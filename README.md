@@ -1,2 +1,1 @@
-### Divvy Bikes Demand 
-Predictor
+# Divvy Bikes Demand Predictor
