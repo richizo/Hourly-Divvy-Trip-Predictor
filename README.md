@@ -7,4 +7,5 @@ The city of Chicago is home to nearly 3 million people, and it is currently the 
 
 ## The Business Problem
 
+The aforementioned data details the trips from Q1 of 2014, until November 2023 (as of 18th December 2023). 
 
