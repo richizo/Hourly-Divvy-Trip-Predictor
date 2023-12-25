@@ -5,13 +5,15 @@ PARENT_DIR = Path("_file_").parent.resolve().parent
 DATA_DIR = PARENT_DIR/"data"
 RAW_DATA_DIR = DATA_DIR/"raw"
 MODELS_DIR = PARENT_DIR/"models"
+TEMPORARY_DATA = DATA_DIR/"temporary"
 
-DATA_PICKLES = RAW_DATA_DIR/"Pickles"
-ORIGINAL_DATA_PICKLES = DATA_PICKLES/"With Original Variable Types"
-ALTERED_DATA_PICKLES = DATA_PICKLES/"With Altered Variable Types"
+PARQUETS = RAW_DATA_DIR/"Parquets"
+ORIGINAL_DATA_TYPES = PARQUETS/"With Original Variable Types"
+ALTERED_DATA_TYPES = PARQUETS/"With Altered Variable Types"
+
 
 CLEANED_DATA = DATA_DIR/"cleaned"
-TRANSFORMED_DATA_DIR = DATA_DIR/"transformed"
+TRANSFORMED_DATA = DATA_DIR/"transformed"
 
 
 if not Path(DATA_DIR).exists():
@@ -20,5 +22,5 @@ if not Path(DATA_DIR).exists():
 if not Path(RAW_DATA_DIR).exists():
     os.mkdir(RAW_DATA_DIR)
 
-if not Path(TRANSFORMED_DATA_DIR).exists():
-    os.mkdir(TRANSFORMED_DATA_DIR)
+if not Path(TRANSFORMED_DATA).exists():
+    os.mkdir(TRANSFORMED_DATA)
