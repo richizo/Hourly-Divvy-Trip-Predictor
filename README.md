@@ -13,3 +13,7 @@ The problem boils down to this:
 Being able to spot spikes in demand like this will enable Divvy to determine how many bikes it would be appropriate to provide in each area. This will allow the the City of Chicago to devote its resources more economically by facilitating the provision of an appropriate number of bikes for each area. It will also help the managers of Divvy to plan any possible expansions of their services in a given area.
 
 
+## The Objective 
+
+
+
