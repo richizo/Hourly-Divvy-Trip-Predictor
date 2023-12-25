@@ -7,6 +7,9 @@ The city of Chicago is home to nearly 3 million people, and it is currently the 
 
 ## The Business Problem
 
-The problem boils down to this: **how can we predict the amount of demand for these bikes in each area of the city?** Being able to spot spikes in demand like this will enable Divvy to determine how many bikes it would be appropriate to provide in each area. This will allow the the City of Chicago to devote its resources more economically by facilitating the provision of an appropriate number of bikes for each area. It will also help the managers of Divvy to plan any possible expansions of their services in a given area.
+The problem boils down to this: 
+**How can we predict the amount of demand for these bikes in each area of the city?** 
+
+Being able to spot spikes in demand like this will enable Divvy to determine how many bikes it would be appropriate to provide in each area. This will allow the the City of Chicago to devote its resources more economically by facilitating the provision of an appropriate number of bikes for each area. It will also help the managers of Divvy to plan any possible expansions of their services in a given area.
 
 
