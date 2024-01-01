@@ -1,5 +1,4 @@
 /data
-./data/raw
 ./venv
 ./src/__pycache__
-./src/core/__pycache__
+./src/notebooks/FEATURE_ENGINEERING.ipynb
