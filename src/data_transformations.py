@@ -99,7 +99,7 @@ def transform_cleaned_data_into_ts_data(
     This function contains all the code in the homonymous notebook, however it has some
     distinguishing features to enable it to integrate with other functions in the pipeline.
 
-    For one thing, it is meant to accept a list of dataframes. Those dataframes should be:
+    For one thing, it accepts two dataframes. Those dataframes should be:
     - one that consists of the "start_time", "start_latitude", and "start_longitude" columns.
     - another that consists of the "stop_time", "stop_latitude", and "stop_longitude" columns.
     """
