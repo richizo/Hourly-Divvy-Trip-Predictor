@@ -2,3 +2,4 @@
 ./venv
 ./src/__pycache__
 ./src/notebooks/FEATURE_ENGINEERING.ipynb
+./idea

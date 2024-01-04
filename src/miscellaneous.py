@@ -12,8 +12,8 @@ sys.path.insert(0, "/home/kobina/cyclistic-bike-sharing-data/src")
 # MEMORY MANAGEMENT
 
 def view_memory_usage(
-        data: pd.DataFrame,
-        column: str
+    data: pd.DataFrame,
+    column: str
 ):
     """This function allows us to view the amount of memory being
     used by one or more columns of a given dataframe."""
@@ -22,9 +22,9 @@ def view_memory_usage(
 
 
 def change_column_data_type(
-        data: pd.DataFrame,
-        columns: list,
-        to_format: str
+    data: pd.DataFrame,
+    columns: list,
+    to_format: str
 ):
     """
     This function changes the datatype of one or more columns of 
@@ -35,11 +35,13 @@ def change_column_data_type(
 
 
 # ROUNDING COORDINATES
+
 def add_rounded_coordinates_to_dataframe(
-        data: pd.DataFrame,
-        decimal_places: int,
-        start_or_stop: str
+    data: pd.DataFrame,
+    decimal_places: int,
+    start_or_stop: str
 ):
+
     """This function takes the latitude and longitude columns of a dataframe,
     rounds them down to a specified number of decimal places, and creates
     a new column for these."""
@@ -74,14 +76,16 @@ def add_rounded_coordinates_to_dataframe(
 
 
 def add_column_of_rounded_points(
-        data: pd.DataFrame,
-        start_or_stop: str
+    data: pd.DataFrame,
+    start_or_stop: str
 ):
     """Make a column which consists of points containing the rounded latitudes and longitudes."""
 
-    points = [
-        point for point in zip(data[f"rounded_{start_or_stop}_latitude"], data[f"rounded_{start_or_stop}_longitude"])
-    ]
+    points = list(
+        zip(
+            data[f"rounded_{start_or_stop}_latitude"], data[f"rounded_{start_or_stop}_longitude"]
+        )
+    )
 
     data.insert(
         loc=data.shape[1],
@@ -91,31 +95,39 @@ def add_column_of_rounded_points(
 
 
 def make_new_station_ids(
-        data: pd.DataFrame,
-        start_or_stop: str
+    data: pd.DataFrame,
+    scenario: str
 ) -> dict:
+
     """
     This function makes a list of random numbers for each unique point, and 
     associates each point with a corresponding number. This effectively creates new 
     IDs for each location.
     """
 
-    num_unique_points = len(data[f"rounded_{start_or_stop}_points"].unique())
+    num_unique_points = len(
+        data[f"rounded_{scenario}_points"].unique()
+    )
+
+    # I must set a seed to ensure reproducibility
+    random.seed(69)
 
     # Make a list of k values consisting of values taken from the population
     randoms = random.sample(population=range(num_unique_points), k=num_unique_points)
 
+    # Make a dictionary of points
     points_and_new_ids = {}
-    for point, value in tqdm(zip(data[f"rounded_{start_or_stop}_points"].unique(), randoms)):
+
+    for point, value in tqdm(zip(data[f"rounded_{scenario}_points"].unique(), randoms)):
         points_and_new_ids[point] = value
 
     return points_and_new_ids
 
 
 def save_dict(
-        dictionary: dict,
-        folder: pathlib.PosixPath,
-        file_name: str
+    dictionary: dict,
+    folder: pathlib.PosixPath,
+    file_name: str
 ):
     """ Save a dictionary (as a .pkl file) into a specified folder,
     and with a specified file name"""
@@ -126,13 +138,13 @@ def save_dict(
 
 # Form a column of said IDs (in the appropriate order)
 def add_column_of_ids(
-        data: pd.DataFrame,
-        start_or_stop: str,
-        points_and_ids: dict
+    data: pd.DataFrame,
+    start_or_stop: str,
+    points_and_ids: dict
 ):
-    """Take each point, and the ID which corresponds to it
-    (within its dictionary), and put those IDs in the relevant dataframe 
-    (in a manner that matches each point with its ID row-wise)."""
+    """Take each point, and the ID which corresponds to it (within its dictionary),
+       and put those IDs in the relevant dataframe (in a manner that matches each 
+       point with its ID row-wise)."""
 
     location_ids = [
         points_and_ids[point] for point in list(data.loc[:, f"rounded_{start_or_stop}_points"]) if

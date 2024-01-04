@@ -1,13 +1,48 @@
 import numpy as np
 from tqdm import tqdm
 import pandas as pd
-from typing import Optional, List, Tuple
+
+from src.miscellaneous import add_column_of_rounded_points, make_new_station_ids, add_column_of_ids, \
+    add_rounded_coordinates_to_dataframe
+
+
+def clean_raw_data(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    This is the same cleaning process used in the named notebook.
+    """
+
+    data["started_at"] = pd.to_datetime(data["started_at"], format="mixed")
+    data["ended_at"] = pd.to_datetime(data["ended_at"], format="mixed")
+
+    data = data.drop(
+        columns=[
+            "ride_id", "rideable_type", "member_casual", "start_station_id", "end_station_id",
+            "start_station_name", "end_station_name"
+        ]
+    )
+
+    data = data.rename(
+        columns={
+            "started_at": "start_time",
+            "ended_at": "stop_time",
+            "start_lat": "start_latitude",
+            "start_lng": "start_longitude",
+            "end_lat": "stop_latitude",
+            "end_lng": "stop_longitude",
+        }
+    )
+
+    data = data.dropna()
+    data.drop_duplicates(inplace=True)
+
+    return data
 
 
 def add_missing_slots(
         agg_data: pd.DataFrame,
-        start_or_stop: str
+        start_or_stop: str  # Load 2023's data
 ) -> pd.DataFrame:
+
     """
     Add rows to the input dataframe so that time slots with no
     trips are now populated in such a way that they now read as
@@ -56,6 +91,99 @@ def add_missing_slots(
     return output
 
 
+def transform_cleaned_data_into_ts_data(
+        start_df: pd.DataFrame,
+        stop_df: pd.DataFrame
+):
+    """
+    This function contains all the code in the homonymous notebook, however it has some
+    distinguishing features to enable it to integrate with other functions in the pipeline.
+
+    For one thing, it is meant to accept a list of dataframes. Those dataframes should be:
+    - one that consists of the "start_time", "start_latitude", and "start_longitude" columns.
+    - another that consists of the "stop_time", "stop_latitude", and "stop_longitude" columns.
+    """
+
+    dictionaries = []
+    intermediate_dataframes = []
+    final_dataframes = []
+
+    for data, scenario in zip(
+            [start_df, stop_df], ["start", "stop"]
+    ):
+
+        print("This might take a moment. Doing some preliminary setup")
+
+        data[f"{scenario}_hour"] = data.loc[:, f"{scenario}_time"].dt.floor("H")
+
+        data = data.drop(
+            columns=[
+                f"{scenario}_time", f"{scenario}_time"
+            ]
+        )
+
+        # Round the latitudes and longitudes down to 3 decimal places, 
+        # and add the rounded values as columns
+        add_rounded_coordinates_to_dataframe(data=data, decimal_places=3, start_or_stop=scenario)
+
+        data = data.drop(
+            columns=[
+                f"{scenario}_latitude", f"{scenario}_longitude"
+            ]
+        )
+
+        # Add the rounded coordinates to the dataframe as a column.
+        add_column_of_rounded_points(data=data, start_or_stop=scenario)
+
+        data = data.drop(
+            columns=[
+                f"rounded_{scenario}_latitude", f"rounded_{scenario}_longitude"
+            ]
+        )
+
+        intermediate_dataframes.append(data)
+
+        print("Matching up approximate locations with generated IDs")
+        if scenario == "start":
+            # Make a list of dictionaries of start points and IDs
+            origins_and_ids = make_new_station_ids(data=data, scenario=scenario)
+            dictionaries.append(origins_and_ids)
+
+        if scenario == "stop":
+            # Make a list of dictionaries of stop points and IDs
+            destinations_and_ids = make_new_station_ids(data=data, scenario=scenario)
+            dictionaries.append(destinations_and_ids)
+
+    # Get all the coordinates that are common to both dictionaries
+    common_points = [
+        point for point in dictionaries[0].keys() if point in dictionaries[1].keys()
+    ]
+
+    # Ensure that these common points have the same IDs in each dictionary.
+    for point in common_points:
+        dictionaries[0][point] = dictionaries[1][point]
+
+    for data, scenario in zip(
+        [intermediate_dataframes[0], intermediate_dataframes[1]], ["start", "stop"]
+    ):
+
+        if scenario == "start":
+            add_column_of_ids(data=data, start_or_stop=scenario, points_and_ids=dictionaries[0])
+
+        if scenario == "stop":
+            add_column_of_ids(data=data, start_or_stop=scenario, points_and_ids=dictionaries[1])
+
+        data = data.drop(f"rounded_{scenario}_points", axis=1)
+
+        agg_data = data.groupby([f"{scenario}_hour", f"{scenario}_station_id"]).size().reset_index()
+        agg_data = agg_data.rename(columns={0: "trips"})
+
+        final_dataframes.append(
+            add_missing_slots(agg_data=agg_data, start_or_stop=scenario)
+        )
+
+    return final_dataframes[0], final_dataframes[1]
+
 def get_cutoff_indices(
         ts_data: pd.DataFrame,
         input_seq_len: int,
@@ -100,8 +228,8 @@ def transform_ts_into_training_data(
         start_or_stop: str,
         input_seq_len: int,
         step_size: int
-) -> Tuple[pd.DataFrame, pd.Series]:
-    """" Transpose the time series data into a feature-target format."""
+) -> tuple[pd.DataFrame, pd.Series]:
+    """ Transpose the time series data into a feature-target format."""
 
     # Ensure first that these are the columns of the chosen data set (and they are listed in this order)
     assert set(ts_data.columns) == {f"{start_or_stop}_hour", f"{start_or_stop}_station_id", "trips"}
@@ -161,7 +289,7 @@ def transform_ts_into_training_data(
         features = pd.concat([features, features_per_location])
         targets = pd.concat([targets, targets_per_location])
 
-        features = features.reset_index(drop=True)
-        targets = targets.reset_index(drop=True)
+    features = features.reset_index(drop=True)
+    targets = targets.reset_index(drop=True)
 
-        return features, targets["trips_next_hour"]
+    return features, targets["trips_next_hour"]

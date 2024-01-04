@@ -25,7 +25,7 @@ def download_one_file_of_raw_data(
     creation of features and targets, let along the testing and training of machine learning models.    
 
     I have to delete the parts of this function that pertain to all the previous years, but I haven't had
-    the heart to.
+    the heart to, because getting this working for every year was quite difficult.
     """
 
     if year == 2014:
@@ -282,6 +282,7 @@ def get_dataframe_from_folder(
     ):
 
     """This function takes the downloaded csv files and returns them as pandas dataframes."""
+
     data = pd.DataFrame()
 
     if year == 2014:
@@ -399,13 +400,15 @@ def get_dataframe_from_folder(
     else:
 
         data_one_month = pd.read_csv(RAW_DATA_DIR / f"{file_name}/{file_name}.csv")
-        data = pd.concat([data, data_one_month])
+        data = pd.concat(
+            [data, data_one_month]
+        )
 
         if data.empty:
             return pd.DataFrame()
 
-        else:
-            return data
+        
+        return data
 
 
 def load_raw_data(
@@ -413,6 +416,13 @@ def load_raw_data(
         months: Optional[List[int]] = None,
         quarters: Optional[List[int]] = None
 ) -> pd.DataFrame:
+
+    """
+    First check for the presence of the data file (and download it if it is absent). 
+    Load the downloaded data by 
+    """
+
+
     if year == 2014:
 
         file_names_2014 = [
@@ -489,6 +499,6 @@ def load_raw_data(
         elif isinstance(months, list):
             months = months
 
-        for month in tqdm(months):
+        for month in months:
             check_for_file_and_download(year=year, month=month, file_name=f"{year}{month:02d}-divvy-tripdata")
             yield get_dataframe_from_folder(year=year, file_name=f"{year}{month:02d}-divvy-tripdata")
