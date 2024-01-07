@@ -42,14 +42,15 @@ def add_missing_slots(
         agg_data: pd.DataFrame,
         start_or_stop: str  # Load 2023's data
 ) -> pd.DataFrame:
-
     """
     Add rows to the input dataframe so that time slots with no
     trips are now populated in such a way that they now read as
     having 0 slots. This creates a complete time series.
     """
 
-    station_ids = agg_data[f"{start_or_stop}_station_id"].unique()
+    station_ids = range(
+        agg_data[f"{start_or_stop}_station_id"].max() + 1
+    )
 
     full_range = pd.date_range(
         agg_data[f"{start_or_stop}_hour"].min(),
@@ -61,14 +62,17 @@ def add_missing_slots(
 
     for station in tqdm(station_ids):
 
-        agg_data_i = agg_data[agg_data[f"{start_or_stop}_station_id"] == station]
+        agg_data_i = agg_data.loc[
+            agg_data[f"{start_or_stop}_station_id"] == station, [f"{start_or_stop}_hour", "trips"]
+        ]
 
         if agg_data_i.empty:
-            # In an hour with no trips, make a row where there are zero trips in the given hour.
-            agg_data_i = pd.DataFrame.from_dict(
-                {
+
+            # Add a missing dates with zero rides
+            agg_data_i = pd.DataFrame(
+                data=[{
                     f"{start_or_stop}_hour": agg_data[f"{start_or_stop}_hour"].max(), "trips": 0
-                }
+                }]
             )
 
         # Set the index
@@ -108,13 +112,20 @@ def transform_cleaned_data_into_ts_data(
     intermediate_dataframes = []
     final_dataframes = []
 
+    print("This might take a moment")
+
     for data, scenario in zip(
             [start_df, stop_df], ["start", "stop"]
     ):
 
-        print("This might take a moment. Doing some preliminary setup")
+        print(f"Computing the hours during which each trip {scenario}s")
 
-        data[f"{scenario}_hour"] = data.loc[:, f"{scenario}_time"].dt.floor("H")
+        data.insert(
+            loc=data.shape[1],
+            column=f"{scenario}_hour",
+            value=data.loc[:, f"{scenario}_time"].dt.floor("H"),
+            allow_duplicates=False
+        )
 
         data = data.drop(
             columns=[
@@ -122,6 +133,7 @@ def transform_cleaned_data_into_ts_data(
             ]
         )
 
+        print(f"Approximating the coordinates of the {scenario} of each trip")
         # Round the latitudes and longitudes down to 3 decimal places, 
         # and add the rounded values as columns
         add_rounded_coordinates_to_dataframe(data=data, decimal_places=3, start_or_stop=scenario)
@@ -164,7 +176,7 @@ def transform_cleaned_data_into_ts_data(
         dictionaries[0][point] = dictionaries[1][point]
 
     for data, scenario in zip(
-        [intermediate_dataframes[0], intermediate_dataframes[1]], ["start", "stop"]
+            [intermediate_dataframes[0], intermediate_dataframes[1]], ["start", "stop"]
     ):
 
         if scenario == "start":
@@ -175,14 +187,17 @@ def transform_cleaned_data_into_ts_data(
 
         data = data.drop(f"rounded_{scenario}_points", axis=1)
 
+        print(f"Aggregating the final data on trip {scenario}s")
+
         agg_data = data.groupby([f"{scenario}_hour", f"{scenario}_station_id"]).size().reset_index()
         agg_data = agg_data.rename(columns={0: "trips"})
 
         final_dataframes.append(
             add_missing_slots(agg_data=agg_data, start_or_stop=scenario)
         )
-
+        
     return final_dataframes[0], final_dataframes[1]
+
 
 def get_cutoff_indices(
         ts_data: pd.DataFrame,
@@ -276,7 +291,7 @@ def transform_ts_into_training_data(
         # Make a dataframe of features
         features_per_location = pd.DataFrame(
             x, columns=[
-                f"rides_previous_{i + 1}_hour" for i in reversed(range(input_seq_len))
+                f"trips_previous_{i + 1}_hour" for i in reversed(range(input_seq_len))
             ]
         )
 

@@ -14,16 +14,14 @@ def train_test_split(
     as test data
     """
 
-    training_data = data[
-        data[f"{scenario}_hour"] < cutoff_date].reset_index(drop=True)
+    training_data = data[data[f"{scenario}_hour"] < cutoff_date].reset_index(drop=True)
 
-    test_data = data[
-        data[f"{scenario}_hour"] > cutoff_date].reset_index(drop=True)
+    test_data = data[data[f"{scenario}_hour"] > cutoff_date].reset_index(drop=True)
 
-    x_train = training_data.drop(columns=f"{target_column}")
-    y_train = training_data[f"{target_column}"]
+    x_train = training_data.drop(columns=[target_column])
+    y_train = training_data[target_column]
 
-    x_test = test_data.drop(columns=f"{target_column}")
-    y_test = test_data[f"{target_column}"]
+    x_test = test_data.drop(columns=[target_column])
+    y_test = test_data[target_column]
 
     return x_train, y_train, x_test, y_test

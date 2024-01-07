@@ -1,7 +1,6 @@
 import sys
 import requests
 import pandas as pd
-from pathlib import Path
 from zipfile import ZipFile
 from typing import Optional, List
 from tqdm import tqdm
@@ -15,7 +14,7 @@ def download_one_file_of_raw_data(
         month: Optional[int] = None,
         quarters: Optional[List[int]] = None,
         file_name: Optional[str] = None
-) -> Path:
+):
 
     """In an earlier version of this project, I downloaded the data for 
     every year that Divvy has been in operation, resulting in the code below.
@@ -257,7 +256,7 @@ def check_for_file_and_download(
         else:
             print(f"{file_name} is already in local storage")
 
-    elif month is not None:
+    elif type(month) is int:
 
         local_file = RAW_DATA_DIR / f"{year}{month:02d}-divvy-tripdata"
 
@@ -422,7 +421,6 @@ def load_raw_data(
     Load the downloaded data by 
     """
 
-
     if year == 2014:
 
         file_names_2014 = [
@@ -483,7 +481,7 @@ def load_raw_data(
 
     if year == 2020 and quarters is None:
 
-        months = list(range(4, 13))
+        months = range(4, 13)
 
         for month in tqdm(months):
             check_for_file_and_download(year=year, month=month, file_name=f"{year}{month:02d}-divvy-tripdata")
@@ -493,12 +491,17 @@ def load_raw_data(
 
         # Download the specified year's worth of data if no month is specified
         if months is None:
-            months = list(range(1, 13))
+            months = range(1, 13)
+
+            for month in months:
+                check_for_file_and_download(year=year, month=month, file_name=f"{year}{month:02d}-divvy-tripdata")
+                yield get_dataframe_from_folder(year=year, file_name=f"{year}{month:02d}-divvy-tripdata")
+
 
         # Download data for only the month specified by the integer "month"
         elif isinstance(months, list):
             months = months
 
-        for month in months:
-            check_for_file_and_download(year=year, month=month, file_name=f"{year}{month:02d}-divvy-tripdata")
-            yield get_dataframe_from_folder(year=year, file_name=f"{year}{month:02d}-divvy-tripdata")
+            for month in months:
+                check_for_file_and_download(year=year, month=month, file_name=f"{year}{month:02d}-divvy-tripdata")
+                yield get_dataframe_from_folder(year=year, file_name=f"{year}{month:02d}-divvy-tripdata")
