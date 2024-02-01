@@ -3,7 +3,7 @@ from tqdm import tqdm
 import pandas as pd
 
 from src.miscellaneous import add_column_of_rounded_points, make_new_station_ids, add_column_of_ids, \
-    add_rounded_coordinates_to_dataframe
+    add_rounded_coordinates_to_dataframe, save_dict
 
 
 def clean_raw_data(data: pd.DataFrame) -> pd.DataFrame:
@@ -66,6 +66,9 @@ def add_missing_slots(
             agg_data[f"{start_or_stop}_station_id"] == station, [f"{start_or_stop}_hour", "trips"]
         ]
 
+        # Set the index
+        agg_data_i.set_index(f"{start_or_stop}_hour", inplace=True)
+
         if agg_data_i.empty:
 
             # Add a missing dates with zero rides
@@ -74,9 +77,6 @@ def add_missing_slots(
                     f"{start_or_stop}_hour": agg_data[f"{start_or_stop}_hour"].max(), "trips": 0
                 }]
             )
-
-        # Set the index
-        agg_data_i.set_index(f"{start_or_stop}_hour", inplace=True)
 
         # Create the indices for these new rows
         agg_data_i.index = pd.DatetimeIndex(agg_data_i.index)
@@ -108,11 +108,14 @@ def transform_cleaned_data_into_ts_data(
     - another that consists of the "stop_time", "stop_latitude", and "stop_longitude" columns.
     """
 
+    from src.paths import GEOGRAPHICAL_DATA
+    
     dictionaries = []
     intermediate_dataframes = []
     final_dataframes = []
-
-    print("This might take a moment")
+    
+    print("This will take a while")
+    print("\n")
 
     for data, scenario in zip(
             [start_df, stop_df], ["start", "stop"]
@@ -133,10 +136,11 @@ def transform_cleaned_data_into_ts_data(
             ]
         )
 
-        print(f"Approximating the coordinates of the {scenario} of each trip")
+        print(f"Approximating the coordinates of the location at which each trip {scenario}s")
+        
         # Round the latitudes and longitudes down to 3 decimal places, 
         # and add the rounded values as columns
-        add_rounded_coordinates_to_dataframe(data=data, decimal_places=3, start_or_stop=scenario)
+        add_rounded_coordinates_to_dataframe(data=data, decimal_places=4, start_or_stop=scenario)
 
         data = data.drop(
             columns=[
@@ -156,15 +160,34 @@ def transform_cleaned_data_into_ts_data(
         intermediate_dataframes.append(data)
 
         print("Matching up approximate locations with generated IDs")
+        
         if scenario == "start":
+            
             # Make a list of dictionaries of start points and IDs
             origins_and_ids = make_new_station_ids(data=data, scenario=scenario)
             dictionaries.append(origins_and_ids)
+            
+            # This (and its counterpart below) is critical for recovering the rounded coordinates 
+            # later on, and for knowing which IDs they correspond to.
+            save_dict(
+                dictionary=origins_and_ids,
+                folder=GEOGRAPHICAL_DATA,
+                file_name="rounded_origin_points_and_new_ids"
+            )
 
         if scenario == "stop":
+            
             # Make a list of dictionaries of stop points and IDs
             destinations_and_ids = make_new_station_ids(data=data, scenario=scenario)
             dictionaries.append(destinations_and_ids)
+            
+            save_dict(
+                dictionary=destinations_and_ids,
+                folder=GEOGRAPHICAL_DATA,
+                file_name="rounded_destination_points_and_new_ids"
+            )
+
+        print("\n")
 
     # Get all the coordinates that are common to both dictionaries
     common_points = [
@@ -244,6 +267,7 @@ def transform_ts_into_training_data(
         input_seq_len: int,
         step_size: int
 ) -> tuple[pd.DataFrame, pd.Series]:
+    
     """ Transpose the time series data into a feature-target format."""
 
     # Ensure first that these are the columns of the chosen data set (and they are listed in this order)

@@ -1,5 +1,6 @@
 /data
 ./venv
 ./src/__pycache__
-./src/notebooks/FEATURE_ENGINEERING.ipynb
 ./idea
+
+/notebooks/.ipynb_checkpoints
