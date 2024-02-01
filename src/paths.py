@@ -17,6 +17,9 @@ CLEANED_DATA = DATA_DIR/"cleaned"
 TRANSFORMED_DATA = DATA_DIR/"transformed"
 GEOGRAPHICAL_DATA = DATA_DIR/"geographical"
 
+TIME_SERIES_DATA = TRANSFORMED_DATA/"time series"
+TRAINING_DATA = TRANSFORMED_DATA/"training data"
+
 
 if not Path(DATA_DIR).exists():
     os.mkdir(DATA_DIR)

@@ -8,7 +8,8 @@ from src.miscellaneous import add_column_of_rounded_points, make_new_station_ids
 
 def clean_raw_data(data: pd.DataFrame) -> pd.DataFrame:
     """
-    This is the same cleaning process used in the named notebook.
+    This is the same cleaning process used in the notebook named "03_DATA_CLEARNING.ipynb"
+    It works for 2023 data, but may not necessarily be ideal for later years.
     """
 
     data["started_at"] = pd.to_datetime(data["started_at"], format="mixed")
@@ -138,7 +139,7 @@ def transform_cleaned_data_into_ts_data(
 
         print(f"Approximating the coordinates of the location at which each trip {scenario}s")
         
-        # Round the latitudes and longitudes down to 3 decimal places, 
+        # Round the latitudes and longitudes down to 4 decimal places, 
         # and add the rounded values as columns
         add_rounded_coordinates_to_dataframe(data=data, decimal_places=4, start_or_stop=scenario)
 
