@@ -16,6 +16,9 @@ lightgbm = "^4.2.0"
 plotly = "^5.18.0"
 ipykernel = "^6.29.0"
 optuna = "^3.5.0"
+xgboost = "^2.0.3"
+python-dotenv = "^1.0.1"
+comet-ml = "^3.37.0"
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.28.0"

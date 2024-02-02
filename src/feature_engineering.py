@@ -1,7 +1,6 @@
 import pandas as pd 
 from sklearn.base import BaseEstimator, TransformerMixin
 
-
 def average_trips_last_4_weeks(X: pd.DataFrame) -> pd.DataFrame:
    
     X["average_trips_last_4_weeks"] = 0.25*(
@@ -62,7 +61,3 @@ def get_stop_pipeline() -> Pipeline:
         FunctionTransformer(func = average_trips_last_4_weeks, validate = False),
         TemporalFeatureEngineeringStops()
     )
-
-
-
-

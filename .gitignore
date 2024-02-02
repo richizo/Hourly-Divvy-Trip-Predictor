@@ -1,6 +1,4 @@
+.env
 /data
-./venv
-./src/__pycache__
-./idea
-
+/src/__pycache__
 /notebooks/.ipynb_checkpoints
