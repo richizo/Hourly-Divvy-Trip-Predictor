@@ -13,7 +13,7 @@ def get_logger(name: Optional[str] = "divvy_trips") -> logging.Logger:
     # Create a handler, its level, and its formatting protocol
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
     
     # Set the formatter
     console_handler.setFormatter(formatter)

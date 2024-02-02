@@ -1,13 +1,14 @@
-import tqdm 
+import os 
 import optuna 
 import numpy as np
 import pandas as pd 
 
-from typing import Optional, Callable, Dict
+from comet_ml import Experiment
+from typing import Optional, Callable, Dict, Union
 
 from sklearn.linear_model import Lasso 
-import lightgbm as LGBMRegressor
-from xgboost import XGBRegressor, XGBRFRegressor
+from lightgbm import LGBMRegressor
+from xgboost import XGBRegressor
 
 from sklearn.pipeline import make_pipeline
 from sklearn.metrics import mean_absolute_error
@@ -16,15 +17,52 @@ from sklearn.model_selection import TimeSeriesSplit
 from src.logger import get_logger
 from src.feature_engineering import get_start_pipeline, get_stop_pipeline
 
-from comet_ml import Experiment
+
+experiment = Experiment(
+    api_key=os.environ["COMET_API_KEY"],
+    workspace=os.environ["COMET_WORKSPACE"],
+    project_name=os.environ["COMET_PROJECT_NAME"]
+  )
+
+
+def tag_experiment(model_fn: Callable):
+  
+  """
+  
+  Attach a tag to a CometML experiment.
+
+  Raises:
+      NotImplementedError: we are only considering three models, so this
+                           error will be raised if some other model is 
+                           invoked.
+  """
+
+  if model_fn == Lasso:
+    
+    tag = "Lasso"
+    
+  elif model_fn == LGBMRegressor:
+    
+    tag = "LGBMRegressor"
+    
+  elif model_fn == XGBRegressor:
+    
+    tag = "XGBRegressor"
+    
+  else:
+    
+    raise NotImplementedError("This model is has not been implemented")
+
+  experiment.add_tag(tag)
 
 
 def sampled_hyperparams(
     model_fn: Callable,
-    trial: optuna.trial.Trial) -> Dict[str, Union[str, int, float]]:
+    trial: optuna.trial.Trial
+    ) -> Dict[str, Union[str, int, float]]:
   
   """
-  Return the values to be considered 
+  Return the range of values of each hyperparameter under consideration.
 
   Returns:
       dict: the range of hyperparemeter values to be considered
@@ -43,16 +81,17 @@ def sampled_hyperparams(
       "verbose": -1, 
       "num_leaves": trial.suggest_int("num_leaves",8, 64),
       "max_depth": trial.suggest_int("max_depth", 3, 10),
-      "subsample": trial.suggest_int("subsample", 0.1, 1),
       "n_estimators": trial.suggest_int("n_estimators", 20, 150),
       "learning_rate": trial.suggest_float("learning_rate", 0.1, 1),
       "importance_type": trial.suggest_categorical("importance_type", ["split", "gain"]),
+      "subsample  ": trial.suggest_int("subsample", 0.1, 1),
+      "feature_fraction": trial.suggest_float("feature_fraction", 0.1, 1),
       "colsample_by_tree": trial.suggest_float("colsample_by_tree", 0.1, 1),
       "colsample_by_level": trial.suggest_float("colsample_by_tree", 0.1, 1),
       "colsample_by_node": trial.suggest_float("colsample_by_node", 0.1, 1)
     }
   
-  elif model_fm == xgboost:
+  elif model_fn == XGBRegressor:
     
     return {
       "objective": "reg:absolute_error",
@@ -67,17 +106,16 @@ def sampled_hyperparams(
   
   else:
     
-    raise NotImplementedError("This model has not been implemented.")
+    raise NotImplementedError("This model has not been implemented")
     
-  
     
 def optimise_hyperparams(
   model_fn: Callable,
-  hyperparem_trials: int,
+  hyperparam_trials: int,
   scenario: str,
-  X: pd.Dataframe,
+  X: pd.DataFrame,
   y: pd.Series,
-  experiment = Experiment
+  experiment=experiment
 ) -> Dict:
   
   logger = get_logger()
@@ -85,25 +123,36 @@ def optimise_hyperparams(
   
   def objective(trial: optuna.trial.Trial) -> float:
     
-    """ The error function we want to optimise. """
+    """
+    Perform Time series cross validation, fit a pipeline to it (equipped with the)
+    selected model, and return the average error across all cross validation splits.
+    
+    Args:
+
+    model_fn: the model architecture to be used
+    hyperparam_trials: the number of optuna trials that will be run per model
+    scenario: whether we are looking at the trip start or trip stop data.
+    X: the dataframe of features
+    y: the pandas series which contains the target variable
+    experiment: the defined CometML experiment object
+    
+
+    Returns:
+        float: Average error per split.
+    """
     
     hyperparams = sampled_hyperparams(model_fn=model_fn, trial=trial)
   
-    
-    # Cross-validation
     scores = []
     tss = TimeSeriesSplit(n_splits=5)
-    logger.info(f"{trial.number=}") 
+    
+    print("\n")
+    logger.info(f"Start Trial {trial.number}") 
     
     # Use TSS to split the features and target variables for training and validation
-    for split_number, (train_indices, val_indices) in tqdm(enumerate(tss.split(X))):
+    for split_number, (train_indices, val_indices) in enumerate(tss.split(X)):
       
-      X_train, X_val = X.iloc[train_indices], X.iloc[val_indices]
-      y_train, y_val = y.iloc[train_indices], y.iloc[val_indices]
-      
-      logger.info(f"{split_number=}")
-      logger.info(f"{len(X_train)}=")
-      logger.info(f"{len(X_val)}=")
+      logger.info(f"Performing split number {split_number}")
       
       if scenario == "start" and "start_station_id" in X.columns:
         
@@ -119,15 +168,37 @@ def optimise_hyperparams(
           model_fn(**hyperparams)
         )
       
-      pipeline.fit(X_train, y_train)
+      pipeline.fit(X.iloc[train_indices], y.iloc[train_indices])
       
-      y_pred = pipeline.predict(X_val)
-      error = mean_absolute_error(y_val, y_pred)
+      y_pred = pipeline.predict(X.iloc[val_indices])
+      error = mean_absolute_error(y.iloc[val_indices], y_pred)
       scores.append(error)
-      
-      logger.info(f"{error=}")
       
     avg_score = np.mean(scores)
     
     return avg_score
-#LGBMRegressor.callback.reset_parameter
+  
+  logger.info("Beginning hyperparameter search")
+  
+  study = optuna.create_study(direction="minimize")
+  study.optimize(func=objective, n_trials=hyperparam_trials)
+  
+  # Get the dictionary of the best hyperparameters and the error that they produce
+  best_hyperparams = study.best_params
+  best_value = study.best_value
+  
+  logger.info(f"The best hyperparameters for {model_fn} are:")
+  
+  for key, value in best_hyperparams.items():
+    logger.info(f"{key}:{value}")
+    
+  logger.info(f"Best MAE: {best_value}")
+  
+  # Log this as an experiment with CometML
+  experiment.log_metric(name = "Cross validation M.A.E", value=best_value)
+  tag_experiment(model_fn=model_fn)
+  
+  experiment.end()
+  
+  return best_hyperparams
+  

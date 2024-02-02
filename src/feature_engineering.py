@@ -2,13 +2,16 @@ import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 
 def average_trips_last_4_weeks(X: pd.DataFrame) -> pd.DataFrame:
-   
-    X["average_trips_last_4_weeks"] = 0.25*(
-        X[f"trips_previous_{7*24}_hour"] + \
-        X[f"trips_previous_{2*7*24}_hour"] + \
-        X[f"trips_previous_{3*7*24}_hour"] + \
-        X[f"trips_previous_{4*7*24}_hour"] 
+    
+    X.insert(
+        loc=X.shape[1], 
+        column="average_trips_last_4_weeks",
+        value= 0.25*(X[f"trips_previous_{7*24}_hour"] + \
+                     X[f"trips_previous_{2*7*24}_hour"] + \
+                     X[f"trips_previous_{3*7*24}_hour"] + \
+                     X[f"trips_previous_{4*7*24}_hour"])
     )
+   
     return X
 
 
@@ -18,13 +21,20 @@ class TemporalFeatureEngineeringStarts(BaseEstimator, TransformerMixin):
         return self 
 
     def transform(self, X, y=None):
+        
+        X.insert(
+            loc=X.shape[1],
+            column="hour",
+            value=X["start_hour"].dt.hour
+        )
 
-        X_ = X.copy()
+        X.insert(
+            loc=X.shape[1],
+            column="day_of_the_week",
+            value=X["start_hour"].dt.dayofweek
+        )
 
-        X_["hour"] = X_["start_hour"].dt.hour
-        X_["day_of_the_week"] = X_["start_hour"].dt.dayofweek
-
-        return X_.drop("start_hour", axis = 1)
+        return X.drop("start_hour", axis = 1)
 
 
 class TemporalFeatureEngineeringStops(BaseEstimator, TransformerMixin):
@@ -34,12 +44,19 @@ class TemporalFeatureEngineeringStops(BaseEstimator, TransformerMixin):
 
     def transform(self, X, y=None):
 
-        X_ = X.copy()
+        X.insert(
+            loc=X.shape[1],
+            column="hour",
+            value=X["stop_hour"].dt.hour
+        )
 
-        X_["hour"] = X_["stop_hour"].dt.hour
-        X_["day_of_the_week"] = X_["stop_hour"].dt.dayofweek
+        X.insert(
+            loc=X.shape[1],
+            column="day_of_the_week",
+            value=X["stop_hour"].dt.dayofweek
+        )
 
-        return X_.drop("stop_hour", axis = 1)
+        return X.drop("stop_hour", axis = 1)
 
 
 from sklearn.preprocessing import FunctionTransformer
