@@ -69,7 +69,6 @@ def add_rounded_coordinates_to_dataframe(
             np.round(longitude, decimals=decimal_places)
         )
 
-    # We put these lists in the dataframe using Pandas' insert function to avoid the SettingCopy Warning
     data.insert(
         loc=data.shape[1],
         column=f"rounded_{start_or_stop}_latitude",
@@ -119,7 +118,7 @@ def make_new_station_ids(
         data[f"rounded_{scenario}_points"].unique()
     )
 
-    # I must set a seed to ensure reproducibility. 
+    # Set a seed to ensure reproducibility. 
     random.seed(69)
 
     # Make a list of k values consisting of values taken from the population
@@ -156,3 +155,4 @@ def add_column_of_ids(
         value=pd.Series(location_ids),
         allow_duplicates=False
     )
+    

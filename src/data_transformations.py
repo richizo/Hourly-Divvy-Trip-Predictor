@@ -1,10 +1,11 @@
 import numpy as np
 from tqdm import tqdm
 import pandas as pd
+from typing import Optional
 
 from src.miscellaneous import add_column_of_rounded_points, make_new_station_ids, add_column_of_ids, \
     add_rounded_coordinates_to_dataframe, save_dict
-
+    
 
 def clean_raw_data(data: pd.DataFrame) -> pd.DataFrame:
     """
@@ -56,7 +57,7 @@ def add_missing_slots(
     full_range = pd.date_range(
         agg_data[f"{start_or_stop}_hour"].min(),
         agg_data[f"{start_or_stop}_hour"].max(),
-        freq="H"
+        freq="h"
     )
 
     output = pd.DataFrame()
@@ -98,7 +99,8 @@ def add_missing_slots(
 
 def transform_cleaned_data_into_ts_data(
         start_df: pd.DataFrame,
-        stop_df: pd.DataFrame
+        stop_df: pd.DataFrame,
+        year: Optional[int] = None
 ):
     """
     This function contains all the code in the homonymous notebook, however it has some
@@ -116,7 +118,6 @@ def transform_cleaned_data_into_ts_data(
     final_dataframes = []
     
     print("This will take a while")
-    print("\n")
 
     for data, scenario in zip(
             [start_df, stop_df], ["start", "stop"]
@@ -127,7 +128,7 @@ def transform_cleaned_data_into_ts_data(
         data.insert(
             loc=data.shape[1],
             column=f"{scenario}_hour",
-            value=data.loc[:, f"{scenario}_time"].dt.floor("H"),
+            value=data.loc[:, f"{scenario}_time"].dt.floor("h"),
             allow_duplicates=False
         )
 
@@ -162,31 +163,56 @@ def transform_cleaned_data_into_ts_data(
 
         print("Matching up approximate locations with generated IDs")
         
-        if scenario == "start":
+        if scenario == "start": 
             
-            # Make a list of dictionaries of start points and IDs
-            origins_and_ids = make_new_station_ids(data=data, scenario=scenario)
-            dictionaries.append(origins_and_ids)
-            
-            # This (and its counterpart below) is critical for recovering the rounded coordinates 
-            # later on, and for knowing which IDs they correspond to.
-            save_dict(
-                dictionary=origins_and_ids,
-                folder=GEOGRAPHICAL_DATA,
-                file_name="rounded_origin_points_and_new_ids"
-            )
+            if year == 2024:
+                
+                import os
+                import pickle
 
-        if scenario == "stop":
+                with open(GEOGRAPHICAL_DATA/"rounded_origin_points_and_new_ids", "rb") as f:
+                
+                    origins_and_ids = pickle.load(f)
+                    
+                dictionaries.append(origins_and_ids)
+                
+            else:
             
-            # Make a list of dictionaries of stop points and IDs
-            destinations_and_ids = make_new_station_ids(data=data, scenario=scenario)
-            dictionaries.append(destinations_and_ids)
+                # Make a list of dictionaries of start points and IDs
+                origins_and_ids = make_new_station_ids(data=data, scenario=scenario)
+                dictionaries.append(origins_and_ids)
+                
+                # This (and its counterpart below) is critical for recovering the rounded coordinates 
+                # later on, and for knowing which IDs they correspond to.
+                save_dict(
+                    dictionary=origins_and_ids,
+                    folder=GEOGRAPHICAL_DATA,
+                    file_name="rounded_origin_points_and_new_ids"
+                )
+                
+                
+        elif scenario == "stop":
             
-            save_dict(
-                dictionary=destinations_and_ids,
-                folder=GEOGRAPHICAL_DATA,
-                file_name="rounded_destination_points_and_new_ids"
-            )
+            if year == 2024:
+                
+                import os
+                import pickle
+
+                with open(GEOGRAPHICAL_DATA/"rounded_destination_points_and_new_ids", "rb") as f:
+                
+                    destinations_and_ids = pickle.load(f)
+                
+            else:
+                    
+                # Make a list of dictionaries of stop points and IDs
+                destinations_and_ids = make_new_station_ids(data=data, scenario=scenario)
+                dictionaries.append(destinations_and_ids)
+                
+                save_dict(
+                    dictionary=destinations_and_ids,
+                    folder=GEOGRAPHICAL_DATA,
+                    file_name="rounded_destination_points_and_new_ids"
+                )
 
         print("\n")
 

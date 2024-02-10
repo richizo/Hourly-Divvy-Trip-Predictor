@@ -6,9 +6,9 @@ import pandas as pd
 from comet_ml import Experiment
 from typing import Optional, Callable, Dict, Union
 
-from sklearn.linear_model import Lasso 
 from lightgbm import LGBMRegressor
 from xgboost import XGBRegressor
+from sklearn.linear_model import Lasso 
 
 from sklearn.pipeline import make_pipeline
 from sklearn.metrics import mean_absolute_error
@@ -17,13 +17,6 @@ from sklearn.model_selection import TimeSeriesSplit
 from src.logger import get_logger
 from src.feature_engineering import get_start_pipeline, get_stop_pipeline
 
-
-experiment = Experiment(
-    api_key=os.environ["COMET_API_KEY"],
-    workspace=os.environ["COMET_WORKSPACE"],
-    project_name=os.environ["COMET_PROJECT_NAME"]
-  )
-  
 
 def sampled_hyperparams(
     model_fn: Callable,
@@ -81,8 +74,7 @@ def optimise_hyperparams(
   hyperparam_trials: int,
   scenario: str,
   X: pd.DataFrame,
-  y: pd.Series,
-  experiment=experiment
+  y: pd.Series
 ) -> Dict:
   
   logger = get_logger()
@@ -112,18 +104,13 @@ def optimise_hyperparams(
   
     scores = []
     tss = TimeSeriesSplit(n_splits=5)
-    
-    print("\n")
     logger.info(f"Start Trial {trial.number}") 
     
     # Use TSS to split the features and target variables for training and validation
     for split_number, (train_indices, val_indices) in enumerate(tss.split(X)):
       
       logger.info(f"Performing split number {split_number}")
-      
-      X_train, X_val = X.iloc[train_indices], X.iloc[val_indices]
-      y_train, y_val = y.iloc[train_indices], y.iloc[val_indices]
-    
+     
       if scenario == "start" and "start_station_id" in X.columns:
         
         pipeline = make_pipeline(
@@ -138,10 +125,12 @@ def optimise_hyperparams(
           model_fn(**hyperparams)
         )
       
-      pipeline.fit(X_train, y_train)
+      pipeline.fit(
+        X.iloc[train_indices], y.iloc[train_indices]
+      )
       
-      y_pred = pipeline.predict(X_val)
-      error = mean_absolute_error(y_val, y_pred)
+      y_pred = pipeline.predict(X.iloc[val_indices])
+      error = mean_absolute_error(y.iloc[val_indices], y_pred)
       scores.append(error)
       
     avg_score = np.mean(scores)
@@ -164,9 +153,14 @@ def optimise_hyperparams(
     
   logger.info(f"Best MAE: {best_value}")
   
-  # Log this as an experiment with CometML
+  # Log an experiment with CometML  
+  experiment = Experiment(
+    api_key=os.environ["COMET_API_KEY"],
+    workspace=os.environ["COMET_WORKSPACE"],
+    project_name=os.environ["COMET_PROJECT_NAME"]
+  )
+
   experiment.log_metric(name="Cross validation M.A.E", value=best_value)
-  
   
   #Attach a tag to a CometML experiment to show which dataset was  worked on, and 
   # include another tag indicating the model type.
