@@ -25,12 +25,15 @@ def plot_one_sample(
     else:
         target_ = None
 
-    columns = [column for column in features.columns if column.startswith("trips_previous_")]
+    columns = [
+        column for column in features.columns if column.startswith("trips_previous_")
+    ]
+    
     values = [features[column] for column in columns] + [target_]
 
     dates = pd.date_range(
         features_[f"{scenario}_hour"] - timedelta(hours=len(columns)),
-        features_[f"{scenario}_hour"], freq="H"
+        features_[f"{scenario}_hour"], freq="h"
     )
 
     if display_title:
@@ -56,6 +59,7 @@ def plot_one_sample(
     if predictions is not None:
 
         predictions_ = predictions.iloc[example_station]
+        
         fig.add_scatter(
             x=dates[-1:], y=[predictions_],
             line_color="red", mode="markers",

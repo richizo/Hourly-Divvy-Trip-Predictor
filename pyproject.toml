@@ -18,8 +18,9 @@ ipykernel = "^6.29.0"
 optuna = "^3.5.0"
 xgboost = "^2.0.3"
 python-dotenv = "^1.0.1"
-comet-ml = "^3.37.0"
 pysqlite3 = "^0.5.2"
+clearml = "^1.14.2"
+nbconvert = "^7.16.0"
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.28.0"
