@@ -1,33 +1,31 @@
+import os 
+import pickle 
+from pathlib import Path 
+from typing import Optional, Callable, Dict, Union
+
 import optuna 
 import numpy as np
 import pandas as pd 
-import pickle 
-
-from typing import Optional, Callable, Dict, Union
-
-from lightgbm import LGBMRegressor
-from xgboost import XGBRegressor
-from sklearn.linear_model import Lasso 
 
 from comet_ml import Experiment
-
-from sklearn.pipeline import make_pipeline
-from sklearn.metrics import mean_absolute_error
-from sklearn.model_selection import TimeSeriesSplit
-
 from loguru import logger 
-
+from lightgbm import LGBMRegressor
 from optuna.samplers import TPESampler
 
-from src.config import settings
-from src.paths import MODELS_DIR
-from src.feature_engineering import get_start_pipeline, get_stop_pipeline
+from sklearn.pipeline import make_pipeline
+from sklearn.linear_model import Lasso 
+from sklearn.metrics import mean_absolute_error
+from sklearn.model_selection import TimeSeriesSplit
+from xgboost import XGBRegressor
+
+from src.setup.config import settings
+from src.setup.paths import MODELS_DIR
+from src.feature_pipeline.feature_engineering import get_start_pipeline, get_stop_pipeline
 
 
 def sampled_hyperparams(
     model_fn: Callable,
     trial: optuna.trial.Trial) -> Dict[str, Union[str, int, float]]:
-  
   """
   Return the range of values of each hyperparameter under consideration.
 
@@ -81,9 +79,13 @@ def optimise_hyperparams(
   
   assert model_fn in [Lasso, LGBMRegressor, XGBRegressor]
   
+  models_and_tags = {
+    Lasso: "Lasso", 
+    LGBMRegressor: "LGBMRegressor", 
+    XGBRegressor: "XGBRegressor"
+  }
   
   def objective(trial: optuna.trial.Trial) -> float:
-    
     """
     Perform Time series cross validation, fit a pipeline to it (equipped with the)
     selected model, and return the average error across all cross validation splits.
@@ -106,7 +108,7 @@ def optimise_hyperparams(
         
     scores = []
     tss = TimeSeriesSplit(n_splits=5)
-    logger.info(f"Start Trial {trial.number}") 
+    logger.info(f"Starting Trial {trial.number}") 
     
     # Use TSS to split the features and target variables for training and validation
     for split_number, (train_indices, val_indices) in enumerate(tss.split(X)):
@@ -114,7 +116,7 @@ def optimise_hyperparams(
       logger.info(f"Performing split number {split_number}")
      
       if scenario == "start" and "start_station_id" in X.columns:
-        
+
         pipeline = make_pipeline(
           get_start_pipeline(),
           model_fn(**hyperparams)
@@ -130,21 +132,27 @@ def optimise_hyperparams(
       pipeline.fit(
         X.iloc[train_indices], y.iloc[train_indices]
       )
-      
+     
       y_pred = pipeline.predict(X.iloc[val_indices])
       error = mean_absolute_error(y.iloc[val_indices], y_pred)
       scores.append(error)
-      
+        
     avg_score = np.mean(scores)
     
     return avg_score  
-  
+   
   logger.info("Beginning hyperparameter search")
   
   sampler = TPESampler(seed=69)
-  study = optuna.create_study(direction="minimize", sampler=sampler)
-  study.optimize(func=objective, n_trials=hyperparam_trials)
   
+  study = optuna.create_study(
+    study_name="optuna_study",
+    direction="minimize", 
+    sampler=sampler
+    )
+  
+  study.optimize(func=objective, n_trials=hyperparam_trials)
+    
   # Get the dictionary of the best hyperparameters and the error that they produce
   best_hyperparams = study.best_params
   best_value = study.best_value
@@ -154,20 +162,14 @@ def optimise_hyperparams(
   for key, value in best_hyperparams.items():
     logger.info(f"{key}:{value}")
     
-  logger.info(f"Best MAE: {best_value}")
+  logger.info(f"Best MAE: {best_value}")  
   
-   # Log an experiment with CometML  
+  # Log an experiment with CometML  
   experiment = Experiment(
     api_key=settings.comet_api_key,
     workspace=settings.comet_workspace,
     project_name=settings.comet_project_name
   )
-  
-  models_and_tags = {
-    Lasso: "Lasso", 
-    LGBMRegressor: "LGBMRegressor", 
-    XGBRegressor: "XGBRegressor"
-  }
   
   # Set the name of the experiment and log the target metric.
   experiment.set_name(f"Hyperparameter Tuning of {models_and_tags[model_fn]} model")
@@ -180,23 +182,8 @@ def optimise_hyperparams(
       scenario, models_and_tags[model_fn]
     ]
   )
+    
+  experiment.end()
   
-  try:  
-    
-    pickle_name = f"Best {models_and_tags[model_fn]} model.pickle"
-    
-    # Save the best model
-    with open(MODELS_DIR/pickle_name, "wb") as model:
-    
-      pickle.dump(obj=study.best_trial, file=model)
-    
-  except:
-    
-    logger.info("Could not save model")
-  
-  finally:
-    
-    experiment.end()
-  
-    return best_hyperparams
+  return best_hyperparams
   

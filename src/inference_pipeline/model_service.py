@@ -8,15 +8,15 @@ import pickle
 from typing import Type, Callable
 from loguru import logger  
 
-from src.model import build_model
-from src.paths import MODELS_DIR
+from src.training_pipeline.training import build_model
+from src.setup.paths import MODELS_DIR
 
 
 models_and_tags = {
     Lasso: "Lasso", 
     LGBMRegressor: "LGBMRegressor", 
     XGBRegressor: "XGBRegressor"
-  }
+}
 
 class ModelService:
   
@@ -28,7 +28,7 @@ class ModelService:
     self, 
     model_fn: Callable, 
     scenario: str
-    ) -> None:
+  ) -> None:
   
     """
     Loads the requested model if it already exists, or builds it if 
@@ -42,11 +42,11 @@ class ModelService:
     """
     
     # Check whether the model is already saved
-    pickle_name = f"Best {models_and_tags[model_fn]} model.pickle"
+    pickle_name = f"Best {models_and_tags[model_fn]} model for {scenario}s.pickle"
 
     model_path = Path(MODELS_DIR/pickle_name)
   
-    # If it is, load it.
+    # If it is already saved, load it.
     if not model_path.exists():
       
       logger.info("The requested model hasn't been trained yet -> Looking for training data")

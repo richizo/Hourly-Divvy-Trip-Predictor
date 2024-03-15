@@ -5,14 +5,15 @@ import pandas as pd
 from tqdm import tqdm
 import numpy as np
 
-# MEMORY MANAGEMENT
 
 def view_memory_usage(
     data: pd.DataFrame,
     column: str
 ):
-    """This function allows us to view the amount of memory being
-    used by one or more columns of a given dataframe."""
+    """
+    This function allows us to view the amount of memory being
+    used by one or more columns of a given dataframe.
+    """
 
     yield data[column].memory_usage(index=False, deep=True)
 
@@ -30,15 +31,15 @@ def change_column_data_type(
     data[columns] = data[columns].astype(to_format)
 
 
-# ROUNDING COORDINATES
-
 def save_dict(
     dictionary: dict,
     folder: pathlib.PosixPath,
     file_name: str
 ):
-    """ Save a dictionary (as a .pkl file) into a specified folder,
-    and with a specified file name"""
+    """ 
+    Save a dictionary (as a .pkl file) into a specified folder,
+    and with a specified file name
+    """
 
     with open(f"{folder}/{file_name}", "wb") as file:
         pickle.dump(dictionary, file)
@@ -47,38 +48,41 @@ def save_dict(
 def add_rounded_coordinates_to_dataframe(
     data: pd.DataFrame,
     decimal_places: int,
-    start_or_stop: str
+    scenario: str
 ):
-
-    """This function takes the latitude and longitude columns of a dataframe,
+    """
+    This function takes the latitude and longitude columns of a dataframe,
     rounds them down to a specified number of decimal places, and creates
-    a new column for these."""
+    a new column for these.
+    """
 
     new_lats = []
     new_longs = []
 
-    for latitude in tqdm(data[f"{start_or_stop}_latitude"].values):
+    for latitude in tqdm(data[f"{scenario}_latitude"].values):
         
         new_lats.append(
             np.round(latitude, decimals=decimal_places)
         )
 
-    for longitude in tqdm(data[f"{start_or_stop}_longitude"].values):
+    for longitude in tqdm(data[f"{scenario}_longitude"].values):
         
         new_longs.append(
             np.round(longitude, decimals=decimal_places)
         )
 
+    # Insert the rounded latitudes into the dataframe
     data.insert(
         loc=data.shape[1],
-        column=f"rounded_{start_or_stop}_latitude",
+        column=f"rounded_{scenario}_latitude",
         value=pd.Series(new_lats),
         allow_duplicates=False
     )
 
+    # Insert the rounded longitudes into the dataframe
     data.insert(
         loc=data.shape[1],
-        column=f"rounded_{start_or_stop}_longitude",
+        column=f"rounded_{scenario}_longitude",
         value=pd.Series(new_longs),
         allow_duplicates=False
     )
@@ -86,19 +90,19 @@ def add_rounded_coordinates_to_dataframe(
 
 def add_column_of_rounded_points(
     data: pd.DataFrame,
-    start_or_stop: str
+    scenario: str
 ):
     """Make a column which consists of points containing the rounded latitudes and longitudes."""
 
     points = list(
         zip(
-            data[f"rounded_{start_or_stop}_latitude"], data[f"rounded_{start_or_stop}_longitude"]
+            data[f"rounded_{scenario}_latitude"], data[f"rounded_{scenario}_longitude"]
         )
     )
 
     data.insert(
         loc=data.shape[1],
-        column=f"rounded_{start_or_stop}_points",
+        column=f"rounded_{scenario}_points",
         value=pd.Series(points),
         allow_duplicates=False)
 
@@ -136,22 +140,24 @@ def make_new_station_ids(
 # Form a column of said IDs (in the appropriate order)
 def add_column_of_ids(
     data: pd.DataFrame,
-    start_or_stop: str,
+    scenario: str,
     points_and_ids: dict
 ):
     
-    """Take each point, and the ID which corresponds to it (within its dictionary),
-       and put those IDs in the relevant dataframe (in a manner that matches each 
-       point with its ID row-wise)."""
+    """
+    Take each point, and the ID which corresponds to it (within its dictionary),
+    and put those IDs in the relevant dataframe (in a manner that matches each 
+    point with its ID row-wise).
+    """
 
     location_ids = [
-        points_and_ids[point] for point in list(data.loc[:, f"rounded_{start_or_stop}_points"]) if
+        points_and_ids[point] for point in list(data.loc[:, f"rounded_{scenario}_points"]) if
         point in points_and_ids.keys()
     ]
 
     data.insert(
         loc=data.shape[1],
-        column=f"{start_or_stop}_station_id",
+        column=f"{scenario}_station_id",
         value=pd.Series(location_ids),
         allow_duplicates=False
     )

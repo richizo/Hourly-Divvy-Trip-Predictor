@@ -3,3 +3,7 @@
 /.vscode
 /src/__pycache__
 /notebooks/.ipynb_checkpoints
+app.log
+/models
+db.sqlite
+/src/optuna_study.sqlite

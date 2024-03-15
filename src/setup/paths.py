@@ -2,11 +2,13 @@ import os
 from pathlib import Path 
 from dotenv import load_dotenv
 
+from src.setup.config import settings
+
 load_dotenv()
 
 # Set the working directory. This was necessary because the working directory was changed for some reason
 os.chdir(
-    path=os.environ.get("SRC_DIR")
+    path=settings.src_dir
 )
 
 PARENT_DIR = Path("_file_").parent.resolve().parent
@@ -37,3 +39,7 @@ if not Path(RAW_DATA_DIR).exists():
 
 if not Path(TRANSFORMED_DATA).exists():
     os.mkdir(TRANSFORMED_DATA)
+    
+if not Path(MODELS_DIR).exists():
+    os.mkdir(MODELS_DIR)
+    

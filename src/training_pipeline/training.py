@@ -13,10 +13,10 @@ from lightgbm import LGBMRegressor
 from xgboost import XGBRegressor
 
 
-from src.data_preparation import make_training_data
-from src.feature_engineering import average_trips_last_4_weeks, get_start_pipeline, get_stop_pipeline
-from src.hyperparameter_tuning import optimise_hyperparams
-from src.paths import MODELS_DIR, TRAINING_DATA
+from src.feature_pipeline.preprocessing import make_training_data
+from src.feature_pipeline.feature_engineering import average_trips_last_4_weeks, get_start_pipeline, get_stop_pipeline
+from src.training_pipeline.hyperparameter_tuning import optimise_hyperparams
+from src.setup.paths import MODELS_DIR, TRAINING_DATA
 
 
 def build_model(
@@ -88,7 +88,7 @@ def build_model(
     
   logger.info("Saving the model so we won't have to go through that again.")
 
-  pickle_name = f"Best {models_and_tags[model_fn]} model.pickle"
+  pickle_name = f"Best {models_and_tags[model_fn]} model for {scenario}s.pickle"
 
   with open(MODELS_DIR/pickle_name, "wb") as place:
     

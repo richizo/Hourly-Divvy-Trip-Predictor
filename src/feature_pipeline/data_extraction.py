@@ -1,22 +1,23 @@
 import sys
 import requests
+
 import pandas as pd
+
 from zipfile import ZipFile
 from typing import Optional, List
 from tqdm import tqdm
-from src.paths import RAW_DATA_DIR
 
-sys.path.insert(0, "/home/kobina/cyclistic-bike-sharing-data/src")
+from src.setup.paths import RAW_DATA_DIR
 
 
 def download_one_file_of_raw_data(
-        year: int,
-        month: Optional[int] = None,
-        quarters: Optional[List[int]] = None,
-        file_name: Optional[str] = None
+    year: int,
+    month: Optional[int] = None,
+    quarters: Optional[List[int]] = None,
+    file_name: Optional[str] = None
 ):
-
-    """In an earlier version of this project, I downloaded the data for 
+    """
+    In an earlier version of this project, I downloaded the data for 
     every year that Divvy has been in operation, resulting in the code below.
     I have since decided to restrict my training data to 2023's data. 
     
@@ -229,10 +230,10 @@ def download_one_file_of_raw_data(
 
 
 def check_for_file_and_download(
-        year: int,
-        file_name: str,
-        quarters: Optional[List[int]] = None,
-        month: Optional[List[int]] = None
+    year: int,
+    file_name: str,
+    quarters: Optional[List[int]] = None,
+    month: Optional[List[int]] = None
 ):
 
     """This function checks for the presence of a file, and downloads 
@@ -280,7 +281,7 @@ def get_dataframe_from_folder(
     file_name: str
     ):
 
-    """This function takes the downloaded csv files and returns them as pandas dataframes."""
+    """Takes the downloaded csv files and returns them as pandas dataframes."""
 
     data = pd.DataFrame()
 
@@ -324,6 +325,7 @@ def get_dataframe_from_folder(
         elif file_name == f"Divvy_Trips_{year}_Q3Q4":
 
             for month in [7, 8, 9]:
+
                 intermediate_month = pd.read_csv(
                     RAW_DATA_DIR / f"{file_name}/Divvy_Trips_{year}_{month:02d}.csv"
                 )
@@ -350,7 +352,9 @@ def get_dataframe_from_folder(
 
             for month in [4, 5, 6]:
                 second_quarter_month = pd.read_csv(RAW_DATA_DIR / f"{file_name}/Divvy_Trips_{year}_{month:02d}.csv")
-                data = pd.concat([data, first_quarter, second_quarter_month])
+                data = pd.concat(
+                    [data, first_quarter, second_quarter_month]
+                )
 
             if data.empty:
                 return pd.DataFrame()
@@ -429,9 +433,18 @@ def load_raw_data(
         ]
 
         for file_name in file_names_2014:
+
             # Download the relevant files and return the corresponding dataframes
-            check_for_file_and_download(year=year, file_name=file_name, quarters=quarters)
-            yield get_dataframe_from_folder(year=year, file_name=file_name)
+            check_for_file_and_download(
+                year=year, 
+                file_name=file_name, 
+                quarters=quarters
+            )
+
+            yield get_dataframe_from_folder(
+                year=year, 
+                file_name=file_name
+            )
 
     if year == 2015:
 
@@ -446,8 +459,17 @@ def load_raw_data(
     if year == 2016:
 
         # Download the relevant files
-        check_for_file_and_download(year=year, file_name=f"Divvy_Trips_{year}_Q1Q2", quarters=[1, 2])
-        check_for_file_and_download(year=year, file_name=f"Divvy_Trips_{year}_Q3Q4", quarters=[3, 4])
+        check_for_file_and_download(
+            year=year, 
+            file_name=f"Divvy_Trips_{year}_Q1Q2", 
+            quarters=[1, 2]
+        )
+
+        check_for_file_and_download(
+            year=year, 
+            file_name=f"Divvy_Trips_{year}_Q3Q4", 
+            quarters=[3, 4]
+        )
 
         file_names_2016 = [
             f"Divvy_Trips_{year}_Q1Q2", f"Divvy_Trips_{year}_Q3Q4"
@@ -459,8 +481,17 @@ def load_raw_data(
     if year == 2017:
 
         # Download the relevant files
-        check_for_file_and_download(year=year, file_name=f"Divvy_Trips_{year}_Q1Q2", quarters=[1, 2])
-        check_for_file_and_download(year=year, file_name=f"Divvy_Trips_{year}_Q3Q4", quarters=[3, 4])
+        check_for_file_and_download(
+            year=year, 
+            file_name=f"Divvy_Trips_{year}_Q1Q2", 
+            quarters=[1, 2]
+        )
+
+        check_for_file_and_download(
+            year=year, 
+            file_name=f"Divvy_Trips_{year}_Q3Q4", 
+            quarters=[3, 4]
+        )
 
         file_names_2017 = [
             f"Divvy_Trips_{year}_Q1Q2", f"Divvy_Trips_{year}_Q3Q4"
@@ -472,36 +503,81 @@ def load_raw_data(
     if year in [2018, 2019]:
 
         for quarter in quarters:
-            check_for_file_and_download(year=year, file_name=f"Divvy_Trips_{year}_Q{quarter}", quarters=[quarter])
-            yield get_dataframe_from_folder(year=year, file_name=f"Divvy_Trips_{year}_Q{quarter}")
+
+            check_for_file_and_download(
+                year=year, 
+                file_name=f"Divvy_Trips_{year}_Q{quarter}", 
+                quarters=[quarter]
+            )
+
+            yield get_dataframe_from_folder(
+                year=year, 
+                file_name=f"Divvy_Trips_{year}_Q{quarter}"
+            )
 
     if year == 2020 and quarters == [1]:
-        check_for_file_and_download(year=2020, quarters=[1], file_name=f"Divvy_Trips_{year}_Q1")
-        yield get_dataframe_from_folder(year=2020, file_name=f"Divvy_Trips_{year}_Q1")
+
+        check_for_file_and_download(
+            year=2020, 
+            quarters=[1], 
+            file_name=f"Divvy_Trips_{year}_Q1"
+        )
+
+        yield get_dataframe_from_folder(
+            year=2020, 
+            file_name=f"Divvy_Trips_{year}_Q1"
+        )
 
     if year == 2020 and quarters is None:
 
         months = range(4, 13)
 
         for month in tqdm(months):
-            check_for_file_and_download(year=year, month=month, file_name=f"{year}{month:02d}-divvy-tripdata")
-            yield get_dataframe_from_folder(year=year, file_name=f"{year}{month:02d}-divvy-tripdata")
+
+            check_for_file_and_download(
+                year=year, 
+                month=month, 
+                file_name=f"{year}{month:02d}-divvy-tripdata"
+            )
+
+            yield get_dataframe_from_folder(
+                year=year, 
+                file_name=f"{year}{month:02d}-divvy-tripdata"
+            )
 
     if year >= 2021:
 
         # Download the specified year's worth of data if no month is specified
         if months is None:
+
             months = range(1, 13)
 
             for month in months:
-                check_for_file_and_download(year=year, month=month, file_name=f"{year}{month:02d}-divvy-tripdata")
-                yield get_dataframe_from_folder(year=year, file_name=f"{year}{month:02d}-divvy-tripdata")
+
+                check_for_file_and_download(
+                    year=year, 
+                    month=month, 
+                    file_name=f"{year}{month:02d}-divvy-tripdata"
+                )
+
+                yield get_dataframe_from_folder(
+                    year=year, 
+                    file_name=f"{year}{month:02d}-divvy-tripdata"
+                )
 
 
         # Download data for only the month specified by the integer "month"
         elif isinstance(months, list):
-            months = months
 
             for month in months:
-                check_for_file_and_download(year=year, month=month, file_name=f"{year}{month:02d}-divvy-tripdata")
-                yield get_dataframe_from_folder(year=year, file_name=f"{year}{month:02d}-divvy-tripdata")
+                
+                check_for_file_and_download(
+                    year=year, 
+                    month=month, 
+                    file_name=f"{year}{month:02d}-divvy-tripdata"
+                )
+
+                yield get_dataframe_from_folder(
+                    year=year, 
+                    file_name=f"{year}{month:02d}-divvy-tripdata"
+                )

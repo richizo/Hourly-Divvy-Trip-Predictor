@@ -1,4 +1,4 @@
-### This folder serves as the final resting place for two defunct notebooks:
+### This folder serves as the final resting place for some defunct notebooks, including but not limited to:
 
  - DATA_CLEANING.ipynb
  - TRANSFORM_CLEANED_DATA_INTO_TS_DATA.ipynb

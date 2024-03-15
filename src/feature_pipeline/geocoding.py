@@ -1,6 +1,7 @@
 import pandas as pd 
 from geopy.geocoders import Nominatim, Photon
 
+
 def use_primary_geocoder(places: list,):
     """
     This function initialises the Nominatim geocoder, and takes a list 
@@ -17,7 +18,7 @@ def use_primary_geocoder(places: list,):
     """
 
     places_and_points = {}
-    geolocator = Nominatim(user_agent="maadabrandon@protonmail.com")
+    geolocator = Nominatim(user_agent=settings.email)
 
     for place in tqdm(places):
 
@@ -62,7 +63,7 @@ def use_secondary_geocoder(
 def add_coordinates_to_dataframe(
         data: pd.DataFrame,
         places_and_points: dict,
-        start_or_stop: str
+        scenario: str
 ):
 
     """
@@ -71,15 +72,20 @@ def add_coordinates_to_dataframe(
     columns of a target dataframe.
     """
 
-    if start_or_stop == "start":
+    if scenario == "start":
         points = [
             places_and_points[place] for place in data["from_station_name"] if place in places_and_points.keys()
         ]
 
-    if start_or_stop == "stop":
+    if scenario == "stop":
         points = [
             places_and_points[place] for place in data["to_station_name"] if place in places_and_points.keys()
         ]
 
-    data[f"{start_or_stop}_latitude"] = pd.Series([point[0] for point in points])
-    data[f"{start_or_stop}_longitude"] = pd.Series([point[1] for point in points])
+    data[f"{scenario}_latitude"] = pd.Series(
+        [point[0] for point in points]
+    )
+    
+    data[f"{scenario}_longitude"] = pd.Series(
+        [point[1] for point in points]
+    )

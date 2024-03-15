@@ -22,5 +22,3 @@ class Settings(BaseSettings):
   
 settings = Settings()
 logger.add("app.log", rotation="1 day", retention="12 hours", compression="zip")
-
-engine = create_engine(url='sqlite:///db.sqlite')
