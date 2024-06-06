@@ -1,9 +1,11 @@
 import random
 import pickle
 import pathlib
-import pandas as pd
-from tqdm import tqdm
+
 import numpy as np
+import pandas as pd
+
+from tqdm import tqdm
 
 
 def view_memory_usage(
@@ -45,11 +47,7 @@ def save_dict(
         pickle.dump(dictionary, file)
 
 
-def add_rounded_coordinates_to_dataframe(
-    data: pd.DataFrame,
-    decimal_places: int,
-    scenario: str
-):
+def add_rounded_coordinates_to_dataframe(data: pd.DataFrame, decimal_places: int, scenario: str):
     """
     This function takes the latitude and longitude columns of a dataframe,
     rounds them down to a specified number of decimal places, and creates
@@ -59,14 +57,22 @@ def add_rounded_coordinates_to_dataframe(
     new_lats = []
     new_longs = []
 
-    for latitude in tqdm(data[f"{scenario}_latitude"].values):
-        
+    latitudes = tqdm(
+        iterable=data[f"{scenario}_lat"].values,
+        desc="Working on latitudes"
+    )
+
+    longitudes = tqdm(
+        iterable=data[f"{scenario}_lng"].values,
+        desc="Working on longitudes"
+    )
+
+    for latitude in latitudes:
         new_lats.append(
             np.round(latitude, decimals=decimal_places)
         )
 
-    for longitude in tqdm(data[f"{scenario}_longitude"].values):
-        
+    for longitude in longitudes:
         new_longs.append(
             np.round(longitude, decimals=decimal_places)
         )
@@ -74,7 +80,7 @@ def add_rounded_coordinates_to_dataframe(
     # Insert the rounded latitudes into the dataframe
     data.insert(
         loc=data.shape[1],
-        column=f"rounded_{scenario}_latitude",
+        column=f"rounded_{scenario}_lat",
         value=pd.Series(new_lats),
         allow_duplicates=False
     )
@@ -82,21 +88,18 @@ def add_rounded_coordinates_to_dataframe(
     # Insert the rounded longitudes into the dataframe
     data.insert(
         loc=data.shape[1],
-        column=f"rounded_{scenario}_longitude",
+        column=f"rounded_{scenario}_lng",
         value=pd.Series(new_longs),
         allow_duplicates=False
     )
 
 
-def add_column_of_rounded_points(
-    data: pd.DataFrame,
-    scenario: str
-):
+def add_column_of_rounded_points(data: pd.DataFrame, scenario: str):
     """Make a column which consists of points containing the rounded latitudes and longitudes."""
 
     points = list(
         zip(
-            data[f"rounded_{scenario}_latitude"], data[f"rounded_{scenario}_longitude"]
+            data[f"rounded_{scenario}_lat"], data[f"rounded_{scenario}_lng"]
         )
     )
 
@@ -104,14 +107,11 @@ def add_column_of_rounded_points(
         loc=data.shape[1],
         column=f"rounded_{scenario}_points",
         value=pd.Series(points),
-        allow_duplicates=False)
+        allow_duplicates=False
+    )
 
 
-def make_new_station_ids(
-    data: pd.DataFrame,
-    scenario: str
-) -> dict:
-
+def make_new_station_ids(data: pd.DataFrame, scenario: str) -> dict:
     """
     This function makes a list of random numbers for each unique point, and 
     associates each point with a corresponding number. This effectively creates new 
@@ -126,7 +126,10 @@ def make_new_station_ids(
     random.seed(69)
 
     # Make a list of k values consisting of values taken from the population
-    station_ids = random.sample(population=range(num_unique_points), k=num_unique_points)
+    station_ids = random.sample(
+        population=range(num_unique_points), 
+        k=num_unique_points
+    )
 
     # Make a dictionary of points
     points_and_new_ids = {}
@@ -161,4 +164,3 @@ def add_column_of_ids(
         value=pd.Series(location_ids),
         allow_duplicates=False
     )
-    
