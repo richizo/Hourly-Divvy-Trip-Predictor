@@ -186,7 +186,7 @@ class DataProcessor:
             logger.success("There is already some cleaned data. Fetching it...")
             return pd.read_parquet(path=CLEANED_DATA/"cleaned.parquet")
 
-    def _make_training_data(self) -> None:
+    def _make_training_data(self) -> list[pd.DataFrame, pd.DataFrame]:
         """
         Extract raw data, transform it into a time series, and 
         transform that time series into training data which is 
@@ -207,10 +207,11 @@ class DataProcessor:
         logger.info("Transforming the data into a time series...")
         agg_starts, agg_ends = self._transform_cleaned_data_into_ts_data(start_df=starts, end_df=ends)
         
-        logger.info("Transforming time series data into training data...")
         trimmed_agg_data = {"start": agg_starts.iloc[:,:3], "end": agg_ends.iloc[:,:3]}
-        
+
+        training_sets = []
         for scenario in trimmed_agg_data.keys():
+            logger.info(f"Turning the time series data on the {scenario}s of trips into training data`...")
             training_data = self._transform_ts_into_training_data(
                 ts_data=trimmed_agg_data[scenario],
                 scenario=scenario,
@@ -220,6 +221,10 @@ class DataProcessor:
 
             logger.info("Saving the data so that we don't have to do this again...")
             training_data.to_parquet(path=TRAINING_DATA/f"{scenario}s.parquet")
+
+            training_sets.append(training_sets)
+        return training_sets 
+            
     
     def _add_missing_slots(self, agg_data: pd.DataFrame, scenario: str) -> pd.DataFrame:
         """
@@ -435,7 +440,6 @@ class DataProcessor:
 
         return _get_ts_or_begin_transformation(starts_ts_path=self.starts_ts_path, ends_ts_path=self.ends_ts_path)
 
-
     def _get_cutoff_indices(self, ts_data: pd.DataFrame, input_seq_len: int, step_size_len: int) -> list:
         """
         Starts by taking a certain number of rows of a given dataframe as an input, and the 
@@ -478,11 +482,11 @@ class DataProcessor:
         return indices
 
     def _transform_ts_into_training_data(
-            self,
-            ts_data: pd.DataFrame,
-            scenario: str,
-            input_seq_len: int,
-            step_size: int
+        self,
+        ts_data: pd.DataFrame,
+        scenario: str,
+        input_seq_len: int,
+        step_size: int
         ) -> tuple[pd.DataFrame, pd.Series]:
 
         """
@@ -528,7 +532,7 @@ class DataProcessor:
                 y[i] = ts_data_per_station[index[1]:index[2]]["trips"].values[0]
 
                 # Append the "hours" list with the appropriate entry at the intersection
-                # of row "index[1]" and the hours column
+                # of row "index[1]" and the appropriate scenario's column
                 hours.append(
                     ts_data_per_station.iloc[index[1]][f"{scenario}_hour"]
                 )
@@ -546,8 +550,8 @@ class DataProcessor:
             targets_per_location = pd.DataFrame(y, columns=["trips_next_hour"])
 
             # Concatenate the dataframes
-            features = pd.concat([features, features_per_location])
-            targets = pd.concat([targets, targets_per_location])
+            features = pd.concat([features, features_per_location], axis=0)
+            targets = pd.concat([targets, targets_per_location], axis=0)
 
         features = features.reset_index(drop=True)
         targets = targets.reset_index(drop=True)

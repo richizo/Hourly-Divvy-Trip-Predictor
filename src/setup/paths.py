@@ -1,17 +1,8 @@
 import os 
 from pathlib import Path 
-from dotenv import load_dotenv
 
-from src.setup.config import settings
 
-load_dotenv()
-
-# Set the working directory. This was necessary because the working directory was changed for some reason
-os.chdir(
-    path=settings.src_dir
-)
-
-PARENT_DIR = Path("_file_").parent.resolve().parent
+PARENT_DIR = Path("_file_").parent.resolve()
 
 DATA_DIR = PARENT_DIR/"data"
 RAW_DATA_DIR = DATA_DIR/"raw"
@@ -19,9 +10,6 @@ MODELS_DIR = PARENT_DIR/"models"
 TEMPORARY_DATA = DATA_DIR/"temporary"
 
 PARQUETS = RAW_DATA_DIR/"Parquets"
-ORIGINAL_DATA_TYPES = PARQUETS/"With Original Variable Types"
-ALTERED_DATA_TYPES = PARQUETS/"With Altered Variable Types"
-
 
 CLEANED_DATA = DATA_DIR/"cleaned"
 TRANSFORMED_DATA = DATA_DIR/"transformed"
@@ -31,15 +19,15 @@ TIME_SERIES_DATA = TRANSFORMED_DATA/"time series"
 TRAINING_DATA = TRANSFORMED_DATA/"training data"
 
 
-if not Path(DATA_DIR).exists():
-    os.mkdir(DATA_DIR)
+def make_fundamental_paths() -> None:
+    for path in [
+        DATA_DIR, CLEANED_DATA, RAW_DATA_DIR, PARQUETS, GEOGRAPHICAL_DATA, TRANSFORMED_DATA, TIME_SERIES_DATA,
+        TRAINING_DATA, MODELS_DIR
+    ]: 
+        if not Path(path).exists():
+            os.mkdir(path)
 
-if not Path(RAW_DATA_DIR).exists():
-    os.mkdir(RAW_DATA_DIR)
 
-if not Path(TRANSFORMED_DATA).exists():
-    os.mkdir(TRANSFORMED_DATA)
-    
-if not Path(MODELS_DIR).exists():
-    os.mkdir(MODELS_DIR)
+if __name__ == "__main__":
+    make_fundamental_paths()
     

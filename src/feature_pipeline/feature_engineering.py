@@ -6,12 +6,12 @@ from warnings import simplefilter
 from geopy.geocoders import Nominatim, Photon
 from sklearn.pipeline import make_pipeline, Pipeline
 from sklearn.preprocessing import FunctionTransformer
-from sklearn.base import BaseEstimator, TransformerMidatain
+from sklearn.base import BaseEstimator, TransformerMixin
 
 from src.setup.config import settings
 
 
-class FeatureEngineering(BaseEstimator, TransformerMidatain):
+class FeatureEngineering(BaseEstimator, TransformerMixin):
 
     def __init__(self, data: pd.DataFrame, scenario: str, y=None) -> None:
         super.__init__()

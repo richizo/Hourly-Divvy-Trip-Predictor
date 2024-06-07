@@ -111,7 +111,7 @@ def add_column_of_rounded_points(data: pd.DataFrame, scenario: str):
     )
 
 
-def make_new_station_ids(data: pd.DataFrame, scenario: str) -> dict:
+def make_dict_of_new_station_ids(data: pd.DataFrame, scenario: str) -> dict:
     """
     This function makes a list of random numbers for each unique point, and 
     associates each point with a corresponding number. This effectively creates new 
@@ -126,10 +126,7 @@ def make_new_station_ids(data: pd.DataFrame, scenario: str) -> dict:
     random.seed(69)
 
     # Make a list of k values consisting of values taken from the population
-    station_ids = random.sample(
-        population=range(num_unique_points), 
-        k=num_unique_points
-    )
+    station_ids = random.sample(population=range(num_unique_points), k=num_unique_points)
 
     # Make a dictionary of points
     points_and_new_ids = {}
@@ -141,12 +138,7 @@ def make_new_station_ids(data: pd.DataFrame, scenario: str) -> dict:
 
 
 # Form a column of said IDs (in the appropriate order)
-def add_column_of_ids(
-    data: pd.DataFrame,
-    scenario: str,
-    points_and_ids: dict
-):
-    
+def add_column_of_ids(data: pd.DataFrame, scenario: str, points_and_ids: dict):
     """
     Take each point, and the ID which corresponds to it (within its dictionary),
     and put those IDs in the relevant dataframe (in a manner that matches each 
