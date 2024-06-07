@@ -1,16 +1,18 @@
+import os
 import pickle
 import numpy as np
 import pandas as pd
 
 from tqdm import tqdm
 from loguru import logger
+from pathlib import Path
 
 from src.setup.miscellaneous import (
-    add_column_of_rounded_points, add_column_of_ids, make_new_station_ids, add_rounded_coordinates_to_dataframe, save_dict
+    add_column_of_rounded_points, add_column_of_ids, make_dict_of_new_station_ids, add_rounded_coordinates_to_dataframe, save_dict
 )
 
 from src.feature_pipeline.data_extraction import load_raw_data
-from src.setup.paths import TRAINING_DATA, GEOGRAPHICAL_DATA, make_fundamental_paths
+from src.setup.paths import CLEANED_DATA, TRAINING_DATA, TIME_SERIES_DATA, GEOGRAPHICAL_DATA, make_fundamental_paths
 
 
 class DataProcessor:
@@ -20,155 +22,169 @@ class DataProcessor:
             list(load_raw_data(year=2024))
         )
 
-    def _clean(self, patient: bool = False) -> pd.DataFrame:
-        self.data["started_at"] = pd.to_datetime(self.data["started_at"], format="mixed")
-        self.data["ended_at"] = pd.to_datetime(self.data["ended_at"], format="mixed")
+        self.starts_ts_path = TIME_SERIES_DATA/"starts_ts.parquet"
+        self.ends_ts_path = TIME_SERIES_DATA/"ends_ts.parquet"
 
-        self.data = self.data.rename(
-            columns={"started_at": "start_time", "ended_at": "end_time"}
-        )
 
-        def __delete_rows_with_unnamed_and_missing_coordinates() -> pd.DataFrame:
-            """
-            There are rows with missing latitude and longitude values for the various 
-            destinations. If any of these rows have available station names, then geocoding 
-            can be used to get the coordinates. At the current time however, all rows with 
-            missing coordinates also have missing station names, rendering those rows 
-            irreprably lacking. We locate and delete these points.
+    def _clean(self, patient: bool = False, save: bool = True) -> pd.DataFrame:
 
-            Returns:
-                pd.DataFrame: the data, absent the aforementioned rows.
-            """ 
-            for scenario in ["start", "end"]:
+        if len(os.listdir(path=CLEANED_DATA)) == 0:
+
+            self.data["started_at"] = pd.to_datetime(self.data["started_at"], format="mixed")
+            self.data["ended_at"] = pd.to_datetime(self.data["ended_at"], format="mixed")
+
+            self.data = self.data.rename(
+                columns={"started_at": "start_time", "ended_at": "end_time"}
+            )
+
+            def __delete_rows_with_unnamed_and_missing_coordinates() -> pd.DataFrame:
+                """
+                There are rows with missing latitude and longitude values for the various 
+                destinations. If any of these rows have available station names, then geocoding 
+                can be used to get the coordinates. At the current time however, all rows with 
+                missing coordinates also have missing station names, rendering those rows 
+                irreprably lacking. We locate and delete these points.
+
+                Returns:
+                    pd.DataFrame: the data, absent the aforementioned rows.
+                """ 
+                for scenario in ["start", "end"]:
+                    station_names = self.data.columns.get_loc(f"{scenario}_station_name")
+                    lats = self.data.columns.get_loc(f"{scenario}_lat")
+                    lngs = self.data.columns.get_loc(f"{scenario}_lng")
+
+                    all_rows = tqdm(
+                        iterable=range(self.data.shape[0]),
+                        desc=f"Targeting rows with missing station names and coordinates for deletion ({scenario}s of trips)"
+                    )
+
+                    rows = []
+                    for row in all_rows:
+                        if pd.isnull(self.data.iloc[row, station_names]) and pd.isnull(self.data.iloc[row, lats]) and pd.isnull(
+                                self.data.iloc[row, lngs]
+                            ):
+                            rows.append(row)
+
+                    # Check that all rows with missing latitudes and longitudes also have missing station names
+                    assert len(rows) == self.data.isna().sum()[f"{scenario}_lat"] == self.data.isna().sum()[f"{scenario}_lng"]
+                    self.data = self.data.drop(self.data.index[rows], axis=0)
+
+                return self.data
+
+            def __find_rows_with_missing_station_names_ids(scenario: str) -> list:
+                station_id = self.data.columns.get_loc(f"{scenario}_station_id")
                 station_names = self.data.columns.get_loc(f"{scenario}_station_name")
-                lats = self.data.columns.get_loc(f"{scenario}_lat")
-                lngs = self.data.columns.get_loc(f"{scenario}_lng")
 
                 all_rows = tqdm(
                     iterable=range(self.data.shape[0]),
-                    desc=f"Targeting rows with missing station names and coordinates for deletion ({scenario}s of trips)"
+                    desc="Searching for rows with missing station names and IDs"
                 )
 
                 rows = []
                 for row in all_rows:
-                    if pd.isnull(self.data.iloc[row, station_names]) and pd.isnull(self.data.iloc[row, lats]) and pd.isnull(
-                            self.data.iloc[row, lngs]
-                        ):
+                    if pd.isnull(self.data.iloc[row, station_names]) and pd.isnull(self.data.iloc[row, station_id]):
                         rows.append(row)
+                return rows
+        
+            def _find_rows_with_known_coords_names_and_ids(scenario: str) -> tuple[list, list, list, list]:
 
-                # Check that all rows with missing latitudes and longitudes also have missing station names
-                assert len(rows) == self.data.isna().sum()[f"{scenario}_lat"] == self.data.isna().sum()[f"{scenario}_lng"]
-                self.data = self.data.drop(self.data.index[rows], axis=0)
+                lats = self.data.columns.get_loc(f"{scenario}_lat")
+                lngs = self.data.columns.get_loc(f"{scenario}_lng")
+                    
+                for row in tqdm(range(self.data.shape[0])):
+                    
+                    station_id_col = self.data.columns.get_loc(f"{scenario}_station_id")
+                    station_names_col = self.data.columns.get_loc(f"{scenario}_station_name")
 
-            return self.data
+                    rows = []
+                    known_lats = []
+                    known_lngs = []
+                    known_station_ids = []
+                    known_station_names = []
+                    
+                    all_rows = tqdm(
+                        iterable=range(self.data.shape[0]), 
+                        desc="Finding rows with known coordinates, station names and IDs"
+                    )
 
-        def __find_rows_with_missing_station_names_ids(scenario: str) -> list:
-            station_id = self.data.columns.get_loc(f"{scenario}_station_id")
-            station_names = self.data.columns.get_loc(f"{scenario}_station_name")
+                    for row in all_rows:
+                        if not pd.isnull(self.data.iloc[row, lats]) and not pd.isnull(self.data.iloc[row, lngs]) and not pd.isnull(
+                                self.data.iloc[row, station_id_col]) and not pd.isnull(self.data.iloc[row, station_names_col]):
+                            
+                            rows.append(row) 
+                            known_lats.append(self.data.iloc[row, lats])
+                            known_lngs.append(self.data.iloc[row, lngs])
+                            known_station_ids.append(self.data.iloc[row, station_id_col])
+                            known_station_names.append(self.data.iloc[row, station_names_col])
 
-            all_rows = tqdm(
-                iterable=range(self.data.shape[0]),
-                desc="Searching for rows with missing station names and IDs"
-            )
+                    return known_lats, known_lngs, known_station_ids, known_station_names
 
-            rows = []
-            for row in all_rows:
-                if pd.isnull(self.data.iloc[row, station_names]) and pd.isnull(self.data.iloc[row, station_id]):
-                    rows.append(row)
-            return rows
-    
-        def _find_rows_with_known_coords_names_and_ids(scenario: str) -> tuple[list, list, list, list]:
+            def _replace_missing_names_and_ids(
+                scenario: str,
+                known_lats: list, 
+                known_lngs: list, 
+                known_station_ids: list, 
+                known_station_names: list
+                ) -> pd.DataFrame:    
 
-            lats = self.data.columns.get_loc(f"{scenario}_lat")
-            lngs = self.data.columns.get_loc(f"{scenario}_lng")
-                
-            for row in tqdm(range(self.data.shape[0])):
-                
-                station_id_col = self.data.columns.get_loc(f"{scenario}_station_id")
-                station_names_col = self.data.columns.get_loc(f"{scenario}_station_name")
+                lats = self.data.columns.get_loc(f"{scenario}_lat")
+                lngs = self.data.columns.get_loc(f"{scenario}_lng")
 
-                rows = []
-                known_lats = []
-                known_lngs = []
-                known_station_ids = []
-                known_station_names = []
-                
-                all_rows = tqdm(
-                    iterable=range(self.data.shape[0]), 
-                    desc="Finding rows with known coordinates, station names and IDs"
+                rows_to_search = tqdm(
+                    iterable=rows_missing_station_names_ids,
+                    desc="Searching through rows to find matching latitudes and longitudes"
                 )
 
-                for row in all_rows:
-                    if not pd.isnull(self.data.iloc[row, lats]) and not pd.isnull(self.data.iloc[row, lngs]) and not pd.isnull(
-                            self.data.iloc[row, station_id_col]) and not pd.isnull(self.data.iloc[row, station_names_col]):
-                        
-                        rows.append(row) 
-                        known_lats.append(self.data.iloc[row, lats])
-                        known_lngs.append(self.data.iloc[row, lngs])
-                        known_station_ids.append(self.data.iloc[row, station_id_col])
-                        known_station_names.append(self.data.iloc[row, station_names_col])
+                for row in rows_to_search:
+                    for lat, lng in zip(known_lats, known_lngs):
+                        if lat == self.data.iloc[row, lats] and lng == self.data.iloc[row, lngs]:
+                            self.data = self.data.replace(
+                                to_replace=self.data.iloc[row, station_id_col], 
+                                value=known_station_ids[known_lats.index(lat)] 
+                            )
 
-                return known_lats, known_lngs, known_station_ids, known_station_names
+                            self.data = self.data.replace(  
+                                to_replace=self.data.iloc[row, station_name_col], 
+                                value=known_station_names[known_lats.index(lat)] 
+                            )
+                return self.data
 
-        def _replace_missing_names_and_ids(
-            scenario: str,
-            known_lats: list, 
-            known_lngs: list, 
-            known_station_ids: list, 
-            known_station_names: list
-            ) -> pd.DataFrame:    
-
-            lats = self.data.columns.get_loc(f"{scenario}_lat")
-            lngs = self.data.columns.get_loc(f"{scenario}_lng")
-
-            rows_to_search = tqdm(
-                iterable=rows_missing_station_names_ids,
-                desc="Searching through rows to find matching latitudes and longitudes"
-            )
-
-            for row in rows_to_search:
-                for lat, lng in zip(known_lats, known_lngs):
-                    if lat == self.data.iloc[row, lats] and lng == self.data.iloc[row, lngs]:
-                        self.data = self.data.replace(
-                            to_replace=self.data.iloc[row, station_id_col], 
-                            value=known_station_ids[known_lats.index(lat)] 
-                        )
-
-                        self.data = self.data.replace(  
-                            to_replace=self.data.iloc[row, station_name_col], 
-                            value=known_station_names[known_lats.index(lat)] 
-                        )
-            return self.data
-
-        self.data = __delete_rows_with_unnamed_and_missing_coordinates()
-        
-        if patient:       
-            rows_missing_station_names_ids = __find_rows_with_missing_station_names_ids(scenario="end")
-            known_lats, known_lngs, known_station_ids, known_station_names = _find_rows_with_known_coords_names_and_ids(scenario="end")
+            self.data = __delete_rows_with_unnamed_and_missing_coordinates()
             
-            self.data = _replace_missing_names_and_ids(
-                    scenario="end",
-                    known_lats=known_lats, 
-                    known_lngs=known_lngs, 
-                    known_station_ids=known_station_ids, 
-                    known_station_names=known_station_names
-                )        
+            if patient:       
+                rows_missing_station_names_ids = __find_rows_with_missing_station_names_ids(scenario="end")
+                known_lats, known_lngs, known_station_ids, known_station_names = _find_rows_with_known_coords_names_and_ids(scenario="end")
+                
+                self.data = _replace_missing_names_and_ids(
+                        scenario="end",
+                        known_lats=known_lats, 
+                        known_lngs=known_lngs, 
+                        known_station_ids=known_station_ids, 
+                        known_station_names=known_station_names
+                    )        
 
-            self.data = self.data.drop(
-                columns=[
-                    "ride_id", "rideable_type", "member_casual"
-                ]
-            )
+                self.data = self.data.drop(
+                    columns=[
+                        "ride_id", "rideable_type", "member_casual"
+                    ]
+                )
+
+            else:
+                self.data = self.data.drop(
+                    columns=[
+                        "ride_id", "rideable_type", "member_casual", "start_station_name", "end_station_name",
+                        "start_station_id", "end_station_id" 
+                    ]
+                )
+
+            if save:
+                self.data.to_parquet(path=CLEANED_DATA/"cleaned.parquet") 
+
+            return self.data
 
         else:
-            self.data = self.data.drop(
-                columns=[
-                    "ride_id", "rideable_type", "member_casual", "start_station_name", "end_station_name",
-                    "start_station_id", "end_station_id" 
-                ]
-            )
-
-        return self.data
+            logger.success("There is already some cleaned data. Fetching it...")
+            return pd.read_parquet(path=CLEANED_DATA/"cleaned.parquet")
 
     def _make_training_data(self) -> None:
         """
@@ -263,7 +279,8 @@ class DataProcessor:
     def _transform_cleaned_data_into_ts_data(
         self, 
         start_df: pd.DataFrame, 
-        end_df: pd.DataFrame
+        end_df: pd.DataFrame, 
+        save: bool = True
         ) -> tuple[pd.DataFrame, pd.DataFrame]:
         """
         Converts cleaned data into time series data.
@@ -281,90 +298,143 @@ class DataProcessor:
                                    and "stop_lng" columns.
 
         Returns:
-            tuple[pd.DataFrame, pd.DataFrame]: 
+            tuple[pd.DataFrame, pd.DataFrame]: the time series datasets on the starts and ends  
+                                               of trips.
         """
-        dictionaries = []
-        intermediate_dataframes = []
-        ts_dataframes = []
 
-        for data, scenario in zip(
-            [start_df, end_df], ["start", "end"]
-        ):
+        def _get_ts_or_begin_transformation(starts_ts_path: str, ends_ts_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
 
-            logger.info(f"Recording the hour during which each trip {scenario}s...")
-            data.insert(
-                loc=data.shape[1],
-                column=f"{scenario}_hour",
-                value=data.loc[:, f"{scenario}_time"].dt.floor("h"),
-                allow_duplicates=False
-            )
+            if Path(starts_ts_path).exists() and Path(ends_ts_path).exists():
+                logger.success("Both time series datasets are already present")
+                starts_ts = pd.read_parquet(path=starts_ts_path)
+                ends_ts = pd.read_parquet(path=ends_ts_path)
+                
+            elif not Path(starts_ts_path).exists() and not Path(ends_ts_path).exists():
+                logger.warning("Neither time series dataset exists")
+                starts_ts, ends_ts = __begin_transformation(missing_scenario="both")
 
-            data = data.drop(
-                columns=[f"{scenario}_time"]
-            )
+            elif not Path(starts_ts_path).exists() and Path(ends_ts_path).exists():
+                logger.warning("Time series data for trip starts has not been made")
+                ends_ts = pd.read_parquet(path=ends_ts_path)
+                starts_ts = __begin_transformation(missing_scenario="start")
+                
+            elif Path(starts_ts_path).exists() and not Path(ends_ts_path).exists():
+                logger.warning("Time series data for the ends of trips has not been made")
+                starts_ts = pd.read_parquet(path=starts_ts_path)
+                ends_ts = __begin_transformation(missing_scenario="end")
+           
+            return starts_ts, ends_ts
 
-            logger.info(f"Approximating the coordinates of the location where each trip {scenario}s...")
-            # Round the latitudes and longitudes down to 5 dp, and add the rounded values as columns
-            add_rounded_coordinates_to_dataframe(data=data, decimal_places=4, scenario=scenario)
+        def __begin_transformation(missing_scenario: str|None) -> tuple[pd.DataFrame, pd.DataFrame]|pd.DataFrame:
 
-            data = data.drop(
-                columns=[f"{scenario}_lat", f"{scenario}_lng"]
-            )
+            dictionaries = []
+            intermediate_dataframes = []
+            ts_dataframes = []
 
-            # Add the rounded coordinates to the dataframe as a column.
-            add_column_of_rounded_points(data=data, scenario=scenario)
+            def ___round_coordinates_and_make_ids(data: pd.DataFrame, scenario: str, decimal_places: int) -> pd.DataFrame:
+                logger.info(f"Recording the hour during which each trip {scenario}s...")
 
-            data = data.drop(
-                columns=[f"rounded_{scenario}_lat", f"rounded_{scenario}_lng"]
-            )
+                data.insert(
+                    loc=data.shape[1],
+                    column=f"{scenario}_hour",
+                    value=data.loc[:, f"{scenario}_time"].dt.floor("h"),
+                    allow_duplicates=False
+                )
 
-            intermediate_dataframes.append(data)
-            logger.info("Matching up approximate locations with generated IDs...")
+                data = data.drop(f"{scenario}_time", axis=1)
 
-            # Make a list of dictionaries of start points and IDs
-            origins_or_destinations_and_ids = make_new_station_ids(data=data, scenario=scenario)
-            dictionaries.append(origins_or_destinations_and_ids)
+                logger.info(f"Approximating the coordinates of the location where each trip {scenario}s...")
+                # Round the latitudes and longitudes down to 5 dp, and add the rounded values as columns
+                add_rounded_coordinates_to_dataframe(data=data, decimal_places=decimal_places, scenario=scenario)
 
-            # This (and its counterpart below) is critical for recovering the rounded coordinates 
-            # later on, and for knowing which IDs they correspond to.
-            save_dict(
-                dictionary=origins_or_destinations_and_ids,
-                folder=GEOGRAPHICAL_DATA,
-                file_name=f"rounded_{scenario}_points_and_new_ids"
-            )
+                data = data.drop(
+                    columns=[f"{scenario}_lat", f"{scenario}_lng"]
+                )
 
-            logger.success(f"Done with the {scenario}s of the trips!")
+                # Add the rounded coordinates to the dataframe as a column.
+                add_column_of_rounded_points(data=data, scenario=scenario)
 
-        # Get all the coordinates that are common to both dictionaries
-        common_points = [
-            point for point in dictionaries[0].keys() if point in dictionaries[1].keys()
-        ]
+                data = data.drop(
+                    columns=[f"rounded_{scenario}_lat", f"rounded_{scenario}_lng"]
+                )
 
-        # Ensure that these common points have the same IDs in each dictionary.
-        for point in common_points:
-            dictionaries[0][point] = dictionaries[1][point]
+                intermediate_dataframes.append(data)
+                logger.info("Matching up approximate locations with generated IDs...")
 
-        for data, scenario in zip(
-                [intermediate_dataframes[0], intermediate_dataframes[1]], ["start", "end"]
-        ):
+                # Make a list of dictionaries of start points and IDs
+                origins_or_destinations_and_ids = make_dict_of_new_station_ids(data=data, scenario=scenario)
+                dictionaries.append(origins_or_destinations_and_ids)
 
-            if scenario == "start":
-                add_column_of_ids(data=data, scenario=scenario, points_and_ids=dictionaries[0])
+                # Critical for recovering the rounded coordinates and their corresponding IDs later.
+                save_dict(
+                    dictionary=origins_or_destinations_and_ids,
+                    folder=GEOGRAPHICAL_DATA,
+                    file_name=f"rounded_{scenario}_points_and_new_ids"
+                )
 
-            elif scenario == "end":
-                add_column_of_ids(data=data, scenario=scenario, points_and_ids=dictionaries[1])
+                logger.success(f"Done with the {scenario}s of the trips!")
+                return data
 
-            data = data.drop(f"rounded_{scenario}_points", axis=1)
+            def __aggregate_final_ts(data: pd.DataFrame, scenario: str) -> pd.DataFrame|list[pd.DataFrame, pd.DataFrame]:
+                
+                if missing_scenario == "start" or "end":
+                    add_column_of_ids(data=data, scenario=scenario, points_and_ids=dictionaries[0])
 
-            logger.info(f"Aggregating the final time series data for the {scenario}s of trips...")
-            agg_data = data.groupby([f"{scenario}_hour", f"{scenario}_station_id"]).size().reset_index()
-            agg_data = agg_data.rename(columns={0: "trips"})
+                elif missing_scenario == "both":
+                    if scenario == "start":
+                        add_column_of_ids(data=data, scenario=scenario, points_and_ids=dictionaries[0])
+                    elif scenario == "end":
+                        add_column_of_ids(data=data, scenario=scenario, points_and_ids=dictionaries[1])
 
-            ts_dataframes.append(
-                self._add_missing_slots(agg_data=agg_data, scenario=scenario)
-            )
+                data = data.drop(f"rounded_{scenario}_points", axis=1)
 
-        return ts_dataframes[0], ts_dataframes[1]
+                logger.info(f"Aggregating the final time series data for the {scenario}s of trips...")
+                agg_data = data.groupby([f"{scenario}_hour", f"{scenario}_station_id"]).size().reset_index()
+                agg_data = agg_data.rename(columns={0: "trips"})
+
+                if missing_scenario == "both":
+                    ts_dataframes.append(self._add_missing_slots(agg_data=agg_data, scenario=scenario))
+                    return ts_dataframes[0], ts_dataframes[1]
+                    
+                elif missing_scenario == "start" or "end":
+                    return self._add_missing_slots(agg_data=agg_data, scenario=missing_scenario)
+                    
+            if missing_scenario == "both": 
+                for data, scenario in zip(
+                    [start_df, end_df], ["start", "end"]
+                ):  
+                    ___round_coordinates_and_make_ids(data=data, scenario=scenario, decimal_places=4)
+                  
+                    # Get all the coordinates that are common to both dictionaries
+                    common_points = [point for point in dictionaries[0].keys() if point in dictionaries[1].keys()]
+
+                    # Ensure that these common points have the same IDs in each dictionary.
+                    for point in common_points:
+                        dictionaries[0][point] = dictionaries[1][point]
+
+                    for data, scenario in zip(
+                            [intermediate_dataframes[0], intermediate_dataframes[1]], ["start", "end"]
+                    ):
+                        start_ts, end_ts = __aggregate_final_ts(data=data, scenario=scenario)
+
+                        if save:
+                            start_ts.to_parquet(TIME_SERIES_DATA/"starts_ts.parquet")
+                            end_ts.to_parquet(TIME_SERIES_DATA/"ends_ts.parquet")
+                
+                return ts_dataframes[0], ts_dataframes[1]
+
+            elif missing_scenario == "start" or "end":
+                data = start_df if missing_scenario == "start" else end_df
+                data = ___round_coordinates_and_make_ids(data=data, scenario=missing_scenario, decimal_places=4)
+                ts_data = __aggregate_final_ts(data=data, scenario=missing_scenario)
+
+                if save:
+                    ts_data.to_parquet(TIME_SERIES_DATA/f"{missing_scenario}s_ts.parquet")
+
+                return ts_data
+
+        return _get_ts_or_begin_transformation(starts_ts_path=self.starts_ts_path, ends_ts_path=self.ends_ts_path)
+
 
     def _get_cutoff_indices(self, ts_data: pd.DataFrame, input_seq_len: int, step_size_len: int) -> list:
         """
@@ -423,6 +493,7 @@ class DataProcessor:
         Returns:
             tuple[pd.DataFrame, pd.Series]: 
         """
+
         # Ensure first that these are the columns of the chosen data set (and they are listed in this order)
         assert set(ts_data.columns) == {f"{scenario}_hour", f"{scenario}_station_id", "trips"}
 
