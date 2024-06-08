@@ -1,31 +1,26 @@
-import os 
-import pickle 
-from pathlib import Path 
-from typing import Optional, Callable, Dict, Union
-
 import optuna 
 import numpy as np
 import pandas as pd 
 
 from comet_ml import Experiment
 from loguru import logger 
-from lightgbm import LGBMRegressor
 from optuna.samplers import TPESampler
 
-from sklearn.pipeline import make_pipeline
-from sklearn.linear_model import Lasso 
 from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import TimeSeriesSplit
+
 from xgboost import XGBRegressor
+from lightgbm import LGBMRegressor
+from sklearn.linear_model import Lasso 
 
 from src.setup.config import settings
-from src.setup.paths import MODELS_DIR
-from src.feature_pipeline.feature_engineering import get_start_pipeline, get_stop_pipeline
+from src.training_pipeline.models import BaseModel
 
 
 def sampled_hyperparams(
-    model_fn: Callable,
-    trial: optuna.trial.Trial) -> Dict[str, Union[str, int, float]]:
+    model_fn: BaseModel|Lasso|LGBMRegressor|XGBRegressor,
+    trial: optuna.trial.Trial
+  ) -> dict[str, str|int|float]:
   """
   Return the range of values of each hyperparameter under consideration.
 
@@ -34,13 +29,11 @@ def sampled_hyperparams(
   """
   
   if model_fn == Lasso:
-    
     return {
       "alpha": trial.suggest_float("alpha", 0.01, 2.0, log=True)
     }
     
   elif model_fn == LGBMRegressor:
-    
     return {
       "metric": "mean_absolute_error",
       "verbose": -1, 
@@ -55,7 +48,6 @@ def sampled_hyperparams(
     }
   
   elif model_fn == XGBRegressor:
-    
     return {
       "objective": "reg:absoluteerror",
       "eta": trial.suggest_float("eta", 0.1, 1),
@@ -65,17 +57,16 @@ def sampled_hyperparams(
     }
   
   else:
-    
     raise NotImplementedError("This model has not been implemented")
     
     
 def optimise_hyperparams(
-  model_fn: Callable,
+  model_fn: BaseModel|Lasso|LGBMRegressor|XGBRegressor,
   hyperparam_trials: int,
   scenario: str,
   X: pd.DataFrame,
   y: pd.Series
-  ) -> Dict:
+  ) -> dict:
   
   assert model_fn in [Lasso, LGBMRegressor, XGBRegressor]
   
@@ -114,26 +105,12 @@ def optimise_hyperparams(
     for split_number, (train_indices, val_indices) in enumerate(tss.split(X)):
       
       logger.info(f"Performing split number {split_number}")
-     
-      if scenario == "start" and "start_station_id" in X.columns:
-
-        pipeline = make_pipeline(
-          get_start_pipeline(),
-          model_fn(**hyperparams)
-        )
-        
-      if scenario == "stop" and "stop_station_id" in X.columns:
-        
-        pipeline = make_pipeline(
-          get_stop_pipeline(),
-          model_fn(**hyperparams)
-        )
-      
-      pipeline.fit(
+  
+      model_fn.fit(
         X.iloc[train_indices], y.iloc[train_indices]
       )
      
-      y_pred = pipeline.predict(X.iloc[val_indices])
+      y_pred = model_fn.predict(X.iloc[val_indices])
       error = mean_absolute_error(y.iloc[val_indices], y_pred)
       scores.append(error)
         
@@ -178,12 +155,10 @@ def optimise_hyperparams(
   # Attach a tags to the CometML experiment to show whether we are training on start 
   # or stop data, and to indicate the model type.
   experiment.add_tags(
-    [
-      scenario, models_and_tags[model_fn]
-    ]
+    tags=[scenario, models_and_tags[model_fn]]
   )
     
   experiment.end()
-  
+ 
   return best_hyperparams
   

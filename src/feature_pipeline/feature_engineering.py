@@ -11,10 +11,15 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from src.setup.config import settings
 
 
+def perform_feature_engineering(data: pd.DataFrame, scenario: str, geocode: bool):
+    feature_engineer = FeatureEngineering(data=data, scenario=scenario)
+    return feature_engineer._get_pipeline(geocode=geocode)
+    
+
 class FeatureEngineering(BaseEstimator, TransformerMixin):
 
     def __init__(self, data: pd.DataFrame, scenario: str, y=None) -> None:
-        super.__init__()
+
         self.data = data
         self.y = y
         self.scenario = scenario
@@ -31,7 +36,7 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
     def _fit(self):
         return self 
 
-    def _include_avg_trips_last_4_weeks(self) -> pd.DataFrame:
+    def _add_avg_trips_last_4_weeks(self) -> pd.DataFrame:
         """
         Include a column for the average number of trips in the past 4 weeks.
 
@@ -48,10 +53,10 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
             )
         return self.data
 
-    def _transform(self) -> pd.DataFrame:
+    def _add_hours_and_days(self) -> pd.DataFrame:
         """
         Create features which consist of the hours and days of the week on which the 
-        departure is taking place.
+        departure or arrival is taking place.
 
         Returns:
             pd.DataFrame: the data frame with these features included
@@ -59,16 +64,26 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
         
         for time in self.times_and_entries.keys():
             self.data.insert(
-                loc=self.data.shape[1], column=time, value=self.times_and_entries[time]
+                loc=self.data.shape[1], 
+                column=time, 
+                value=self.times_and_entries[time]
             )   
 
-        return self.data.drop(f"{self.scenario}_hour", adatais = 1)
+        return self.data.drop(f"{self.scenario}_hour", axis = 1)
 
-    def _get_pipeline(self) -> Pipeline:
-        return make_pipeline(
-            FunctionTransformer(func = self._include_avg_trips_last_4_weeks, validate = False),
-            self
-        )
+    def _get_pipeline(self, geocode: bool) -> Pipeline:
+        
+        steps = [
+            FunctionTransformer(func = self._add_avg_trips_last_4_weeks, validate = False),
+            FunctionTransformer(func=self._add_hours_and_days)
+        ]
+
+        if geocode:
+            steps.append(
+                FunctionTransformer(func=self._add_coordinates_to_dataframe)
+            )
+
+        return make_pipeline(*steps)
 
     def _add_coordinates_to_dataframe(self) -> None:
         """
@@ -84,8 +99,8 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
                 geodata.latitudes.append(places_and_points[place][0])
                 geodata.longitudes.append(places_and_points[place][0])
 
-        self.data[f"{scenario}_latitude"] = pd.Series(geodata.latitudes)
-        self.data[f"{scenario}_longitude"] = pd.Series(geodata.longitudes)
+        self.data[f"{self.scenario}_latitude"] = pd.Series(geodata.latitudes)
+        self.data[f"{self.scenario}_longitude"] = pd.Series(geodata.longitudes)
 
 
 class GeoData():
@@ -142,4 +157,7 @@ class GeoData():
         )
 
         return final_places_and_points
-                
+
+
+
+

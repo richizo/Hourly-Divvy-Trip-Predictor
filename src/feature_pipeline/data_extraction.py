@@ -17,7 +17,6 @@ import os
 import requests
 import pandas as pd
 
-from tqdm import tqdm
 from loguru import logger
 from zipfile import ZipFile
 from datetime import datetime as dt

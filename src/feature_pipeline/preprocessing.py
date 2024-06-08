@@ -1,5 +1,4 @@
 import os
-import pickle
 import numpy as np
 import pandas as pd
 
@@ -19,22 +18,32 @@ class DataProcessor:
     def __init__(self, year: int):
 
         self.data = pd.concat(
-            list(load_raw_data(year=2024))
+            list(load_raw_data(year=year))
         )
 
         self.starts_ts_path = TIME_SERIES_DATA/"starts_ts.parquet"
         self.ends_ts_path = TIME_SERIES_DATA/"ends_ts.parquet"
 
+        scenario = "start" or "end"
+
+        lats = self.data.columns.get_loc(f"{scenario}_lat")
+        lngs = self.data.columns.get_loc(f"{scenario}_lng")
+        
+        station_id_col = self.data.columns.get_loc(f"{scenario}_station_id")
+        station_names_col = self.data.columns.get_loc(f"{scenario}_station_name")
+
 
     def _clean(self, patient: bool = False, save: bool = True) -> pd.DataFrame:
-
+            
         if len(os.listdir(path=CLEANED_DATA)) == 0:
-
             self.data["started_at"] = pd.to_datetime(self.data["started_at"], format="mixed")
             self.data["ended_at"] = pd.to_datetime(self.data["ended_at"], format="mixed")
 
             self.data = self.data.rename(
-                columns={"started_at": "start_time", "ended_at": "end_time"}
+                columns={
+                    "started_at": "start_time", 
+                    "ended_at": "end_time"
+                }
             )
 
             def __delete_rows_with_unnamed_and_missing_coordinates() -> pd.DataFrame:
@@ -49,9 +58,6 @@ class DataProcessor:
                     pd.DataFrame: the data, absent the aforementioned rows.
                 """ 
                 for scenario in ["start", "end"]:
-                    station_names = self.data.columns.get_loc(f"{scenario}_station_name")
-                    lats = self.data.columns.get_loc(f"{scenario}_lat")
-                    lngs = self.data.columns.get_loc(f"{scenario}_lng")
 
                     all_rows = tqdm(
                         iterable=range(self.data.shape[0]),
@@ -60,7 +66,7 @@ class DataProcessor:
 
                     rows = []
                     for row in all_rows:
-                        if pd.isnull(self.data.iloc[row, station_names]) and pd.isnull(self.data.iloc[row, lats]) and pd.isnull(
+                        if pd.isnull(self.data.iloc[row, station_names_col]) and pd.isnull(self.data.iloc[row, lats]) and pd.isnull(
                                 self.data.iloc[row, lngs]
                             ):
                             rows.append(row)
@@ -72,9 +78,7 @@ class DataProcessor:
                 return self.data
 
             def __find_rows_with_missing_station_names_ids(scenario: str) -> list:
-                station_id = self.data.columns.get_loc(f"{scenario}_station_id")
-                station_names = self.data.columns.get_loc(f"{scenario}_station_name")
-
+                
                 all_rows = tqdm(
                     iterable=range(self.data.shape[0]),
                     desc="Searching for rows with missing station names and IDs"
@@ -90,12 +94,9 @@ class DataProcessor:
 
                 lats = self.data.columns.get_loc(f"{scenario}_lat")
                 lngs = self.data.columns.get_loc(f"{scenario}_lng")
-                    
+                
                 for row in tqdm(range(self.data.shape[0])):
-                    
-                    station_id_col = self.data.columns.get_loc(f"{scenario}_station_id")
-                    station_names_col = self.data.columns.get_loc(f"{scenario}_station_name")
-
+                
                     rows = []
                     known_lats = []
                     known_lngs = []
@@ -126,9 +127,6 @@ class DataProcessor:
                 known_station_ids: list, 
                 known_station_names: list
                 ) -> pd.DataFrame:    
-
-                lats = self.data.columns.get_loc(f"{scenario}_lat")
-                lngs = self.data.columns.get_loc(f"{scenario}_lng")
 
                 rows_to_search = tqdm(
                     iterable=rows_missing_station_names_ids,
@@ -211,7 +209,7 @@ class DataProcessor:
 
         training_sets = []
         for scenario in trimmed_agg_data.keys():
-            logger.info(f"Turning the time series data on the {scenario}s of trips into training data`...")
+            logger.info(f"Turning the time series data on the {scenario}s of trips into training data...")
             training_data = self._transform_ts_into_training_data(
                 ts_data=trimmed_agg_data[scenario],
                 scenario=scenario,
@@ -408,7 +406,7 @@ class DataProcessor:
                 for data, scenario in zip(
                     [start_df, end_df], ["start", "end"]
                 ):  
-                    ___round_coordinates_and_make_ids(data=data, scenario=scenario, decimal_places=4)
+                    ___round_coordinates_and_make_ids(data=data, scenario=scenario, decimal_places=5)
                   
                     # Get all the coordinates that are common to both dictionaries
                     common_points = [point for point in dictionaries[0].keys() if point in dictionaries[1].keys()]
@@ -430,7 +428,7 @@ class DataProcessor:
 
             elif missing_scenario == "start" or "end":
                 data = start_df if missing_scenario == "start" else end_df
-                data = ___round_coordinates_and_make_ids(data=data, scenario=missing_scenario, decimal_places=4)
+                data = ___round_coordinates_and_make_ids(data=data, scenario=missing_scenario, decimal_places=5)
                 ts_data = __aggregate_final_ts(data=data, scenario=missing_scenario)
 
                 if save:

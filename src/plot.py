@@ -1,6 +1,5 @@
-from typing import Optional, List
-from datetime import datetime, timedelta
 import pandas as pd 
+from datetime import timedelta
 
 import plotly.express as plotx
 
@@ -9,9 +8,9 @@ def plot_one_sample(
     example_station: int, 
     features: pd.DataFrame,
     scenario: str,
-    targets: Optional[pd.Series] = None, 
-    predictions: Optional[pd.Series] = None,
-    display_title: Optional[bool] = True
+    targets: pd.Series = None, 
+    predictions: pd.Series = None,
+    display_title: bool = True
 ):
 
     """Credit to Pau Labarta Bajo"""
@@ -19,7 +18,6 @@ def plot_one_sample(
     features_ = features.iloc[example_station]
 
     if targets is not None:
-
         target_ = targets.iloc[example_station]
 
     else:
@@ -38,12 +36,12 @@ def plot_one_sample(
 
     if display_title:
 
-        title = f'{scenario}_hour = {features_[{scenario}]}_hour, station_id = {features_[f"{scenario}_station_id"]}'
+        #title = f'{scenario}_hour = {features_[{scenario}]}_hour, station_id = {features_[f"{scenario}_station_id"]}'
 
         fig = plotx.line(
             x=dates, y=values, 
             template="plotly_dark",
-            markers=True, title=title
+            markers=True
         )
     
     # Plot actual values if available

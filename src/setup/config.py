@@ -1,7 +1,5 @@
-from loguru import logger 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from sqlalchemy.engine import create_engine
 
 class Settings(BaseSettings):
   
