@@ -24,11 +24,7 @@ from datetime import datetime as dt
 from src.setup.paths import RAW_DATA_DIR
 
 
-def download_one_file_of_raw_data(
-    year: int,
-    month: int = None,
-    file_name: str = None
-) -> None:
+def download_one_file_of_raw_data(year: int, month: int = None) -> None:
     """
     Download the data for a given year, specifying the month if necessary,
     and the file name for the downloaded file.
@@ -38,18 +34,20 @@ def download_one_file_of_raw_data(
         
         month (int, optional): the month for which we want that data. 
                                Defaults to None.
-        
-        file_name (str, optional): the name of the .csv file to be saved. 
-                                   Defaults to None.
     """
-    def __download_and_extract_zipfile(
-        first_zipfile_name: str,
-        URL_1: str, 
-        second_zipfile_name: str = None, 
-        URL_2: str = None
-    ) -> None:  
 
-        def __write_and_extract_zipfile(zipfile_name: str, response: requests.Response, keep_zipfile: bool = False) -> None:
+    def __download_and_extract_zipfile(
+            first_zipfile_name: str,
+            url_1: str,
+            second_zipfile_name: str = None,
+            url_2: str = None
+    ) -> None:
+
+        def __write_and_extract_zipfile(
+                zipfile_name: str,
+                response: requests.Response,
+                keep_zipfile: bool = False
+        ) -> None:
             """
             If the HTTP request for the data is successful, download the zipfile containing the data, 
             and extract the .csv file into a folder of the same name. The zipfile will be deleted by 
@@ -64,27 +62,27 @@ def download_one_file_of_raw_data(
                                                Defaults to False.
             """
             if response.status_code == 200:
-                file_name = zipfile_name[:-4] # Remove ".zip" from the name of the zipfile
-                folder_path = RAW_DATA_DIR/file_name
-                zipfile_path = RAW_DATA_DIR/zipfile_name
-                 
+                file_name = zipfile_name[:-4]  # Remove ".zip" from the name of the zipfile
+                folder_path = RAW_DATA_DIR / file_name
+                zipfile_path = RAW_DATA_DIR / zipfile_name
+
                 open(file=zipfile_path, mode="wb").write(response.content)
 
-                with ZipFile(file=zipfile_path, mode="r") as zip:
-                    zip.extract(f"{file_name}.csv", folder_path) # Extract only the the .csv file
-                if not keep_zipfile:    
+                with ZipFile(file=zipfile_path, mode="r") as zipfile:
+                    zipfile.extract(f"{file_name}.csv", folder_path)  # Extract only the .csv file
+                if not keep_zipfile:
                     os.remove(zipfile_path)
 
-        first_response = requests.get(URL_1)    
+        first_response = requests.get(url_1)
         __write_and_extract_zipfile(zipfile_name=first_zipfile_name, response=first_response)
 
-        if URL_2 and second_zipfile_name is not None:
-            second_response = requests.get(URL_2)
+        if url_2 and second_zipfile_name is not None:
+            second_response = requests.get(url_2)
             __write_and_extract_zipfile(zipfile_name=second_zipfile_name, response=second_response)
 
     if year >= 2021:
-        URL = f"https://divvy-tripdata.s3.amazonaws.com/{year}{month:02d}-divvy-tripdata.zip"
-        __download_and_extract_zipfile(first_zipfile_name=f"{year}{month:02d}-divvy-tripdata.zip", URL_1=URL)
+        url = f"https://divvy-tripdata.s3.amazonaws.com/{year}{month:02d}-divvy-tripdata.zip"
+        __download_and_extract_zipfile(first_zipfile_name=f"{year}{month:02d}-divvy-tripdata.zip", url_1=url)
 
 
 def check_for_file_and_download(year: int, file_name: str, month: int = None):
@@ -93,30 +91,26 @@ def check_for_file_and_download(year: int, file_name: str, month: int = None):
 
     Args:
         year (int): the year whose data we are looking to potentially download
-
         file_name (str): the name of the file to be saved to disk
-        
-        months (list[int] | None, optional): the month for which we seek data
+        month (list[int] | None, optional): the month for which we seek data
     """
     if month is not None:
-        local_file = RAW_DATA_DIR/f"{year}{month:02d}-divvy-tripdata"
+        local_file = RAW_DATA_DIR/file_name
         if not local_file.exists():
             try:
-                logger.info(f"Downloading and extracting {year}{month:02d}-divvy-tripdata.zip")
+                logger.info(f"Downloading and extracting {file_name}.zip")
                 download_one_file_of_raw_data(year=year, month=month)
-            except:
-                logger.error(f"{year}{month:02d}-divvy-tripdata is not available")
+            except Exception as error:
+                logger.error(error)
         else:
-            logger.success(f"The file {year}{month:02d}-divvy-tripdata.zip is already in local storage")
+            logger.success(f"The file {file_name}.zip is already in local storage")
 
 
-def get_dataframe_from_folder(year: int, file_name: str) -> pd.DataFrame:
+def get_dataframe_from_folder(file_name: str) -> pd.DataFrame:
     """
     Load a requested data file which has been downloaded and return it as dataframes.
 
     Args:
-        year (int): the year whose data is to be loaded.
-
         file_name (str): the name of the file to be loaded.
 
     Returns:
@@ -143,13 +137,12 @@ def load_raw_data(year: int, months: list[int] = None) -> pd.DataFrame:
     """
     is_current_year = True if year == dt.now().year else False
     end_month = dt.now().month if is_current_year else 12
-    months_to_download = range(1, end_month+1) if months is None else months
+    months_to_download = range(1, end_month + 1) if months is None else months
 
     for month in months_to_download:
         file_name = f"{year}{month:02d}-divvy-tripdata"
         try:
             check_for_file_and_download(year=year, month=month, file_name=file_name)
-            yield get_dataframe_from_folder(year=year, file_name=file_name)
-        except:
-            break
-    
+            yield get_dataframe_from_folder(file_name=file_name)
+        except Exception as error:
+            logger.error(error)

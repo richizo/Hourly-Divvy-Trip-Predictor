@@ -1,11 +1,11 @@
 # Files
 .env
 
-
 # Folders
 /data
 /.idea
 /models
+/.ruff_cache
 /.vscode
 **/__pycache__
 /notebooks/.ipynb_checkpoints
