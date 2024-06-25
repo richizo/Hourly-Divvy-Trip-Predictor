@@ -55,7 +55,7 @@ def add_rounded_coordinates_to_dataframe(data: pd.DataFrame, decimal_places: int
     """
 
     new_lats = []
-    new_longs = []
+    new_lngs = []
 
     latitudes = tqdm(
         iterable=data[f"{scenario}_lat"].values,
@@ -73,7 +73,7 @@ def add_rounded_coordinates_to_dataframe(data: pd.DataFrame, decimal_places: int
         )
 
     for longitude in longitudes:
-        new_longs.append(
+        new_lngs.append(
             np.round(longitude, decimals=decimal_places)
         )
 
@@ -89,7 +89,7 @@ def add_rounded_coordinates_to_dataframe(data: pd.DataFrame, decimal_places: int
     data.insert(
         loc=data.shape[1],
         column=f"rounded_{scenario}_lng",
-        value=pd.Series(new_longs),
+        value=pd.Series(new_lngs),
         allow_duplicates=False
     )
 

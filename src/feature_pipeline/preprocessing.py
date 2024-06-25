@@ -1,23 +1,37 @@
 import os
+import warnings
 import numpy as np
 import pandas as pd
+from pandas import DataFrame
 
 from tqdm import tqdm
 from loguru import logger
 from pathlib import Path
 
 from src.setup.miscellaneous import (
-    add_column_of_rounded_points, add_column_of_ids, make_dict_of_new_station_ids, add_rounded_coordinates_to_dataframe,
-    save_dict
+    add_column_of_rounded_points, add_column_of_ids, make_dict_of_new_station_ids,
+    add_rounded_coordinates_to_dataframe, save_dict
 )
 
 from src.feature_pipeline.data_extraction import load_raw_data
 from src.setup.paths import CLEANED_DATA, TRAINING_DATA, TIME_SERIES_DATA, GEOGRAPHICAL_DATA, make_fundamental_paths
 
 
+def get_named_column(data: DataFrame, column_name: str, scenario: str):
+    if "id" in column_name:
+        return data.columns.get_loc(f"{scenario}_station_id")
+    elif "station_name" in column_name:
+        return data.columns.get_loc(f"{scenario}_station_name")
+    elif "lat" in column_name:
+        return data.columns.get_loc(f"{scenario}_lat")
+    elif "lng" in column_name:
+        return data.columns.get_loc(f"{scenario}_lng")
+
+
 class DataProcessor:
     def __init__(self, year: int):
 
+        self.station_ids = None
         self.data = pd.concat(
             list(load_raw_data(year=year))
         )
@@ -25,14 +39,15 @@ class DataProcessor:
         self.starts_ts_path = TIME_SERIES_DATA / "starts_ts.parquet"
         self.ends_ts_path = TIME_SERIES_DATA / "ends_ts.parquet"
 
-        scenario = "start" or "end"
-        lats = self.data.columns.get_loc(f"{scenario}_lat")
-        lngs = self.data.columns.get_loc(f"{scenario}_lng")
+        self.start_lats = self.data.columns.get_loc("start_lat")
+        self.start_lngs = self.data.columns.get_loc("start_lng")
 
-        station_id_col = self.data.columns.get_loc(f"{scenario}_station_id")
-        station_names_col = self.data.columns.get_loc(f"{scenario}_station_name")
+        self.start_station_ids = self.data.columns.get_loc("start_station_id")
+        self.end_station_ids = self.data.columns.get_loc("end_station_id")
+        self.start_station_names_col = self.data.columns.get_loc("start_station_name")
+        self.end_station_names_col = self.data.columns.get_loc("end_station_name")
 
-    def clean(self, patient: bool = False, save: bool = True) -> pd.DataFrame:
+    def clean(self, patient: bool = False, save: bool = True) -> DataFrame:
 
         if len(os.listdir(path=CLEANED_DATA)) == 0:
             self.data["started_at"] = pd.to_datetime(self.data["started_at"], format="mixed")
@@ -45,29 +60,33 @@ class DataProcessor:
                 }
             )
 
-            def _delete_rows_with_unnamed_and_missing_coordinates() -> pd.DataFrame:
+            def _delete_rows_with_unnamed_and_missing_coordinates() -> DataFrame:
                 """
-                There are rows with missing latitude and longitude values for the various 
-                destinations. If any of these rows have available station names, then geocoding 
-                can be used to get the coordinates. At the current time however, all rows with 
-                missing coordinates also have missing station names, rendering those rows 
+                There are rows with missing latitude and longitude values for the various
+                destinations. If any of these rows have available station names, then geocoding
+                can be used to get the coordinates. At the current time however, all rows with
+                missing coordinates also have missing station names, rendering those rows
                 irreparably lacking. We locate and delete these points.
 
                 Returns:
-                    pd.DataFrame: the data, absent the aforementioned rows.
+                    DataFrame: the data, absent the aforementioned rows.
                 """
                 for scenario in ["start", "end"]:
+                    lats = get_named_column(data=self.data, column_name="lat", scenario=scenario)
+                    lngs = get_named_column(data=self.data, column_name="lng", scenario=scenario)
+                    station_id_col = get_named_column(data=self.data, column_name="station_id", scenario=scenario)
+                    station_names_col = get_named_column(data=self.data, column_name="station_name", scenario=scenario)
 
                     all_rows = tqdm(
                         iterable=range(self.data.shape[0]),
-                        desc=f"Targeting rows with missing station names and coordinates for deletion ({scenario}s of trips)"
+                        desc=f"Targeting rows with missing station names and coordinates for deletion ({scenario}s)"
                     )
 
                     rows = []
                     for row in all_rows:
                         if pd.isnull(self.data.iloc[row, station_names_col]) and pd.isnull(
                                 self.data.iloc[row, lats]) and pd.isnull(
-                                self.data.iloc[row, lngs]
+                            self.data.iloc[row, lngs]
                         ):
                             rows.append(row)
 
@@ -80,6 +99,9 @@ class DataProcessor:
 
             def _find_rows_with_missing_station_names_ids(scenario: str) -> list:
 
+                station_id_col = get_named_column(data=self.data, column_name="station_id", scenario=scenario)
+                station_names_col = get_named_column(data=self.data, column_name="station_name", scenario=scenario)
+
                 all_rows = tqdm(
                     iterable=range(self.data.shape[0]),
                     desc="Searching for rows with missing station names and IDs"
@@ -87,16 +109,19 @@ class DataProcessor:
 
                 rows = []
                 for row in all_rows:
-                    if pd.isnull(self.data.iloc[row, station_names]) and pd.isnull(self.data.iloc[row, station_id]):
+                    if pd.isnull(self.data.iloc[row, station_names_col]) and \
+                            pd.isnull(self.data.iloc[row, station_id_col]):
                         rows.append(row)
                 return rows
 
             def _find_rows_with_known_coords_names_and_ids(scenario: str) -> tuple[list, list, list, list]:
 
-                lats = self.data.columns.get_loc(f"{scenario}_lat")
-                lngs = self.data.columns.get_loc(f"{scenario}_lng")
+                lats = get_named_column(data=self.data, column_name="lat", scenario=scenario)
+                lngs = get_named_column(data=self.data, column_name="lng", scenario=scenario)
+                station_id_col = get_named_column(data=self.data, column_name="station_id", scenario=scenario)
+                station_names_col = get_named_column(data=self.data, column_name="station_name", scenario=scenario)
 
-                for row in tqdm(range(self.data.shape[0])):
+                for _ in tqdm(range(self.data.shape[0])):
 
                     rows = []
                     known_lats = []
@@ -110,10 +135,10 @@ class DataProcessor:
                     )
 
                     for row in all_rows:
-                        if not pd.isnull(self.data.iloc[row, lats]) and not pd.isnull(
-                                self.data.iloc[row, lngs]) and not pd.isnull(
-                                self.data.iloc[row, station_id_col]) and not pd.isnull(
-                                self.data.iloc[row, station_names_col]):
+                        if (not pd.isnull(self.data.iloc[row, lats]) and not pd.isnull(self.data.iloc[row, lngs])
+                                and not pd.isnull(self.data.iloc[row, station_id_col]) and not
+                                pd.isnull(self.data.iloc[row, station_names_col])):
+
                             rows.append(row)
                             known_lats.append(self.data.iloc[row, lats])
                             known_lngs.append(self.data.iloc[row, lngs])
@@ -128,12 +153,17 @@ class DataProcessor:
                     known_lngs: list,
                     known_station_ids: list,
                     known_station_names: list
-            ) -> pd.DataFrame:
+            ) -> DataFrame:
 
                 rows_to_search = tqdm(
                     iterable=rows_missing_station_names_ids,
                     desc="Searching through rows to find matching latitudes and longitudes"
                 )
+
+                lats = get_named_column(data=self.data, column_name="lat", scenario=scenario)
+                lngs = get_named_column(data=self.data, column_name="lng", scenario=scenario)
+                station_id_col = get_named_column(data=self.data, column_name="id", scenario=scenario)
+                station_name_col = get_named_column(data=self.data, column_name="station_name", scenario=scenario)
 
                 for row in rows_to_search:
                     for lat, lng in zip(known_lats, known_lngs):
@@ -153,8 +183,8 @@ class DataProcessor:
 
             if patient:
                 rows_missing_station_names_ids = _find_rows_with_missing_station_names_ids(scenario="end")
-                known_lats, known_lngs, known_station_ids, known_station_names = _find_rows_with_known_coords_names_and_ids(
-                    scenario="end")
+                known_lats, known_lngs, known_station_ids, known_station_names = \
+                    _find_rows_with_known_coords_names_and_ids(scenario="end")
 
                 self.data = _replace_missing_names_and_ids(
                     scenario="end",
@@ -187,10 +217,10 @@ class DataProcessor:
             logger.success("There is already some cleaned data. Fetching it...")
             return pd.read_parquet(path=CLEANED_DATA / "cleaned.parquet")
 
-    def make_training_data(self) -> list[pd.DataFrame, pd.DataFrame]:
+    def make_training_data(self) -> list[DataFrame]:
         """
-        Extract raw data, transform it into a time series, and 
-        transform that time series into training data which is 
+        Extract raw data, transform it into a time series, and
+        transform that time series into training data which is
         subsequently saved.
         """
 
@@ -206,15 +236,14 @@ class DataProcessor:
         ]
 
         logger.info("Transforming the data into a time series...")
-        agg_starts, agg_ends = self.transform_cleaned_data_into_ts_data(start_df=starts, end_df=ends)
-
-        trimmed_agg_data = {"start": agg_starts.iloc[:, :3], "end": agg_ends.iloc[:, :3]}
+        starts_ts, ends_ts = self.transform_cleaned_data_into_ts_data(start_df=starts, end_df=ends)
+        ts_data_per_scenario = {"start": starts_ts, "end": ends_ts}
 
         training_sets = []
-        for scenario in trimmed_agg_data.keys():
+        for scenario in ts_data_per_scenario.keys():
             logger.info(f"Turning the time series data on the {scenario}s of trips into training data...")
             training_data = self.transform_ts_into_training_data(
-                ts_data=trimmed_agg_data[scenario],
+                ts_data=ts_data_per_scenario[scenario],
                 scenario=scenario,
                 input_seq_len=24 * 28 * 1,
                 step_size=24
@@ -222,232 +251,195 @@ class DataProcessor:
 
             logger.info("Saving the data so that we don't have to do this again...")
             training_data.to_parquet(path=TRAINING_DATA / f"{scenario}s.parquet")
-
             training_sets.append(training_sets)
+
         return training_sets
-
-    def add_missing_slots(self, agg_data: pd.DataFrame, scenario: str) -> pd.DataFrame:
-        """
-        Add rows to the input dataframe so that time slots with no
-        trips are now populated in such a way that they now read as
-        having 0 entries. This creates a complete time series.
-        
-        Args:
-            agg_data (pd.DataFrame): the aggregate data
-            scenario (str): "start"/"end"
-
-        Returns:
-            pd.DataFrame: t
-        """
-        self.station_ids = range(
-            agg_data[f"{scenario}_station_id"].max() + 1
-        )
-
-        full_range = pd.date_range(
-            start=agg_data[f"{scenario}_hour"].min(),
-            end=agg_data[f"{scenario}_hour"].max(),
-            freq="h"
-        )
-
-        output = pd.DataFrame()
-
-        station_ids = tqdm(
-            iterable=self.station_ids,
-            desc=f"Categorising the data on the {scenario}s of trips by station IDs"
-        )
-
-        for station in station_ids:
-            agg_data_i = agg_data.loc[
-                agg_data[f"{scenario}_station_id"] == station, [f"{scenario}_hour", "trips"]
-            ]
-
-            # Create the indices for these new rows
-            agg_data_i.index = pd.DatetimeIndex(agg_data_i.index)
-
-            # Ensure that the number of indices is the same as the number of dates, filling empty timeslots with zeros
-            agg_data_i = agg_data_i.reindex(full_range, fill_value=0)
-
-            # Provide the station IDs
-            agg_data_i[f"{scenario}_station_id"] = station
-            output = pd.concat([output, agg_data_i])
-
-        # Drop this column so that the next line doesn't result in two columns with the same name
-        output = output.drop(f"{scenario}_hour", axis=1)
-
-        # Rename the index appropriately
-        output = output.reset_index().rename(
-            columns={"index": f"{scenario}_hour"}
-        )
-
-        return output
 
     def transform_cleaned_data_into_ts_data(
             self,
-            start_df: pd.DataFrame,
-            end_df: pd.DataFrame,
+            start_df: DataFrame,
+            end_df: DataFrame,
             save: bool = True
-    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    ) -> tuple[DataFrame, DataFrame]:
         """
         Converts cleaned data into time series data.
 
         In addition to the putting the start and end times in hourly form, we approximate
-        the latitudes and longitudes of each point of origin or destination (we are targeting 
+        the latitudes and longitudes of each point of origin or destination (we are targeting
         no more than a 100m radius of each point, but ideally we would like to maintain a 10m
         radius), and use these to construct new station IDs.
 
         Args:
-            start_df (pd.DataFrame): dataframe consisting of the "start_time", "start_lat", 
+            start_df (DataFrame): dataframe consisting of the "start_time", "start_lat",
                                      and "start_lng" columns.
-            
-            end_df (pd.DataFrame): dataframe consisting of the "stop_time", "stop_latitude", 
+
+            end_df (DataFrame): dataframe consisting of the "stop_time", "stop_latitude",
                                    and "stop_lng" columns.
 
+            save (bool): whether we wish to save the time series data
+
         Returns:
-            tuple[pd.DataFrame, pd.DataFrame]: the time series datasets on the starts and ends  
+            tuple[DataFrame, DataFrame]: the time series datasets on the starts and ends
                                                of trips.
         """
 
-        def _get_ts_or_begin_transformation(starts_ts_path: str, ends_ts_path: str) -> tuple[
-            pd.DataFrame, pd.DataFrame]:
+        def _get_ts_or_begin_transformation(start_ts_path: str, end_ts_path: str) -> tuple[DataFrame, DataFrame]:
 
-            if Path(starts_ts_path).exists() and Path(ends_ts_path).exists():
+            if Path(start_ts_path).exists() and Path(end_ts_path).exists():
                 logger.success("Both time series datasets are already present")
-                starts_ts = pd.read_parquet(path=starts_ts_path)
-                ends_ts = pd.read_parquet(path=ends_ts_path)
+                start_ts = pd.read_parquet(path=start_ts_path)
+                end_ts = pd.read_parquet(path=end_ts_path)
+                return start_ts, end_ts
 
-            elif not Path(starts_ts_path).exists() and not Path(ends_ts_path).exists():
+            elif not Path(start_ts_path).exists() and not Path(end_ts_path).exists():
                 logger.warning("Neither time series dataset exists")
-                starts_ts, ends_ts = _begin_transformation(missing_scenario="both")
+                start_ts, end_ts = _begin_transformation(missing_scenario="both")
+                return start_ts, end_ts
 
-            elif not Path(starts_ts_path).exists() and Path(ends_ts_path).exists():
+            elif not Path(start_ts_path).exists() and Path(end_ts_path).exists():
                 logger.warning("Time series data for trip starts has not been made")
-                ends_ts = pd.read_parquet(path=ends_ts_path)
-                starts_ts = _begin_transformation(missing_scenario="start")
+                start_ts = _begin_transformation(missing_scenario="start")
+                end_ts = pd.read_parquet(path=end_ts_path)
+                return start_ts, end_ts
 
-            elif Path(starts_ts_path).exists() and not Path(ends_ts_path).exists():
+            elif Path(start_ts_path).exists() and not Path(end_ts_path).exists():
                 logger.warning("Time series data for the ends of trips has not been made")
-                starts_ts = pd.read_parquet(path=starts_ts_path)
-                ends_ts = _begin_transformation(missing_scenario="end")
+                start_ts = pd.read_parquet(path=start_ts_path)
+                end_ts = _begin_transformation(missing_scenario="end")
+                return start_ts, end_ts
 
-            return starts_ts, ends_ts
+        def _begin_transformation(missing_scenario: str | None) -> tuple[DataFrame, DataFrame] | DataFrame:
 
-        def _begin_transformation(missing_scenario: str | None) -> tuple[pd.DataFrame, pd.DataFrame] | pd.DataFrame:
+            dictionaries: list[dict] = []
+            interim_dataframes: list[DataFrame] = []
+            ts_dataframes: list[DataFrame] = []
 
-            dictionaries = []
-            intermediate_dataframes = []
-            ts_dataframes = []
+            def __round_coordinates_and_make_ids(
+                    cleaned_data: DataFrame,
+                    start_or_end: str,
+                    decimal_places: int
+            ) -> DataFrame:
+                logger.info(f"Recording the hour during which each trip {start_or_end}s...")
 
-            def __round_coordinates_and_make_ids(data: pd.DataFrame, scenario: str,
-                                                 decimal_places: int) -> pd.DataFrame:
-                logger.info(f"Recording the hour during which each trip {scenario}s...")
-
-                data.insert(
-                    loc=data.shape[1],
-                    column=f"{scenario}_hour",
-                    value=data.loc[:, f"{scenario}_time"].dt.floor("h"),
+                cleaned_data.insert(
+                    loc=cleaned_data.shape[1],
+                    column=f"{start_or_end}_hour",
+                    value=cleaned_data.loc[:, f"{start_or_end}_time"].dt.floor("h"),
                     allow_duplicates=False
                 )
 
-                data = data.drop(f"{scenario}_time", axis=1)
+                cleaned_data = cleaned_data.drop(f"{start_or_end}_time", axis=1)
 
-                logger.info(f"Approximating the coordinates of the location where each trip {scenario}s...")
-                # Round the latitudes and longitudes down to 5 dp, and add the rounded values as columns
-                add_rounded_coordinates_to_dataframe(data=data, decimal_places=decimal_places, scenario=scenario)
+                logger.info(f"Approximating the coordinates of the location where each trip {start_or_end}s...")
+                # Round the latitudes and longitudes down to the specified dp, and add the rounded values to the data
+                add_rounded_coordinates_to_dataframe(
+                    data=cleaned_data,
+                    decimal_places=decimal_places,
+                    scenario=start_or_end
+                )
 
-                data = data.drop(
-                    columns=[f"{scenario}_lat", f"{scenario}_lng"]
+                cleaned_data.drop(
+                    columns=[f"{start_or_end}_lat", f"{start_or_end}_lng"],
+                    inplace=True
                 )
 
                 # Add the rounded coordinates to the dataframe as a column.
-                add_column_of_rounded_points(data=data, scenario=scenario)
+                add_column_of_rounded_points(data=cleaned_data, scenario=start_or_end)
 
-                data = data.drop(
-                    columns=[f"rounded_{scenario}_lat", f"rounded_{scenario}_lng"]
+                cleaned_data.drop(
+                    columns=[f"rounded_{start_or_end}_lat", f"rounded_{start_or_end}_lng"],
+                    inplace=True
                 )
 
-                intermediate_dataframes.append(data)
+                interim_dataframes.append(cleaned_data)
                 logger.info("Matching up approximate locations with generated IDs...")
 
                 # Make a list of dictionaries of start points and IDs
-                origins_or_destinations_and_ids = make_dict_of_new_station_ids(data=data, scenario=scenario)
+                origins_or_destinations_and_ids = make_dict_of_new_station_ids(data=cleaned_data, scenario=start_or_end)
                 dictionaries.append(origins_or_destinations_and_ids)
 
                 # Critical for recovering the rounded coordinates and their corresponding IDs later.
                 save_dict(
                     dictionary=origins_or_destinations_and_ids,
                     folder=GEOGRAPHICAL_DATA,
-                    file_name=f"rounded_{scenario}_points_and_new_ids"
+                    file_name=f"rounded_{start_or_end}_points_and_new_ids"
                 )
 
-                logger.success(f"Done with the {scenario}s of the trips!")
-                return data
+                logger.success(f"Done with the {start_or_end}s of the trips!")
+                return cleaned_data
 
-            def __aggregate_final_ts(data: pd.DataFrame, scenario: str) -> pd.DataFrame | list[
-                pd.DataFrame, pd.DataFrame]:
+            def __aggregate_final_ts(
+                    interim_data: DataFrame,
+                    start_or_end: str
+            ) -> DataFrame | list[DataFrame, DataFrame]:
 
                 if missing_scenario == "start" or "end":
-                    add_column_of_ids(data=data, scenario=scenario, points_and_ids=dictionaries[0])
+                    add_column_of_ids(data=interim_data, scenario=start_or_end, points_and_ids=dictionaries[0])
 
                 elif missing_scenario == "both":
-                    if scenario == "start":
-                        add_column_of_ids(data=data, scenario=scenario, points_and_ids=dictionaries[0])
-                    elif scenario == "end":
-                        add_column_of_ids(data=data, scenario=scenario, points_and_ids=dictionaries[1])
+                    if start_or_end == "start":
+                        add_column_of_ids(data=interim_data, scenario=start_or_end, points_and_ids=dictionaries[0])
+                    elif start_or_end == "end":
+                        add_column_of_ids(data=interim_data, scenario=start_or_end, points_and_ids=dictionaries[1])
 
-                data = data.drop(f"rounded_{scenario}_points", axis=1)
+                interim_data = interim_data.drop(f"rounded_{start_or_end}_points", axis=1)
+                logger.info(f"Aggregating the final time series data for the {start_or_end}s of trips...")
 
-                logger.info(f"Aggregating the final time series data for the {scenario}s of trips...")
-                agg_data = data.groupby([f"{scenario}_hour", f"{scenario}_station_id"]).size().reset_index()
+                agg_data = interim_data.groupby(
+                    [f"{start_or_end}_hour", f"{start_or_end}_station_id"]).size().reset_index()
+
                 agg_data = agg_data.rename(columns={0: "trips"})
-
-                if missing_scenario == "both":
-                    ts_dataframes.append(self.add_missing_slots(agg_data=agg_data, scenario=scenario))
-                    return ts_dataframes[0], ts_dataframes[1]
-
-                elif missing_scenario == "start" or "end":
-                    return self.add_missing_slots(agg_data=agg_data, scenario=missing_scenario)
+                return agg_data
 
             if missing_scenario == "both":
-                for data, scenario in zip(
-                        [start_df, end_df], ["start", "end"]
-                ):
-                    __round_coordinates_and_make_ids(data=data, scenario=scenario, decimal_places=5)
+                for data, scenario in zip([start_df, end_df], ["start", "end"]):
+                    # The coordinates are in 6 dp, so no rounding is happening here.
+                    __round_coordinates_and_make_ids(cleaned_data=data, start_or_end=scenario, decimal_places=6)
 
-                    # Get all the coordinates that are common to both dictionaries
-                    common_points = [point for point in dictionaries[0].keys() if point in dictionaries[1].keys()]
+                # Get all the coordinates that are common to both dictionaries
+                common_points = [point for point in dictionaries[0].keys() if point in dictionaries[1].keys()]
 
-                    # Ensure that these common points have the same IDs in each dictionary.
-                    for point in common_points:
-                        dictionaries[0][point] = dictionaries[1][point]
+                # Ensure that these common points have the same IDs in each dictionary.
+                for point in common_points:
+                    dictionaries[0][point] = dictionaries[1][point]
 
-                    for data, scenario in zip(
-                            [intermediate_dataframes[0], intermediate_dataframes[1]], ["start", "end"]
-                    ):
-                        start_ts, end_ts = __aggregate_final_ts(data=data, scenario=scenario)
+                start_ts = __aggregate_final_ts(
+                    interim_data=interim_dataframes[0], start_or_end="start"
+                )
 
-                        if save:
-                            start_ts.to_parquet(TIME_SERIES_DATA / "starts_ts.parquet")
-                            end_ts.to_parquet(TIME_SERIES_DATA / "ends_ts.parquet")
+                end_ts = __aggregate_final_ts(
+                    interim_data=interim_dataframes[1], start_or_end="end"
+                )
 
-                return ts_dataframes[0], ts_dataframes[1]
+                if save:
+                    start_ts.to_parquet(TIME_SERIES_DATA/"starts_ts.parquet")
+                    end_ts.to_parquet(TIME_SERIES_DATA/"ends_ts.parquet")
+
+                return start_ts, end_ts
 
             elif missing_scenario == "start" or "end":
                 data = start_df if missing_scenario == "start" else end_df
-                data = __round_coordinates_and_make_ids(data=data, scenario=missing_scenario, decimal_places=5)
-                ts_data = __aggregate_final_ts(data=data, scenario=missing_scenario)
+                data = __round_coordinates_and_make_ids(
+                    cleaned_data=data,
+                    start_or_end=missing_scenario,
+                    decimal_places=5
+                )
+
+                ts_data = __aggregate_final_ts(interim_data=data, start_or_end=missing_scenario)
 
                 if save:
                     ts_data.to_parquet(TIME_SERIES_DATA / f"{missing_scenario}s_ts.parquet")
 
                 return ts_data
 
-        return _get_ts_or_begin_transformation(starts_ts_path=self.starts_ts_path, ends_ts_path=self.ends_ts_path)
+        return _get_ts_or_begin_transformation(start_ts_path=self.starts_ts_path, end_ts_path=self.ends_ts_path)
 
-    def get_cutoff_indices(self, ts_data: pd.DataFrame, input_seq_len: int, step_size_len: int) -> list:
+    @staticmethod
+    def get_cutoff_indices(ts_data: DataFrame, input_seq_len: int, step_size_len: int) -> list:
         """
-        Starts by taking a certain number of rows of a given dataframe as an input, and the 
-        indices of the row on which the selected rows starts and ends. These will be placed 
-        in the first and second positions of a three element tuple. The third position of 
+        Starts by taking a certain number of rows of a given dataframe as an input, and the
+        indices of the row on which the selected rows start and end. These will be placed
+        in the first and second positions of a three element tuple. The third position of
         said tuple will be occupied by the index of the row that comes after.
 
         Then the function will slide "step_size_len" steps and repeat the process. The function
@@ -456,7 +448,7 @@ class DataProcessor:
         Credit to Pau Labarta Bajo
 
         Args:
-            ts_data (pd.DataFrame): the time series dataset that serves as the input
+            ts_data (DataFrame): the time series dataset that serves as the input
             input_seq_len (int): the number of rows to be considered at any one time
             step_size_len (int): how many rows down we move as we repeat the process
 
@@ -485,8 +477,8 @@ class DataProcessor:
         return indices
 
     def transform_ts_into_training_data(
-            self, ts_data: pd.DataFrame, scenario: str, input_seq_len: int, step_size: int
-    ) -> pd.DataFrame:
+            self, ts_data: DataFrame, scenario: str, input_seq_len: int, step_size: int
+    ) -> DataFrame:
         """
         Transpose the time series data into a feature-target format.
 
@@ -497,15 +489,15 @@ class DataProcessor:
             step_size:
 
         Returns:
-            pd.DataFrame: the training data
+            DataFrame: the training data
         """
         # Ensure first that these are the columns of the chosen data set (and they are listed in this order)
         assert set(ts_data.columns) == {f"{scenario}_hour", f"{scenario}_station_id", "trips"}
         station_ids = ts_data[f"{scenario}_station_id"].unique()
 
         # Prepare the dataframe which will contain the features and targets
-        features = pd.DataFrame()
-        targets = pd.DataFrame()
+        features = DataFrame()
+        targets = DataFrame()
 
         for station_id in tqdm(station_ids):
             # Isolate a part of the dataframe that relates to each station ID
@@ -521,7 +513,6 @@ class DataProcessor:
             )
 
             num_indices = len(indices)
-
             # Create a multidimensional array for the features, and a column vector for the target
             x = np.ndarray(shape=(num_indices, input_seq_len), dtype=np.float32)
             y = np.ndarray(shape=num_indices, dtype=np.float32)
@@ -538,7 +529,7 @@ class DataProcessor:
                 )
 
             # Make a dataframe of features
-            features_per_location = pd.DataFrame(
+            features_per_location = DataFrame(
                 x, columns=[
                     f"trips_previous_{i + 1}_hour" for i in reversed(range(input_seq_len))
                 ]
@@ -547,11 +538,14 @@ class DataProcessor:
             features_per_location[f"{scenario}_hour"] = hours
             features_per_location[f"{scenario}_station_id"] = station_id
 
-            targets_per_location = pd.DataFrame(y, columns=["trips_next_hour"])
+            targets_per_location = DataFrame(y, columns=["trips_next_hour"])
 
-            # Concatenate the dataframes
-            features = pd.concat([features, features_per_location], axis=0)
-            targets = pd.concat([targets, targets_per_location], axis=0)
+            with warnings.catch_warnings():
+                warnings.filterwarnings(action="ignore", category=FutureWarning)
+
+                # Concatenate the dataframes
+                features = pd.concat([features, features_per_location], axis=0)
+                targets = pd.concat([targets, targets_per_location], axis=0)
 
         features = features.reset_index(drop=True)
         targets = targets.reset_index(drop=True)
