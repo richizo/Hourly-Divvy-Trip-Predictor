@@ -39,14 +39,6 @@ class DataProcessor:
         self.starts_ts_path = TIME_SERIES_DATA / "starts_ts.parquet"
         self.ends_ts_path = TIME_SERIES_DATA / "ends_ts.parquet"
 
-        self.start_lats = self.data.columns.get_loc("start_lat")
-        self.start_lngs = self.data.columns.get_loc("start_lng")
-
-        self.start_station_ids = self.data.columns.get_loc("start_station_id")
-        self.end_station_ids = self.data.columns.get_loc("end_station_id")
-        self.start_station_names_col = self.data.columns.get_loc("start_station_name")
-        self.end_station_names_col = self.data.columns.get_loc("end_station_name")
-
     def clean(self, patient: bool = False, save: bool = True) -> DataFrame:
 
         if len(os.listdir(path=CLEANED_DATA)) == 0:
@@ -74,7 +66,6 @@ class DataProcessor:
                 for scenario in ["start", "end"]:
                     lats = get_named_column(data=self.data, column_name="lat", scenario=scenario)
                     lngs = get_named_column(data=self.data, column_name="lng", scenario=scenario)
-                    station_id_col = get_named_column(data=self.data, column_name="station_id", scenario=scenario)
                     station_names_col = get_named_column(data=self.data, column_name="station_name", scenario=scenario)
 
                     all_rows = tqdm(
@@ -124,10 +115,10 @@ class DataProcessor:
                 for _ in tqdm(range(self.data.shape[0])):
 
                     rows = []
-                    known_lats = []
-                    known_lngs = []
-                    known_station_ids = []
-                    known_station_names = []
+                    rows_with_known_lats = []
+                    rows_with_known_lngs = []
+                    rows_with_known_ids = []
+                    rows_with_known_station_names = []
 
                     all_rows = tqdm(
                         iterable=range(self.data.shape[0]),
@@ -140,19 +131,20 @@ class DataProcessor:
                                 pd.isnull(self.data.iloc[row, station_names_col])):
 
                             rows.append(row)
-                            known_lats.append(self.data.iloc[row, lats])
-                            known_lngs.append(self.data.iloc[row, lngs])
-                            known_station_ids.append(self.data.iloc[row, station_id_col])
-                            known_station_names.append(self.data.iloc[row, station_names_col])
+                            rows_with_known_lats.append(self.data.iloc[row, lats])
+                            rows_with_known_lngs.append(self.data.iloc[row, lngs])
+                            rows_with_known_ids.append(self.data.iloc[row, station_id_col])
+                            rows_with_known_station_names.append(self.data.iloc[row, station_names_col])
 
-                    return known_lats, known_lngs, known_station_ids, known_station_names
+                    return (rows_with_known_lats, rows_with_known_lngs, rows_with_known_ids,
+                            rows_with_known_station_names)
 
             def _replace_missing_names_and_ids(
                     scenario: str,
-                    known_lats: list,
-                    known_lngs: list,
-                    known_station_ids: list,
-                    known_station_names: list
+                    rows_with_known_lats: list,
+                    rows_with_known_lngs: list,
+                    rows_with_known_station_ids: list,
+                    rows_with_known_station_names: list
             ) -> DataFrame:
 
                 rows_to_search = tqdm(
@@ -166,16 +158,16 @@ class DataProcessor:
                 station_name_col = get_named_column(data=self.data, column_name="station_name", scenario=scenario)
 
                 for row in rows_to_search:
-                    for lat, lng in zip(known_lats, known_lngs):
+                    for lat, lng in zip(rows_with_known_lats, rows_with_known_lngs):
                         if lat == self.data.iloc[row, lats] and lng == self.data.iloc[row, lngs]:
                             self.data = self.data.replace(
                                 to_replace=self.data.iloc[row, station_id_col],
-                                value=known_station_ids[known_lats.index(lat)]
+                                value=rows_with_known_station_ids[rows_with_known_lats.index(lat)]
                             )
 
                             self.data = self.data.replace(
                                 to_replace=self.data.iloc[row, station_name_col],
-                                value=known_station_names[known_lats.index(lat)]
+                                value=rows_with_known_station_names[rows_with_known_lats.index(lat)]
                             )
                 return self.data
 
@@ -188,10 +180,10 @@ class DataProcessor:
 
                 self.data = _replace_missing_names_and_ids(
                     scenario="end",
-                    known_lats=known_lats,
-                    known_lngs=known_lngs,
-                    known_station_ids=known_station_ids,
-                    known_station_names=known_station_names
+                    rows_with_known_lats=known_lats,
+                    rows_with_known_lngs=known_lngs,
+                    rows_with_known_station_ids=known_station_ids,
+                    rows_with_known_station_names=known_station_names
                 )
 
                 self.data = self.data.drop(
@@ -312,7 +304,6 @@ class DataProcessor:
 
             dictionaries: list[dict] = []
             interim_dataframes: list[DataFrame] = []
-            ts_dataframes: list[DataFrame] = []
 
             def __round_coordinates_and_make_ids(
                     cleaned_data: DataFrame,
@@ -541,6 +532,7 @@ class DataProcessor:
             targets_per_location = DataFrame(y, columns=["trips_next_hour"])
 
             with warnings.catch_warnings():
+                # There is a warning from pandas about concatenating dataframes that are empty or have missing values
                 warnings.filterwarnings(action="ignore", category=FutureWarning)
 
                 # Concatenate the dataframes

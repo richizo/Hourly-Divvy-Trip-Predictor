@@ -14,8 +14,9 @@ class Settings(BaseSettings):
     email: str
     scenario: str
 
+    @staticmethod
     @field_validator("scenario")
-    def validate_scenarios(self, scenario: str):
+    def validate_scenarios(scenario: str):
         assert scenario in ["start", "end"], f"Invalid value for scenario: {scenario}"
         return scenario
 
