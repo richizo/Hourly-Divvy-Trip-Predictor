@@ -243,7 +243,7 @@ class DataProcessor:
 
             logger.info("Saving the data so that we don't have to do this again...")
             training_data.to_parquet(path=TRAINING_DATA / f"{scenario}s.parquet")
-            training_sets.append(training_sets)
+            training_sets.append(training_data)
 
         return training_sets
 

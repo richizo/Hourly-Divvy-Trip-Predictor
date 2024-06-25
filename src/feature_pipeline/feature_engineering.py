@@ -12,25 +12,26 @@ from src.setup.config import settings
 
 
 def perform_feature_engineering(data: pd.DataFrame, scenario: str, geocode: bool):
-    feature_engineer = FeatureEngineering(data=data, scenario=scenario)
+    feature_engineer = FeatureEngineering(features=data, scenario=scenario)
     return feature_engineer.get_pipeline(geocode=geocode)
 
 
 class FeatureEngineering(BaseEstimator, TransformerMixin):
 
-    def __init__(self, data: pd.DataFrame, scenario: str, y=None) -> None:
+    def __init__(self, features: pd.DataFrame, scenario: str, y=None) -> None:
 
-        self.data = data
+        self.features = features
         self.y = y
         self.scenario = scenario
         self.added_averages = 0.25 * (
-                self.data[f"trips_previous_{1 * 7 * 24}_hour"] + self.data[f"trips_previous_{2 * 7 * 24}_hour"] +
-                self.data[f"trips_previous_{3 * 7 * 24}_hour"] + self.data[f"trips_previous_{4 * 7 * 24}_hour"]
+                self.features[f"trips_previous_{1 * 7 * 24}_hour"] +
+                self.features[f"trips_previous_{2 * 7 * 24}_hour"] +
+                self.features[f"trips_previous_{3 * 7 * 24}_hour"] + self.features[f"trips_previous_{4 * 7 * 24}_hour"]
         )
 
         self.times_and_entries = {
-            "hour": self.data[f"{self.scenario}_hour"].dt.hour,
-            "day_of_the_week": self.data[f"{self.scenario}_hour"].dt.dayofweek
+            "hour": self.features[f"{self.scenario}_hour"].dt.hour,
+            "day_of_the_week": self.features[f"{self.scenario}_hour"].dt.dayofweek
         }
 
     def _fit(self):
@@ -43,15 +44,15 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
         Returns:
             pd.DataFrame: the modified dataframe
         """
-        if "average_trips_last_4_weeks" not in self.data.columns:
+        if "average_trips_last_4_weeks" not in self.features.columns:
             simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
-            self.data.insert(
-                loc=self.data.shape[1],
+            self.features.insert(
+                loc=self.features.shape[1],
                 column="average_trips_last_4_weeks",
                 value=self.added_averages,
                 allow_duplicates=False
             )
-        return self.data
+        return self.features
 
     def add_hours_and_days(self) -> pd.DataFrame:
         """
@@ -63,13 +64,13 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
         """
 
         for time in self.times_and_entries.keys():
-            self.data.insert(
-                loc=self.data.shape[1],
+            self.features.insert(
+                loc=self.features.shape[1],
                 column=time,
                 value=self.times_and_entries[time]
             )
 
-        return self.data.drop(f"{self.scenario}_hour", axis=1)
+        return self.features.drop(f"{self.scenario}_hour", axis=1)
 
     def get_pipeline(self, geocode: bool) -> Pipeline:
 
@@ -91,7 +92,7 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
         the latitudes, and longitudes and places them in appropriately named columns of
         a target dataframe.
         """
-        geodata = GeoData(data=self.data, scenario=self.scenario)
+        geodata = GeoData(data=self.features, scenario=self.scenario)
         places_and_points = geodata.geocode()
 
         for place in geodata.place_names:
@@ -99,8 +100,8 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
                 geodata.latitudes.append(places_and_points[place][0])
                 geodata.longitudes.append(places_and_points[place][0])
 
-        self.data[f"{self.scenario}_latitude"] = pd.Series(geodata.latitudes)
-        self.data[f"{self.scenario}_longitude"] = pd.Series(geodata.longitudes)
+        self.features[f"{self.scenario}_latitude"] = pd.Series(geodata.latitudes)
+        self.features[f"{self.scenario}_longitude"] = pd.Series(geodata.longitudes)
 
 
 class GeoData:
@@ -136,7 +137,7 @@ class GeoData:
             """
 
             Args:
-                geocoder:
+                geocoder: the geocoder to be used.
                 place_names: the names of the places that are to be geocoded.
 
             Returns:
@@ -146,7 +147,7 @@ class GeoData:
             for place in place_names:
                 if place in places_and_points.keys():  # The same geocoding request will not be made twice
                     continue
-                elif place not in places_and_points.keys():
+                else:
                     try:
                         places_and_points[f"{place}"] = geocoder.geocode(place, timeout=120)[-1]
                     except geocoder.geocode(place, timeout=120) is None:
@@ -159,10 +160,8 @@ class GeoData:
             geocoder=Nominatim(user_agent=settings.email),
             place_names=self.place_names
         )
-
         final_places_and_points = _trigger_geocoder(
             geocoder=Photon(),
             place_names=[key for key, value in nominatim_results if value == (0, 0)]
         )
-
         return final_places_and_points
