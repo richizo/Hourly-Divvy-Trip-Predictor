@@ -26,11 +26,12 @@ def get_or_make_training_data(scenario: str) -> pd.DataFrame:
     Returns:
         pd.DataFrame: _description_
     """
-    data_path = TRAINING_DATA / f"{scenario}s.parquet"
+    data_path = TRAINING_DATA/f"{scenario}s.parquet"
     if Path(data_path).is_file():
         logger.success("The training data has already been created and saved. Fetching it...")
         training_data = pd.read_parquet(path=data_path)
-        logger.success("Training data fetched successfully")
+        #print(training_data.columns.get_loc("trips_previous_168_hour"))
+        #breakpoint()
     else:
         logger.warning("No training data is stored. Creating the dataset will take a long time...")
         training_sets = DataProcessor(year=settings.year).make_training_data()
@@ -44,7 +45,8 @@ def train(
         scenario: str,
         tune_hyperparams: bool | None,
         hyperparameter_trials: int | None,
-        save: bool = True
+        save: bool = True,
+        geocode: bool = False
 ) -> None:
     """
     The function first checks for the existence of the training data, and builds it if 
@@ -54,35 +56,34 @@ def train(
     Args:
         model_name (str): the name of the model to be trained
 
-        scenario:   a string indicating whether we are training on start or stop data.
-                    The only accepted answers are "start" and "stop"
+        scenario:   a string indicating whether we are training data on the starts or ends of trips.
+                    The only accepted answers are "start" and "end"
         
         tune_hyperparams (bool | None, optional): whether to tune hyperparameters or not.
 
         hyperparameter_trials (int | None): the number of times that we will try to optimize the hyperparameters
 
         save (bool): whether to save the model (locally and on CometML)
+
+        geocode(bool): whether to geocode during feature engineering
     """
 
-    model_fn = get_model(model_name=model_name)
-
     experiment = Experiment(
-        api_key=settings.comet_api_key,
-        workspace=settings.comet_workspace,
-        project_name=settings.comet_project_name
+        api_key=settings.comet_api_key, workspace=settings.comet_workspace, project_name=settings.comet_project_name
     )
 
     experiment.add_tag(tag=model_name)
+
     training_data = get_or_make_training_data(scenario=scenario)
     target = training_data["trips_next_hour"]
     features = training_data.drop("trips_next_hour", axis=1)
-
-    features = perform_feature_engineering(data=features, scenario=scenario, geocode=False)
+    features = perform_feature_engineering(features=features, scenario=scenario, geocode=geocode)
 
     train_sample_size = int(0.9 * len(features))
     x_train, x_test = features[:train_sample_size], features[train_sample_size:]
     y_train, y_test = target[:train_sample_size], target[train_sample_size:]
 
+    model_fn = get_model(model_name=model_name)
     if not tune_hyperparams:
         experiment.add_tag("Tuned")
         logger.info("Using the default hyperparameters")

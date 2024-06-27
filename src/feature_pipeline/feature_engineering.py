@@ -9,32 +9,24 @@ from sklearn.preprocessing import FunctionTransformer
 from sklearn.base import BaseEstimator, TransformerMixin
 
 from src.setup.config import settings
+from src.training_pipeline.models import BaseModel
+from lightgbm import LGBMRegressor
+from xgboost import XGBRegressor
 
 
-def perform_feature_engineering(data: pd.DataFrame, scenario: str, geocode: bool):
-    feature_engineer = FeatureEngineering(features=data, scenario=scenario)
+def perform_feature_engineering(features: pd.DataFrame, scenario: str, geocode: bool):
+    feature_engineer = FeatureEngineering(features=features, scenario=scenario)
     return feature_engineer.get_pipeline(geocode=geocode)
 
 
 class FeatureEngineering(BaseEstimator, TransformerMixin):
 
-    def __init__(self, features: pd.DataFrame, scenario: str, y=None) -> None:
+    def __init__(self, features: pd.DataFrame, scenario: str) -> None:
 
         self.features = features
-        self.y = y
         self.scenario = scenario
-        self.added_averages = 0.25 * (
-                self.features[f"trips_previous_{1 * 7 * 24}_hour"] +
-                self.features[f"trips_previous_{2 * 7 * 24}_hour"] +
-                self.features[f"trips_previous_{3 * 7 * 24}_hour"] + self.features[f"trips_previous_{4 * 7 * 24}_hour"]
-        )
 
-        self.times_and_entries = {
-            "hour": self.features[f"{self.scenario}_hour"].dt.hour,
-            "day_of_the_week": self.features[f"{self.scenario}_hour"].dt.dayofweek
-        }
-
-    def _fit(self):
+    def fit(self):
         return self
 
     def add_avg_trips_last_4_weeks(self) -> pd.DataFrame:
@@ -46,10 +38,17 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
         """
         if "average_trips_last_4_weeks" not in self.features.columns:
             simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
+            averages = 0.25 * (
+                self.features[f"trips_previous_{1 * 7 * 24}_hour"] +
+                self.features[f"trips_previous_{2 * 7 * 24}_hour"] +
+                self.features[f"trips_previous_{3 * 7 * 24}_hour"] +
+                self.features[f"trips_previous_{4 * 7 * 24}_hour"]
+            )
+
             self.features.insert(
                 loc=self.features.shape[1],
                 column="average_trips_last_4_weeks",
-                value=self.added_averages,
+                value=averages,
                 allow_duplicates=False
             )
         return self.features
@@ -63,11 +62,16 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
             pd.DataFrame: the data frame with these features included
         """
 
-        for time in self.times_and_entries.keys():
+        times_and_entries = {
+            "hour": self.features[f"{self.scenario}_hour"].dt.hour,
+            "day_of_the_week": self.features[f"{self.scenario}_hour"].dt.dayofweek
+        }
+
+        for time in times_and_entries.keys():
             self.features.insert(
                 loc=self.features.shape[1],
                 column=time,
-                value=self.times_and_entries[time]
+                value=times_and_entries[time]
             )
 
         return self.features.drop(f"{self.scenario}_hour", axis=1)
@@ -80,13 +84,11 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
         ]
 
         if geocode:
-            steps.append(
-                FunctionTransformer(func=self._add_coordinates_to_dataframe)
-            )
+            steps.append(FunctionTransformer(func=self.add_coordinates_to_dataframe))
 
         return make_pipeline(*steps)
 
-    def _add_coordinates_to_dataframe(self) -> None:
+    def add_coordinates_to_dataframe(self) -> None:
         """
         After forming the dictionary of places and coordinates, this function isolates
         the latitudes, and longitudes and places them in appropriately named columns of

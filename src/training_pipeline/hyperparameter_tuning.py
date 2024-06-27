@@ -86,7 +86,6 @@ def optimise_hyperparams(
         LGBMRegressor: "LGBMRegressor",
         XGBRegressor: "XGBRegressor"
     }
-
     model_name = models_and_tags[model_fn]
 
     def objective(trial: optuna.trial.Trial) -> float:
@@ -114,8 +113,7 @@ def optimise_hyperparams(
 
             logger.info("Fitting model after feature engineering")
             pipeline = make_pipeline(
-                feature_eng.get_pipeline(geocode=False),
-                model_fn(**hyperparameters)
+                feature_eng.get_pipeline(geocode=False, model_fn=model_fn(**hyperparameters))
             )
             pipeline.fit(x_train, y_train)
 
