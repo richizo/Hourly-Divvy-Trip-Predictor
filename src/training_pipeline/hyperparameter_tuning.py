@@ -8,15 +8,15 @@ from optuna.samplers import TPESampler
 
 from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import TimeSeriesSplit
+from sklearn.pipeline import make_pipeline
 
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 from sklearn.linear_model import Lasso
-from sklearn.pipeline import make_pipeline
 
 from src.setup.config import settings
 from src.training_pipeline.models import BaseModel
-from src.feature_pipeline.feature_engineering import FeatureEngineering
+from src.feature_pipeline.feature_engineering import perform_feature_engineering
 
 
 def sampled_hyperparams(
@@ -78,14 +78,14 @@ def optimise_hyperparams(
     y: the pandas series which contains the target variable
 
   Returns:
-
+    dict: the optimal hyperparameters
   """
-    assert model_fn in [Lasso, LGBMRegressor, XGBRegressor]
-    models_and_tags: dict[Lasso | LGBMRegressor | type, str] = {
-        Lasso: "Lasso",
-        LGBMRegressor: "LGBMRegressor",
-        XGBRegressor: "XGBRegressor"
+    models_and_tags: dict[callable, str] = {
+        Lasso: "lasso",
+        LGBMRegressor: "lightgbm",
+        XGBRegressor: "xgboost"
     }
+    assert model_fn in models_and_tags.keys()
     model_name = models_and_tags[model_fn]
 
     def objective(trial: optuna.trial.Trial) -> float:
@@ -102,26 +102,23 @@ def optimise_hyperparams(
         error_scores = []
         hyperparameters = sampled_hyperparams(model_fn=model_fn, trial=trial)
         tss = TimeSeriesSplit(n_splits=5)
-        logger.info(f"Starting Trial {trial.number}")
+        pipeline = make_pipeline(model_fn(**hyperparameters))
 
-        feature_eng = FeatureEngineering(scenario=scenario, features=x)
+        logger.info(f"Starting Trial {trial.number}")
         # Use TSS to split the features and target variables for training and validation
         for split_number, (train_indices, val_indices) in enumerate(tss.split(x)):
             logger.info(f"Performing split number {split_number}")
             x_train, x_val = x.iloc[train_indices], x.iloc[val_indices]
             y_train, y_val = y.iloc[train_indices], y.iloc[val_indices]
 
-            logger.info("Fitting model after feature engineering")
-            pipeline = make_pipeline(
-                feature_eng.get_pipeline(geocode=False, model_fn=model_fn(**hyperparameters))
-            )
+            logger.info("Fitting model...")
             pipeline.fit(x_train, y_train)
 
             logger.info("Evaluating the performance of the trial...")
-            y_pred = model_fn.predict(x_val)
-            error = mean_absolute_error(y_val, y_pred)
+            y_pred = pipeline.predict(X=x_val)
+            error = mean_absolute_error(y_true=y_val, y_pred=y_pred)
             error_scores.append(error)
-            logger.info(f"MAE = {mean_absolute_error}")
+            logger.info(f"MAE = {error}")
 
         avg_score = np.mean(error_scores)
         return avg_score

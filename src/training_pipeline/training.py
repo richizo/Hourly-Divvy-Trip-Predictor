@@ -77,10 +77,10 @@ def train(
     training_data = get_or_make_training_data(scenario=scenario)
     target = training_data["trips_next_hour"]
     features = training_data.drop("trips_next_hour", axis=1)
-    features = perform_feature_engineering(features=features, scenario=scenario, geocode=geocode)
+    engineered_features = perform_feature_engineering(features=features, scenario=scenario, geocode=False)
 
-    train_sample_size = int(0.9 * len(features))
-    x_train, x_test = features[:train_sample_size], features[train_sample_size:]
+    train_sample_size = int(0.9 * len(engineered_features))
+    x_train, x_test = engineered_features[:train_sample_size], engineered_features[train_sample_size:]
     y_train, y_test = target[:train_sample_size], target[train_sample_size:]
 
     model_fn = get_model(model_name=model_name)
@@ -101,9 +101,7 @@ def train(
         )
 
         logger.success(f"Best model hyperparameters {best_model_hyperparams}")
-        pipeline = make_pipeline(
-            model_fn(**best_model_hyperparams)
-        )
+        pipeline = make_pipeline(model_fn(**best_model_hyperparams))
 
     logger.info("Fitting model...")
     pipeline.fit(x_train, y_train)
@@ -115,15 +113,15 @@ def train(
     experiment.log_metric(name="Test M.A.E", value=test_error)
 
     if save:
-        logger.info("Saving model to disk")
         tuned_or_not = "tuned" if tune_hyperparams else "Not tuned"
         model_file_name = f"Best_{tuned_or_not}_{model_name}_model_for_{scenario}s.pkl"
         with open(MODELS_DIR/model_file_name, mode="wb") as file:
-            pickle.dump(file)
+            pickle.dump(obj=pipeline, file=file)
+        logger.success("Saved model to disk")
 
-        logger.info("Logging model to CometML")
         experiment.log_model(name=model_name, file_or_folder=MODELS_DIR/model_file_name)
+        logger.success("Logged model to CometML")
 
 
 if __name__ == "__main__":
-    train(model_name="lightgbm", scenario="start", tune_hyperparams=True, hyperparameter_trials=5)
+    train(model_name="xgboost", scenario="start", tune_hyperparams=True, hyperparameter_trials=5)

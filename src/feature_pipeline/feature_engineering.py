@@ -2,108 +2,9 @@ import pandas as pd
 
 from loguru import logger
 from warnings import simplefilter
-
 from geopy.geocoders import Nominatim, Photon
-from sklearn.pipeline import make_pipeline, Pipeline
-from sklearn.preprocessing import FunctionTransformer
-from sklearn.base import BaseEstimator, TransformerMixin
 
 from src.setup.config import settings
-from src.training_pipeline.models import BaseModel
-from lightgbm import LGBMRegressor
-from xgboost import XGBRegressor
-
-
-def perform_feature_engineering(features: pd.DataFrame, scenario: str, geocode: bool):
-    feature_engineer = FeatureEngineering(features=features, scenario=scenario)
-    return feature_engineer.get_pipeline(geocode=geocode)
-
-
-class FeatureEngineering(BaseEstimator, TransformerMixin):
-
-    def __init__(self, features: pd.DataFrame, scenario: str) -> None:
-
-        self.features = features
-        self.scenario = scenario
-
-    def fit(self):
-        return self
-
-    def add_avg_trips_last_4_weeks(self) -> pd.DataFrame:
-        """
-        Include a column for the average number of trips in the past 4 weeks.
-
-        Returns:
-            pd.DataFrame: the modified dataframe
-        """
-        if "average_trips_last_4_weeks" not in self.features.columns:
-            simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
-            averages = 0.25 * (
-                self.features[f"trips_previous_{1 * 7 * 24}_hour"] +
-                self.features[f"trips_previous_{2 * 7 * 24}_hour"] +
-                self.features[f"trips_previous_{3 * 7 * 24}_hour"] +
-                self.features[f"trips_previous_{4 * 7 * 24}_hour"]
-            )
-
-            self.features.insert(
-                loc=self.features.shape[1],
-                column="average_trips_last_4_weeks",
-                value=averages,
-                allow_duplicates=False
-            )
-        return self.features
-
-    def add_hours_and_days(self) -> pd.DataFrame:
-        """
-        Create features which consist of the hours and days of the week on which the
-        departure or arrival is taking place.
-
-        Returns:
-            pd.DataFrame: the data frame with these features included
-        """
-
-        times_and_entries = {
-            "hour": self.features[f"{self.scenario}_hour"].dt.hour,
-            "day_of_the_week": self.features[f"{self.scenario}_hour"].dt.dayofweek
-        }
-
-        for time in times_and_entries.keys():
-            self.features.insert(
-                loc=self.features.shape[1],
-                column=time,
-                value=times_and_entries[time]
-            )
-
-        return self.features.drop(f"{self.scenario}_hour", axis=1)
-
-    def get_pipeline(self, geocode: bool) -> Pipeline:
-
-        steps = [
-            FunctionTransformer(func=self.add_avg_trips_last_4_weeks, validate=False),
-            FunctionTransformer(func=self.add_hours_and_days)
-        ]
-
-        if geocode:
-            steps.append(FunctionTransformer(func=self.add_coordinates_to_dataframe))
-
-        return make_pipeline(*steps)
-
-    def add_coordinates_to_dataframe(self) -> None:
-        """
-        After forming the dictionary of places and coordinates, this function isolates
-        the latitudes, and longitudes and places them in appropriately named columns of
-        a target dataframe.
-        """
-        geodata = GeoData(data=self.features, scenario=self.scenario)
-        places_and_points = geodata.geocode()
-
-        for place in geodata.place_names:
-            if place in places_and_points.keys():
-                geodata.latitudes.append(places_and_points[place][0])
-                geodata.longitudes.append(places_and_points[place][0])
-
-        self.features[f"{self.scenario}_latitude"] = pd.Series(geodata.latitudes)
-        self.features[f"{self.scenario}_longitude"] = pd.Series(geodata.longitudes)
 
 
 class GeoData:
@@ -167,3 +68,80 @@ class GeoData:
             place_names=[key for key, value in nominatim_results if value == (0, 0)]
         )
         return final_places_and_points
+
+
+def avg_trips_last_4_weeks(features: pd.DataFrame) -> pd.DataFrame:
+    """
+    Include a column for the average number of trips in the past 4 weeks.
+
+    Returns:
+        pd.DataFrame: the modified dataframe
+    """
+    if "average_trips_last_4_weeks" not in features.columns:
+        simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
+        averages = 0.25 * (
+                features[f"trips_previous_{1 * 7 * 24}_hour"] +
+                features[f"trips_previous_{2 * 7 * 24}_hour"] +
+                features[f"trips_previous_{3 * 7 * 24}_hour"] +
+                features[f"trips_previous_{4 * 7 * 24}_hour"]
+        )
+
+        features.insert(
+            loc=features.shape[1],
+            column="average_trips_last_4_weeks",
+            value=averages
+        )
+
+    return features
+
+
+def hours_and_days(features: pd.DataFrame, scenario: str) -> pd.DataFrame:
+    """
+    Create features which consist of the hours and days of the week on which the
+    departure or arrival is taking place.
+
+    Returns:
+        pd.DataFrame: the data frame with these features included
+    """
+    times_and_entries = {
+        "hour": features[f"{scenario}_hour"].dt.hour,
+        "day_of_the_week": features[f"{scenario}_hour"].dt.dayofweek
+    }
+
+    for time in times_and_entries.keys():
+        features.insert(
+            loc=features.shape[1],
+            column=time,
+            value=times_and_entries[time]
+        )
+
+    return features.drop(f"{scenario}_hour", axis=1)
+
+
+def add_coordinates_to_dataframe(features: pd.DataFrame, scenario: str, y=None) -> pd.DataFrame:
+    """
+    After forming the dictionary of places and coordinates, this function isolates
+    the latitudes, and longitudes and places them in appropriately named columns of
+    a target dataframe.
+    """
+    geodata = GeoData(data=features, scenario=scenario)
+    places_and_points = geodata.geocode()
+
+    for place in geodata.place_names:
+        if place in places_and_points.keys():
+            geodata.latitudes.append(places_and_points[place][0])
+            geodata.longitudes.append(places_and_points[place][0])
+
+    features[f"{scenario}_latitude"] = pd.Series(geodata.latitudes)
+    features[f"{scenario}_longitude"] = pd.Series(geodata.longitudes)
+
+    return features
+
+
+def perform_feature_engineering(features: pd.DataFrame, scenario: str, geocode: bool):
+
+    features_with_hours_and_days = hours_and_days(features=features, scenario=scenario)
+    final_features = avg_trips_last_4_weeks(features=features_with_hours_and_days)
+    if geocode:
+        final_features = add_coordinates_to_dataframe(features=features, scenario=scenario)
+    return final_features
