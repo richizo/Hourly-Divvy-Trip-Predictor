@@ -16,7 +16,6 @@ from sklearn.linear_model import Lasso
 
 from src.setup.config import settings
 from src.training_pipeline.models import BaseModel
-from src.feature_pipeline.feature_engineering import perform_feature_engineering
 
 
 def sampled_hyperparams(
@@ -136,7 +135,7 @@ def optimise_hyperparams(
     for key, value in best_hyperparams.items():
         logger.info(f"{key}:{value}")
 
-    logger.info(f"Best MAE: {best_value}")
+    logger.success(f"Best MAE Across Trials: {best_value}")
     experiment = Experiment(
         api_key=settings.comet_api_key,
         workspace=settings.comet_workspace,
@@ -144,7 +143,7 @@ def optimise_hyperparams(
     )
 
     experiment.set_name(f"Hyperparameter Tuning of {model_name} model")
-    experiment.log_metric(name="Cross validation M.A.E", value=best_value)
+    #experiment.log_metric(name="Best MAE Across Trials", value=best_value)
     experiment.add_tags(tags=[scenario, model_name])
     experiment.end()
 

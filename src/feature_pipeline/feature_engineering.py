@@ -118,7 +118,7 @@ def hours_and_days(features: pd.DataFrame, scenario: str) -> pd.DataFrame:
     return features.drop(f"{scenario}_hour", axis=1)
 
 
-def add_coordinates_to_dataframe(features: pd.DataFrame, scenario: str, y=None) -> pd.DataFrame:
+def add_coordinates_to_dataframe(features: pd.DataFrame, scenario: str) -> pd.DataFrame:
     """
     After forming the dictionary of places and coordinates, this function isolates
     the latitudes, and longitudes and places them in appropriately named columns of
