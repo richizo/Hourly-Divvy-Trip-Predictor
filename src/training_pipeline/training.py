@@ -29,13 +29,13 @@ def get_or_make_training_data(scenario: str) -> tuple[pd.DataFrame, pd.Series]:
     """
     data_path = TRAINING_DATA/f"{scenario}s.parquet"
     if Path(data_path).is_file():
-        logger.success("The training data has already been created and saved. Fetching it...")
         training_data = pd.read_parquet(path=data_path)
+        logger.success("The training data has already been created and saved. Fetched it...")
     else:
         logger.warning("No training data is stored. Creating the dataset will take a long time...")
         training_sets = DataProcessor(year=settings.year).make_training_data()
         training_data = training_sets[0] if scenario.lower() == "start" else training_sets[1]
-        logger.success("Training data created successfully")
+        logger.success("Training data produced successfully")
 
     target = training_data["trips_next_hour"]
     features = training_data.drop("trips_next_hour", axis=1)

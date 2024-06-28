@@ -21,7 +21,7 @@ from loguru import logger
 from zipfile import ZipFile
 from datetime import datetime as dt
 
-from src.setup.paths import RAW_DATA_DIR
+from src.setup.paths import RAW_DATA_DIR, make_fundamental_paths
 
 
 def download_one_file_of_raw_data(year: int, month: int = None) -> None:
@@ -135,6 +135,7 @@ def load_raw_data(year: int, months: list[int] = None) -> pd.DataFrame:
     Yields:
         Iterator[pd.DataFrame]: the requested datasets.
     """
+    make_fundamental_paths()
     is_current_year = True if year == dt.now().year else False
     end_month = dt.now().month if is_current_year else 12
     months_to_download = range(1, end_month + 1) if months is None else months
