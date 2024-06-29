@@ -5,7 +5,7 @@ from pathlib import Path
 from loguru import logger
 from comet_ml import Experiment
 from argparse import ArgumentParser
-from sklearn.pipeline import Pipeline, make_pipeline
+from sklearn.pipeline import make_pipeline
 from sklearn.metrics import mean_absolute_error
 
 from src.feature_pipeline.feature_engineering import perform_feature_engineering
@@ -89,11 +89,15 @@ def train(
         hyperparameter_trials = None
 
     if not tune_hyperparameters:
-        experiment.add_tag("Not tuned")
+        experiment.set_name(name=f"Untuned {model_name.title()} model for the {scenario}s of trips")
         logger.info("Using the default hyperparameters")
-        model_fn = make_pipeline(model_fn)
+        if model_name == "base":
+            pipeline = make_pipeline(model_fn(scenario=scenario))
+        else:
+            pipeline = make_pipeline(model_fn())
+
     else:
-        experiment.add_tag("Tuned")
+        experiment.set_name(name=f"Tuned {model_name.title()} model for the {scenario}s of trips")
         logger.info(f"Tuning hyperparameters of the {model_name} model. Have a snack and watch One Piece")
 
         best_model_hyperparams = optimise_hyperparams(
@@ -106,17 +110,16 @@ def train(
         )
 
         logger.success(f"Best model hyperparameters {best_model_hyperparams}")
-        model_fn = model_fn(**best_model_hyperparams)
+        pipeline = make_pipeline(
+            model_fn(**best_model_hyperparams)
+        )
 
     logger.info("Fitting model...")
     # The setup base model requires that we specify these parameters, whereas with one of the other models,
     # specifying the arguments causes an error.
-    if isinstance(model_fn, Pipeline):
-        model_fn.fit(X=x_train, y=y_train)
-    else:
-        model_fn.fit(x_train=x_train, y_train=y_train)
+    pipeline.fit(X=x_train, y=y_train)
 
-    y_pred = model_fn.predict(x_test)
+    y_pred = pipeline.predict(x_test)
     test_error = mean_absolute_error(y_true=y_test, y_pred=y_pred)
     experiment.log_metric(name="Test M.A.E", value=test_error)
     experiment.end()
