@@ -16,9 +16,10 @@ class BaseModel:
     def __init__(self, scenario: str):
         self.scenario = scenario
         self.data = pd.read_parquet(TRAINING_DATA/f"{scenario}s.parquet")
-    
-    def fit(self, x_train: pd.DataFrame, y_train: pd.Series):
-        pass 
+
+    @staticmethod
+    def fit(x_train: pd.DataFrame, y_train: pd.Series):
+        pass
 
     def train_test_split(self, cutoff_date: datetime) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
         """
@@ -66,7 +67,8 @@ def get_model(model_name: str) -> BaseModel | XGBRegressor | LGBMRegressor:
     models_and_names = {
         "lasso": Lasso,
         "lightgbm": LGBMRegressor,
-        "xgboost": XGBRegressor
+        "xgboost": XGBRegressor,
+        "base": BaseModel
     }
     if model_name.lower() in models_and_names.keys():
         return models_and_names[model_name.lower()]

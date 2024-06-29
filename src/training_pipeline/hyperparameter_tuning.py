@@ -64,6 +64,7 @@ def optimise_hyperparams(
         model_fn: BaseModel | Lasso | LGBMRegressor | XGBRegressor,
         scenario: str,
         hyperparameter_trials: int,
+        experiment: Experiment,
         x: pd.DataFrame,
         y: pd.Series
 ) -> dict:
@@ -73,6 +74,7 @@ def optimise_hyperparams(
     model_fn: the model architecture to be used
     scenario: whether we are looking at the trip start or trip stop data.
     hyperparameter_trials: the number of optuna trials that will be run per mode scenario
+    experiment: the CometML experiment object
     x: the dataframe of features
     y: the pandas series which contains the target variable
 
@@ -82,7 +84,8 @@ def optimise_hyperparams(
     models_and_tags: dict[callable, str] = {
         Lasso: "lasso",
         LGBMRegressor: "lightgbm",
-        XGBRegressor: "xgboost"
+        XGBRegressor: "xgboost",
+        BaseModel: "base"
     }
     assert model_fn in models_and_tags.keys()
     model_name = models_and_tags[model_fn]
@@ -91,10 +94,10 @@ def optimise_hyperparams(
         """
     Perform Time series cross validation, fit a pipeline to it (equipped with the)
     selected model, and return the average error across all cross validation splits.
-    
+
     Args:
         trial: The optuna trial that's being optimised.
-    
+
     Returns:
         float: Average error per split.
     """
@@ -103,7 +106,7 @@ def optimise_hyperparams(
         tss = TimeSeriesSplit(n_splits=5)
         pipeline = make_pipeline(model_fn(**hyperparameters))
 
-        logger.info(f"Starting Trial {trial.number}")
+        logger.warning(f"Starting Trial {trial.number}")
         # Use TSS to split the features and target variables for training and validation
         for split_number, (train_indices, val_indices) in enumerate(tss.split(x)):
             logger.info(f"Performing split number {split_number}")
@@ -131,20 +134,10 @@ def optimise_hyperparams(
     best_hyperparams = study.best_params
     best_value = study.best_value
 
-    logger.info(f"The best hyperparameters for {model_fn} are:")
-    for key, value in best_hyperparams.items():
-        logger.info(f"{key}:{value}")
+    experiment.log_parameters(best_hyperparams)
+    experiment.log_metric(name="Best MAE Across Trials", value=best_value)
 
+    logger.info(f"The best hyperparameters for the {model_name} model are: {best_hyperparams}")
     logger.success(f"Best MAE Across Trials: {best_value}")
-    experiment = Experiment(
-        api_key=settings.comet_api_key,
-        workspace=settings.comet_workspace,
-        project_name=settings.comet_project_name
-    )
-
-    experiment.set_name(f"Hyperparameter Tuning of {model_name} model")
-    #experiment.log_metric(name="Best MAE Across Trials", value=best_value)
-    experiment.add_tags(tags=[scenario, model_name])
-    experiment.end()
 
     return best_hyperparams

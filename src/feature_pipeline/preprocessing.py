@@ -36,8 +36,8 @@ class DataProcessor:
             list(load_raw_data(year=year))
         )
 
-        self.starts_ts_path = TIME_SERIES_DATA / "starts_ts.parquet"
-        self.ends_ts_path = TIME_SERIES_DATA / "ends_ts.parquet"
+        self.starts_ts_path = TIME_SERIES_DATA/"starts_ts.parquet"
+        self.ends_ts_path = TIME_SERIES_DATA/"ends_ts.parquet"
 
     def clean(self, patient: bool = False, save: bool = True) -> DataFrame:
 
