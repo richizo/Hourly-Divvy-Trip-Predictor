@@ -1,9 +1,11 @@
+# Files
 .env
+
+# Folders
 /data
-/.vscode
-/src/__pycache__
-/notebooks/.ipynb_checkpoints
-app.log
+/.idea
 /models
-db.sqlite
-/src/optuna_study.sqlite
+/.ruff_cache
+/.vscode
+**/__pycache__
+/notebooks/.ipynb_checkpoints
