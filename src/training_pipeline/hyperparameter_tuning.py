@@ -14,7 +14,6 @@ from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 from sklearn.linear_model import Lasso
 
-from src.setup.config import settings
 from src.training_pipeline.models import BaseModel
 
 
@@ -62,7 +61,6 @@ def sampled_hyperparams(
 
 def optimise_hyperparams(
         model_fn: BaseModel | Lasso | LGBMRegressor | XGBRegressor,
-        scenario: str,
         hyperparameter_trials: int,
         experiment: Experiment,
         x: pd.DataFrame,
@@ -72,7 +70,6 @@ def optimise_hyperparams(
 
   Args:
     model_fn: the model architecture to be used
-    scenario: whether we are looking at the trip start or trip stop data.
     hyperparameter_trials: the number of optuna trials that will be run per mode scenario
     experiment: the CometML experiment object
     x: the dataframe of features
