@@ -1,4 +1,3 @@
-from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from src.setup.paths import PARENT_DIR
@@ -12,6 +11,12 @@ class Settings(BaseSettings):
     comet_api_key: str
     comet_workspace: str
     comet_project_name: str
+
+    # Hopsworks
+    hopsworks_api_key: str
+    feature_group_name: str
+    feature_group_version: int
+    feature_view_version: int
 
     # Names
     email: str
