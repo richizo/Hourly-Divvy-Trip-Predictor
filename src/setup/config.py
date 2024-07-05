@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from src.setup.paths import PARENT_DIR
 
 
-class Settings(BaseSettings):
+class GeneralConfig(BaseSettings):
     model_config = SettingsConfigDict(env_file=f"{PARENT_DIR}/.env", env_file_encoding="utf-8", extra="allow")
 
     # CometML
@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     # Hopsworks
     hopsworks_api_key: str
-    feature_group_name: str
+    hopsworks_project_name: str
     feature_group_version: int
     feature_view_version: int
 
@@ -36,4 +36,4 @@ class FeatureViewConfig(BaseSettings):
     feature_group: FeatureGroupConfig
 
 
-settings = Settings()
+config = GeneralConfig()

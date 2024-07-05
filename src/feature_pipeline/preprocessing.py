@@ -2,7 +2,6 @@ import os
 import warnings
 import numpy as np
 import pandas as pd
-from pandas import DataFrame
 
 from tqdm import tqdm
 from loguru import logger
@@ -17,7 +16,7 @@ from src.feature_pipeline.data_extraction import load_raw_data
 from src.setup.paths import CLEANED_DATA, TRAINING_DATA, TIME_SERIES_DATA, GEOGRAPHICAL_DATA, make_fundamental_paths
 
 
-def get_named_column(data: DataFrame, column_name: str, scenario: str):
+def get_named_column(data: pd.DataFrame, column_name: str, scenario: str):
     if "id" in column_name:
         return data.columns.get_loc(f"{scenario}_station_id")
     elif "station_name" in column_name:
@@ -39,7 +38,7 @@ class DataProcessor:
         self.starts_ts_path = TIME_SERIES_DATA/"starts_ts.parquet"
         self.ends_ts_path = TIME_SERIES_DATA/"ends_ts.parquet"
 
-    def clean(self, patient: bool = False, save: bool = True) -> DataFrame:
+    def clean(self, patient: bool = False, save: bool = True) -> pd.DataFrame:
 
         if len(os.listdir(path=CLEANED_DATA)) == 0:
             self.data["started_at"] = pd.to_datetime(self.data["started_at"], format="mixed")
@@ -52,7 +51,7 @@ class DataProcessor:
                 }
             )
 
-            def _delete_rows_with_unnamed_and_missing_coordinates() -> DataFrame:
+            def _delete_rows_with_unnamed_and_missing_coordinates() -> pd.DataFrame:
                 """
                 There are rows with missing latitude and longitude values for the various
                 destinations. If any of these rows have available station names, then geocoding
@@ -61,7 +60,7 @@ class DataProcessor:
                 irreparably lacking. We locate and delete these points.
 
                 Returns:
-                    DataFrame: the data, absent the aforementioned rows.
+                    pd.DataFrame: the data, absent the aforementioned rows.
                 """
                 for scenario in ["start", "end"]:
                     lats = get_named_column(data=self.data, column_name="lat", scenario=scenario)
@@ -145,7 +144,7 @@ class DataProcessor:
                     rows_with_known_lngs: list,
                     rows_with_known_station_ids: list,
                     rows_with_known_station_names: list
-            ) -> DataFrame:
+            ) -> pd.DataFrame:
 
                 rows_to_search = tqdm(
                     iterable=rows_missing_station_names_ids,
@@ -209,11 +208,13 @@ class DataProcessor:
             logger.success("There is already some cleaned data. Fetching it...")
             return pd.read_parquet(path=CLEANED_DATA / "cleaned.parquet")
 
-    def make_training_data(self) -> list[DataFrame]:
+    def make_training_data(self) -> list[pd.DataFrame]:
         """
-        Extract raw data, transform it into a time series, and
-        transform that time series into training data which is
-        subsequently saved.
+        Extract raw data, transform it into a time series, and transform that time series into
+        training data which is subsequently saved.
+
+        Returns:
+            list[pd.DataFrame]: a list containing the datasets for the starts and ends of trips.
         """
 
         logger.info("Cleaning dataframe")
@@ -249,10 +250,10 @@ class DataProcessor:
 
     def transform_cleaned_data_into_ts_data(
             self,
-            start_df: DataFrame,
-            end_df: DataFrame,
+            start_df: pd.DataFrame,
+            end_df: pd.DataFrame,
             save: bool = True
-    ) -> tuple[DataFrame, DataFrame]:
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
         """
         Converts cleaned data into time series data.
 
@@ -262,20 +263,20 @@ class DataProcessor:
         radius), and use these to construct new station IDs.
 
         Args:
-            start_df (DataFrame): dataframe consisting of the "start_time", "start_lat",
+            start_df (pd.DataFrame): dataframe consisting of the "start_time", "start_lat",
                                      and "start_lng" columns.
 
-            end_df (DataFrame): dataframe consisting of the "stop_time", "stop_latitude",
+            end_df (pd.DataFrame): dataframe consisting of the "stop_time", "stop_latitude",
                                    and "stop_lng" columns.
 
             save (bool): whether we wish to save the time series data
 
         Returns:
-            tuple[DataFrame, DataFrame]: the time series datasets on the starts and ends
+            tuple[pd.DataFrame, pd.DataFrame]: the time series datasets on the starts and ends
                                                of trips.
         """
 
-        def _get_ts_or_begin_transformation(start_ts_path: str, end_ts_path: str) -> tuple[DataFrame, DataFrame]:
+        def _get_ts_or_begin_transformation(start_ts_path: str, end_ts_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
 
             if Path(start_ts_path).exists() and Path(end_ts_path).exists():
                 logger.success("Both time series datasets are already present")
@@ -300,16 +301,16 @@ class DataProcessor:
                 end_ts = _begin_transformation(missing_scenario="end")
                 return start_ts, end_ts
 
-        def _begin_transformation(missing_scenario: str | None) -> tuple[DataFrame, DataFrame] | DataFrame:
+        def _begin_transformation(missing_scenario: str | None) -> tuple[pd.DataFrame, pd.DataFrame] | pd.DataFrame:
 
             dictionaries: list[dict] = []
-            interim_dataframes: list[DataFrame] = []
+            interim_dataframes: list[pd.DataFrame] = []
 
             def __round_coordinates_and_make_ids(
-                    cleaned_data: DataFrame,
+                    cleaned_data: pd.DataFrame,
                     start_or_end: str,
                     decimal_places: int
-            ) -> DataFrame:
+            ) -> pd.DataFrame:
                 logger.info(f"Recording the hour during which each trip {start_or_end}s...")
 
                 cleaned_data.insert(
@@ -360,9 +361,9 @@ class DataProcessor:
                 return cleaned_data
 
             def __aggregate_final_ts(
-                    interim_data: DataFrame,
+                    interim_data: pd.DataFrame,
                     start_or_end: str
-            ) -> DataFrame | list[DataFrame, DataFrame]:
+            ) -> pd.DataFrame | list[pd.DataFrame, pd.DataFrame]:
 
                 if missing_scenario == "start" or "end":
                     add_column_of_ids(data=interim_data, scenario=start_or_end, points_and_ids=dictionaries[0])
@@ -426,7 +427,7 @@ class DataProcessor:
         return _get_ts_or_begin_transformation(start_ts_path=self.starts_ts_path, end_ts_path=self.ends_ts_path)
 
     @staticmethod
-    def get_cutoff_indices(ts_data: DataFrame, input_seq_len: int, step_size_len: int) -> list:
+    def get_cutoff_indices(ts_data: pd.DataFrame, input_seq_len: int, step_size_len: int) -> list:
         """
         Starts by taking a certain number of rows of a given dataframe as an input, and the
         indices of the row on which the selected rows start and end. These will be placed
@@ -439,7 +440,7 @@ class DataProcessor:
         Credit to Pau Labarta Bajo
 
         Args:
-            ts_data (DataFrame): the time series dataset that serves as the input
+            ts_data (pd.DataFrame): the time series dataset that serves as the input
             input_seq_len (int): the number of rows to be considered at any one time
             step_size_len (int): how many rows down we move as we repeat the process
 
@@ -468,8 +469,8 @@ class DataProcessor:
         return indices
 
     def transform_ts_into_training_data(
-            self, ts_data: DataFrame, scenario: str, input_seq_len: int, step_size: int
-    ) -> DataFrame:
+            self, ts_data: pd.DataFrame, scenario: str, input_seq_len: int, step_size: int
+    ) -> pd.DataFrame:
         """
         Transpose the time series data into a feature-target format.
 
@@ -480,15 +481,15 @@ class DataProcessor:
             step_size:
 
         Returns:
-            DataFrame: the training data
+            pd.DataFrame: the training data
         """
         # Ensure first that these are the columns of the chosen data set (and they are listed in this order)
         assert set(ts_data.columns) == {f"{scenario}_hour", f"{scenario}_station_id", "trips"}
         station_ids = ts_data[f"{scenario}_station_id"].unique()
 
         # Prepare the dataframe which will contain the features and targets
-        features = DataFrame()
-        targets = DataFrame()
+        features = pd.DataFrame()
+        targets = pd.DataFrame()
 
         for station_id in tqdm(station_ids):
             # Isolate a part of the dataframe that relates to each station ID
@@ -520,7 +521,7 @@ class DataProcessor:
                 )
 
             # Make a dataframe of features
-            features_per_location = DataFrame(
+            features_per_location = pd.DataFrame(
                 x, columns=[
                     f"trips_previous_{i + 1}_hour" for i in reversed(range(input_seq_len))
                 ]
@@ -529,7 +530,7 @@ class DataProcessor:
             features_per_location[f"{scenario}_hour"] = hours
             features_per_location[f"{scenario}_station_id"] = station_id
 
-            targets_per_location = DataFrame(y, columns=["trips_next_hour"])
+            targets_per_location = pd.DataFrame(y, columns=["trips_next_hour"])
 
             with warnings.catch_warnings():
                 # There is a warning from pandas about concatenating dataframes that are empty or have missing values

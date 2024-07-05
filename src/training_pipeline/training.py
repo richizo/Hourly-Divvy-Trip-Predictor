@@ -10,30 +10,31 @@ from sklearn.metrics import mean_absolute_error
 
 from src.feature_pipeline.feature_engineering import perform_feature_engineering
 
-from src.setup.config import settings
+from src.setup.config import config
 from src.setup.paths import MODELS_DIR, TRAINING_DATA
 from src.feature_pipeline.preprocessing import DataProcessor
 from src.training_pipeline.models import BaseModel, get_model
-from src.training_pipeline.hyperparameter_tuning import optimise_hyperparams
+from src.training_pipeline.hyperparameter_tuning import optimise_hyperparameters
 
 
 def get_or_make_training_data(scenario: str) -> tuple[pd.DataFrame, pd.Series]:
     """
-    Fetches or builds the training data.
+    Fetches or builds the training data for the starts or ends of trips.
 
     Args:
         scenario (str): "start" or "end".
 
     Returns:
-        pd.DataFrame: _description_
+        pd.DataFrame: a tuple containing the training data's features and targets
     """
+    assert scenario.lower() == "start" or scenario.lower() == "end"
     data_path = TRAINING_DATA/f"{scenario}s.parquet"
     if Path(data_path).is_file():
         training_data = pd.read_parquet(path=data_path)
         logger.success("The training data has already been created and saved. Fetched it...")
     else:
         logger.warning("No training data is stored. Creating the dataset will take a long time...")
-        training_sets = DataProcessor(year=settings.year).make_training_data()
+        training_sets = DataProcessor(year=config.year).make_training_data()
         training_data = training_sets[0] if scenario.lower() == "start" else training_sets[1]
         logger.success("Training data produced successfully")
 
@@ -67,22 +68,23 @@ def train(
 
         save (bool): whether to save the model (locally and on CometML)
 
-        geocode(bool): whether to geocode during feature engineering
+        geocode (bool): whether to geocode during feature engineering
     """
-    experiment = Experiment(
-        api_key=settings.comet_api_key,
-        workspace=settings.comet_workspace,
-        project_name=settings.comet_project_name
-    )
 
     model_fn = get_model(model_name=model_name)
-    experiment.add_tags(tags=[model_name, scenario])
     features, target = get_or_make_training_data(scenario=scenario)
     engineered_features = perform_feature_engineering(features=features, scenario=scenario, geocode=geocode)
 
     train_sample_size = int(0.9 * len(engineered_features))
     x_train, x_test = engineered_features[:train_sample_size], engineered_features[train_sample_size:]
     y_train, y_test = target[:train_sample_size], target[train_sample_size:]
+
+    experiment = Experiment(
+        api_key=config.comet_api_key,
+        workspace=config.comet_workspace,
+        project_name=config.comet_project_name
+    )
+    experiment.add_tags(tags=[model_name, scenario])
 
     if isinstance(model_fn, BaseModel):
         tune_hyperparameters = False
@@ -100,18 +102,17 @@ def train(
         experiment.set_name(name=f"Tuned {model_name.title()} model for the {scenario}s of trips")
         logger.info(f"Tuning hyperparameters of the {model_name} model. Have a snack and watch One Piece")
 
-        best_model_hyperparams = optimise_hyperparams(
+        best_model_hyperparameters = optimise_hyperparameters(
             model_fn=model_fn,
             hyperparameter_trials=hyperparameter_trials,
-            scenario=scenario,
             experiment=experiment,
             x=x_train,
             y=y_train
         )
 
-        logger.success(f"Best model hyperparameters {best_model_hyperparams}")
+        logger.success(f"Best model hyperparameters {best_model_hyperparameters}")
         pipeline = make_pipeline(
-            model_fn(**best_model_hyperparams)
+            model_fn(**best_model_hyperparameters)
         )
 
     logger.info("Fitting model...")
@@ -146,4 +147,3 @@ if __name__ == "__main__":
         tune_hyperparameters=args.tune_hyperparameters,
         hyperparameter_trials=args.hyperparameter_trials
     )
-    

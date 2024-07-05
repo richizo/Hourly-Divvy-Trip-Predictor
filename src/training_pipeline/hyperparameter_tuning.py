@@ -17,7 +17,7 @@ from sklearn.linear_model import Lasso
 from src.training_pipeline.models import BaseModel
 
 
-def sampled_hyperparams(
+def sampled_hyperparameters(
         model_fn: BaseModel | Lasso | LGBMRegressor | XGBRegressor,
         trial: optuna.trial.Trial
 ) -> dict[str, str | int | float]:
@@ -59,7 +59,7 @@ def sampled_hyperparams(
         raise NotImplementedError("This model has not been implemented")
 
 
-def optimise_hyperparams(
+def optimise_hyperparameters(
         model_fn: BaseModel | Lasso | LGBMRegressor | XGBRegressor,
         hyperparameter_trials: int,
         experiment: Experiment,
@@ -99,7 +99,7 @@ def optimise_hyperparams(
         float: Average error per split.
     """
         error_scores = []
-        hyperparameters = sampled_hyperparams(model_fn=model_fn, trial=trial)
+        hyperparameters = sampled_hyperparameters(model_fn=model_fn, trial=trial)
         tss = TimeSeriesSplit(n_splits=5)
         pipeline = make_pipeline(model_fn(**hyperparameters))
 

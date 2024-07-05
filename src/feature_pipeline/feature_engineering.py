@@ -4,11 +4,16 @@ from loguru import logger
 from warnings import simplefilter
 from geopy.geocoders import Nominatim, Photon
 
-from src.setup.config import settings
+from src.setup.config import config
 
 
 class GeoData:
-
+    """
+    The code that makes up what is now this class was created in order to geocode an older version
+    of this dataset which did not contain the coordinates of each station. In 2024's data, coordinates are
+    provided, so we will not be geocoding. However, if Divvy fails to provide coordinates in future datasets,
+    this code may be of use.
+    """
     def __init__(self, data: pd.DataFrame, scenario: str) -> None:
         self.data = data
         self.scenario = scenario
@@ -60,7 +65,7 @@ class GeoData:
             return places_and_points
 
         nominatim_results = _trigger_geocoder(
-            geocoder=Nominatim(user_agent=settings.email),
+            geocoder=Nominatim(user_agent=config.email),
             place_names=self.place_names
         )
         final_places_and_points = _trigger_geocoder(
@@ -70,7 +75,7 @@ class GeoData:
         return final_places_and_points
 
 
-def avg_trips_last_4_weeks(features: pd.DataFrame) -> pd.DataFrame:
+def add_avg_trips_last_4_weeks(features: pd.DataFrame) -> pd.DataFrame:
     """
     Include a column for the average number of trips in the past 4 weeks.
 
@@ -95,7 +100,7 @@ def avg_trips_last_4_weeks(features: pd.DataFrame) -> pd.DataFrame:
     return features
 
 
-def hours_and_days(features: pd.DataFrame, scenario: str) -> pd.DataFrame:
+def add_hours_and_days(features: pd.DataFrame, scenario: str) -> pd.DataFrame:
     """
     Create features which consist of the hours and days of the week on which the
     departure or arrival is taking place.
@@ -138,10 +143,27 @@ def add_coordinates_to_dataframe(features: pd.DataFrame, scenario: str) -> pd.Da
     return features
 
 
-def perform_feature_engineering(features: pd.DataFrame, scenario: str, geocode: bool):
+def perform_feature_engineering(features: pd.DataFrame, scenario: str, geocode: bool) -> None:
+    """
+    Initiate a chain of events that results in the accomplishment of the above feature
+    engineering steps.
 
-    features_with_hours_and_days = hours_and_days(features=features, scenario=scenario)
-    final_features = avg_trips_last_4_weeks(features=features_with_hours_and_days)
+    Args:
+        features: the features of our dataset
+        scenario: whether we are looking at the starts or the ends of trips (enter "start" or "end")
+        geocode: whether we want to initiate the geocoding procedures.
+
+    Returns:
+        None
+    """
+
+    logger.warning("Initiating feature engineering...")
+    features_with_hours_and_days = add_hours_and_days(features=features, scenario=scenario)
+    final_features = add_avg_trips_last_4_weeks(features=features_with_hours_and_days)
+
+    assert "day_of_the_week" and "average_trips_last_4_weeks" in final_features.columns
+    assert final_features["day_of_the_week"].isna().sum() == 0 and \
+           final_features["average_trips_last_4_weeks"].isna().sum() == 0
     if geocode:
         final_features = add_coordinates_to_dataframe(features=features, scenario=scenario)
     return final_features
