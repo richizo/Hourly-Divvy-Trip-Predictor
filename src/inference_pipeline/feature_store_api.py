@@ -6,6 +6,8 @@ from hsfs.feature_store import FeatureStore
 from hsfs.feature_group import FeatureGroup
 from hsfs.feature_view import FeatureView
 
+from src.setup.config import config
+
 
 class FeatureStoreAPI:
     def __init__(
@@ -77,3 +79,15 @@ class FeatureStoreAPI:
                 version=self.feature_view_version
             )
         return feature_view
+
+
+def create_hopsworks_api_object(scenario: str) -> FeatureStoreAPI:
+    return FeatureStoreAPI(
+        scenario=scenario,
+        api_key=config.hopsworks_api_key,
+        project_name=config.hopsworks_project_name,
+        feature_group_name=f"{scenario}_feature_group",
+        feature_group_version=config.feature_group_version,
+        feature_view_name=f"{scenario}_feature_view",
+        feature_view_version=config.feature_view_version
+    )

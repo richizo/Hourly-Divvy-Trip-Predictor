@@ -1,4 +1,5 @@
 import pickle
+import subprocess
 import pandas as pd
 
 from pathlib import Path
@@ -7,14 +8,15 @@ from comet_ml import Experiment
 from argparse import ArgumentParser
 from sklearn.pipeline import make_pipeline
 from sklearn.metrics import mean_absolute_error
-
-from src.feature_pipeline.feature_engineering import perform_feature_engineering
+from hsml.model_schema import ModelSchema, Schema
 
 from src.setup.config import config
 from src.setup.paths import MODELS_DIR, TRAINING_DATA
 from src.feature_pipeline.preprocessing import DataProcessor
 from src.training_pipeline.models import BaseModel, get_model
 from src.training_pipeline.hyperparameter_tuning import optimise_hyperparameters
+
+from src.inference_pipeline.feature_store_api import FeatureStoreAPI, create_hopsworks_api_object
 
 
 def get_or_make_training_data(scenario: str) -> tuple[pd.DataFrame, pd.Series]:
@@ -43,13 +45,20 @@ def get_or_make_training_data(scenario: str) -> tuple[pd.DataFrame, pd.Series]:
     return features.sort_index(), target.sort_index()
 
 
+def provide_model_schema(x_train: pd.DataFrame, y_train: pd.Series) -> ModelSchema:
+    input_schema = Schema(x_train)
+    output_schema = Schema(y_train)
+    return ModelSchema(input_schema=input_schema, output_schema=output_schema)
+
+
 def train(
         model_name: str,
         scenario: str,
         tune_hyperparameters: bool | None,
         hyperparameter_trials: int | None,
-        save: bool = True
-) -> None:
+        save_model_locally: bool = True,
+        send_best_model_to_registry: bool = True
+) -> float:
     """
     The function first checks for the existence of the training data, and builds it if 
     it doesn't find it locally. Then it checks for a saved model. If it doesn't find a model,
@@ -65,7 +74,10 @@ def train(
 
         hyperparameter_trials (int | None): the number of times that we will try to optimize the hyperparameters
 
-        save (bool): whether to save the model (locally and on CometML)
+        save_model_locally (bool): whether to save the model locally.
+
+        send_best_model_to_registry (bool): whether to send the best model (the one with the lowest error on the test
+                                            set) to Hopsworks' model registry.
     """
     model_fn = get_model(model_name=model_name)
     features, target = get_or_make_training_data(scenario=scenario)
@@ -113,20 +125,31 @@ def train(
     # specifying the arguments causes an error.
     pipeline.fit(X=x_train, y=y_train)
 
+    test_errors = []
     y_pred = pipeline.predict(x_test)
     test_error = mean_absolute_error(y_true=y_test, y_pred=y_pred)
+    test_errors.append(test_error)
+
     experiment.log_metric(name="Test M.A.E", value=test_error)
     experiment.end()
 
-    if save:
+    if save_model_locally:
         tuned_or_not = "tuned" if tune_hyperparameters else "Not tuned"
         model_file_name = f"Best_{tuned_or_not}_{model_name}_model_for_{scenario}s.pkl"
         with open(MODELS_DIR/model_file_name, mode="wb") as file:
             pickle.dump(obj=model_fn, file=file)
         logger.success("Saved model to disk")
 
+    return test_error
 
-if __name__ == "__main__":
+
+def run_make_train(command_target: str):
+    command = ["make", command_target]
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    logger.info("Running the ")
+
+
+def arg_parse() -> None:
     parser = ArgumentParser()
     parser.add_argument("--scenario", type=str)
     parser.add_argument("--model", type=str, default="lightgbm")
@@ -140,3 +163,25 @@ if __name__ == "__main__":
         tune_hyperparameters=args.tune_hyperparameters,
         hyperparameter_trials=args.hyperparameter_trials
     )
+
+
+def log__best_model_to_registry(test_error: float, model_name: str, x_train, y_train) -> None:
+    api = create_hopsworks_api_object(scenario=scenario)
+    project = api.login_to_hopsworks()
+    model_registry = project.get_model_registry()
+
+    model = model_registry.sklearn.create_model(
+        name=config.comet_project_name,
+        metrics={"Test M.A.E": test_error},
+        description=model_name,
+        input_example=x_train.sample(),
+        model_schema=provide_model_schema(x_train=x_train, y_train=y_train)
+    )
+
+
+
+
+
+if __name__ == "__main__":
+
+
