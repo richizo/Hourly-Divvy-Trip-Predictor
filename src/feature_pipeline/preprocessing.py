@@ -26,12 +26,19 @@ class DataProcessor:
         self.starts_ts_path = TIME_SERIES_DATA/"starts_ts.parquet"
         self.ends_ts_path = TIME_SERIES_DATA/"ends_ts.parquet"
 
-    def make_training_data(self, geocode: bool) -> list[pd.DataFrame]:
+    def make_training_data(
+            self,
+            for_feature_store: bool,
+            geocode: bool
+    ) -> list[pd.DataFrame] | tuple[pd.DataFrame, pd.DataFrame]:
         """
         Extract raw data, transform it into a time series, and transform that time series into
         training data which is subsequently saved.
 
         Args:
+            for_feature_store (bool): whether we are intending to stop at the provision of
+                                      time series data for subsequent pushing to the feature
+                                      store.
             geocode (bool): whether to geocode when performing feature engineering.
 
         Returns:
@@ -50,6 +57,9 @@ class DataProcessor:
 
         logger.info("Transforming the data into a time series...")
         starts_ts, ends_ts = self.transform_cleaned_data_into_ts_data(start_df=starts, end_df=ends)
+        if for_feature_store:
+            return starts_ts, ends_ts
+
         ts_data_per_scenario = {"start": starts_ts, "end": ends_ts}
 
         training_sets = []
@@ -245,7 +255,7 @@ class DataProcessor:
             self,
             start_df: pd.DataFrame,
             end_df: pd.DataFrame,
-            save: bool = True
+            save: bool = True,
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
         """
         Converts cleaned data into time series data.
@@ -341,14 +351,14 @@ class DataProcessor:
 
                 def find_num_string_indices() -> int:
                     string_count = 0
-                    for station_id in cleaned_data[f"{scenario}_station_id"].to_list():
+                    for station_id in cleaned_data[f"{start_or_end}_station_id"].to_list():
                         if isinstance(station_id, str):
                             string_count += 1
                     return string_count
 
                 def use_custom_indexing_method() -> bool:
                     string_count = find_num_string_indices()
-                    num_missing_indices = cleaned_data[f"{scenario}_station_id"].isna().sum()
+                    num_missing_indices = cleaned_data[f"{start_or_end}_station_id"].isna().sum()
                     if (num_missing_indices + string_count) / cleaned_data.shape[0] > 0.5:
                         return True
                     else:
@@ -608,4 +618,4 @@ class DataProcessor:
 if __name__ == "__main__":
     make_fundamental_paths()
     trips_2024 = DataProcessor(year=2024)
-    trips_2024.make_training_data(geocode=False)
+    trips_2024.make_training_data(geocode=False, for_feature_store=False)

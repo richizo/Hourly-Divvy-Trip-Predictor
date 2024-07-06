@@ -1,4 +1,5 @@
 import hopsworks
+from hsfs.util import datetime, date
 
 from loguru import logger
 from hsfs.feature_store import FeatureStore
@@ -41,13 +42,20 @@ class FeatureStoreAPI:
         return project.get_feature_store()
 
     def get_or_create_feature_group(self) -> FeatureGroup:
+        """
+        Create or connect to a feature group with the specified name, and 
+        return an object that represents it.
+
+        Returns:
+            FeatureGroup: a representation of the fetched or created feature group
+        """
         feature_store = self.get_feature_store()
         feature_group = feature_store.get_or_create_feature_group(
             name=self.feature_group_name,
             version=self.feature_group_version,
             description=f"Hourly time series data showing when trips {self.scenario}",
-            primary_key=[f"{self.scenario}_hour", f"{self.scenario}_station_id"],
-            event_time=f"{self.scenario}_hour"
+            primary_key=[f"{self.scenario}_timestamp", f"{self.scenario}_station_id"],
+            event_time=f"{self.scenario}_timestamp"
         )
         return feature_group
 

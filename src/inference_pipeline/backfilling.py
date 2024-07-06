@@ -1,19 +1,24 @@
 import pandas as pd
-from src.setup.config import config
 
-from src.training_pipeline.training import get_or_make_training_data
+from loguru import logger 
+
+from src.feature_pipeline.preprocessing import DataProcessor
 from src.inference_pipeline.feature_store_api import FeatureStoreAPI
+from src.setup.config import config
+from src.setup.paths import TIME_SERIES_DATA
 
 
 def backfill_feature_store(scenario: str) -> None:
     """
+    Upload the time series data to the feature store.
 
     Args:
-        scenario:
+        scenario: "start" or "end"
 
     Returns:
 
     """
+    assert scenario in ["start", "end"]
     api = FeatureStoreAPI(
         scenario=scenario,
         api_key=config.hopsworks_api_key,
@@ -24,13 +29,18 @@ def backfill_feature_store(scenario: str) -> None:
         feature_view_version=config.feature_view_version
     )
 
-    features, target = get_or_make_training_data(scenario=scenario)
+    processor = DataProcessor(year=config.year)
+    
+    try:
+        ts_data = pd.read_parquet(TIME_SERIES_DATA/f"{scenario}s_ts.parquet")
+    except:
+        logger.exception(f"There is no saved time series data for the {scenario}s of trips")
+        ts_data = processor.make_training_data(for_feature_store=True, geocode=False)[0] if scenario == "start" \
+            else processor.make_training_data(for_feature_store=True, geocode=False)[1]
 
+    ts_data[f"{scenario}_timestamp"] = ts_data[f"{scenario}_hour"].astype(int) // 10**6  # Express in milliseconds
     feature_group = api.get_or_create_feature_group()
-    feature_group.insert(
-        features, write_options={"wait_for_job": True}
-    )
-
+    feature_group.insert(ts_data, write_options={"wait_for_job": True})  # Push time series data to the feature group
 
 if __name__ == "__main__":
     for scenario in ["start", "end"]:
