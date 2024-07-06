@@ -41,11 +41,11 @@ class DataProcessor:
         self.data = self.clean()
 
         starts = self.data[
-            ["start_time", "start_lat", "start_lng"]
+            ["start_time", "start_lat", "start_lng", "start_station_id"]
         ]
 
         ends = self.data[
-            ["end_time", "end_lat", "end_lng"]
+            ["end_time", "end_lat", "end_lng", "end_station_id"]
         ]
 
         logger.info("Transforming the data into a time series...")
@@ -166,8 +166,12 @@ class DataProcessor:
                             rows_with_known_ids.append(self.data.iloc[row, station_id_col])
                             rows_with_known_station_names.append(self.data.iloc[row, station_names_col])
 
-                    return (rows_with_known_lats, rows_with_known_longs, rows_with_known_ids,
-                            rows_with_known_station_names)
+                    return (
+                        rows_with_known_lats,
+                        rows_with_known_longs,
+                        rows_with_known_ids,
+                        rows_with_known_station_names
+                    )
 
             def _replace_missing_names_and_ids(
                     scenario: str,
@@ -319,31 +323,33 @@ class DataProcessor:
                 string indices (which are somewhat problematic) and missing ones. If the proportion
                 of rows that feature such indices exceeds a certain hardcoded threshold (I chose 50%),
                 we use the custom procedure described above (without rounding.ie. with the original
-                coordinates). As of early July 2024, 82% of the rows have string or missing indices. It
-                is therefore unlikely that we will need an alternative method. However, I will write one
-                eventually. Most likely it will involve simply applying the custom procedure to only that
-                problematic minority of indices, to generate new integer indices that aren't already in
-                the column.
+                coordinates). As of early July 2024, and for the IDs of origin and destination stations, 
+                82% of the rows have string or missing indices. It is therefore unlikely that we will need 
+                an alternative method. However, I will write one eventually. Most likely it will involve
+                simply applying the custom procedure to only that problematic minority of indices,to generate
+                new integer indices that aren't already in the column.
 
                 Args:
-                    cleaned_data (pd.DataFrame): _description_
-                    decimal_places (int): _description_
-                    start_or_end (str): _description_
+                    cleaned_data (pd.DataFrame): the version of the dataset that has been cleaned
+                    decimal_places (int): the number of decimal places to which we may round the coordinates.
+                                          Choosing 6 decimal places will result in no rounding at all.
+                    start_or_end (str): whether we are looking at the starts or ends of trips.
 
                 Returns:
-                    pd.DataFrame: _description_
+                    pd.DataFrame: the data after the inclusion of the possibly rounded coordinates.
                 """
+
                 def find_num_string_indices() -> int:
                     string_count = 0
-                    for station_id in cleaned_data[f"{start_or_end}_station_id"].to_list():
+                    for station_id in cleaned_data[f"{scenario}_station_id"].to_list():
                         if isinstance(station_id, str):
                             string_count += 1
                     return string_count
 
                 def use_custom_indexing_method() -> bool:
                     string_count = find_num_string_indices()
-                    num_missing_indices = cleaned_data[f"{start_or_end}_station_id"].isna().sum()
-                    if (num_missing_indices+string_count)/cleaned_data.shape[0] > 0.5:
+                    num_missing_indices = cleaned_data[f"{scenario}_station_id"].isna().sum()
+                    if (num_missing_indices + string_count) / cleaned_data.shape[0] > 0.5:
                         return True
                     else:
                         return False
@@ -391,7 +397,7 @@ class DataProcessor:
                     )
                     dictionaries.append(origins_or_destinations_and_ids)
 
-                    # Critical for recovering the rounded coordinates and their corresponding IDs later.
+                    # Critical for recovering the (rounded) coordinates and their corresponding IDs later.
                     save_dict(
                         dictionary=origins_or_destinations_and_ids,
                         folder=GEOGRAPHICAL_DATA,
@@ -402,7 +408,7 @@ class DataProcessor:
                     return cleaned_data
 
                 else:
-                    raise NotImplementedError("Yet to produce logic to perform an alternative indexing method")
+                    raise NotImplementedError("Yet to provide logic to perform an alternative indexing method")
 
             def __aggregate_final_ts(
                     interim_data: pd.DataFrame,
