@@ -8,41 +8,32 @@ import pandas as pd
 from tqdm import tqdm
 
 
-def view_memory_usage(
-    data: pd.DataFrame,
-    column: str
-):
+def view_memory_usage(data: pd.DataFrame, column: str) -> pd.Series:
     """
     This function allows us to view the amount of memory being
     used by one or more columns of a given dataframe.
     """
-
     yield data[column].memory_usage(index=False, deep=True)
 
 
-def change_column_data_type(
-    data: pd.DataFrame,
-    columns: list,
-    to_format: str
-):
+def change_column_data_type(data: pd.DataFrame, columns: list, to_format: str):
     """
     This function changes the datatype of one or more columns of 
     a given dataframe.
     """
-
     data[columns] = data[columns].astype(to_format)
 
 
-def save_dict(
-    dictionary: dict,
-    folder: pathlib.PosixPath,
-    file_name: str
-):
-    """ 
+def save_dict(dictionary: dict, folder: pathlib.PosixPath, file_name: str):
+    """
     Save a dictionary (as a .pkl file) into a specified folder,
     and with a specified file name
-    """
 
+    Args:
+        dictionary (dict): the target dictionary
+        folder (pathlib.PosixPath): the directory where the file is to be saved
+        file_name (str): the name of the .pkl file
+    """
     with open(f"{folder}/{file_name}", "wb") as file:
         pickle.dump(dictionary, file)
 

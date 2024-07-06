@@ -48,12 +48,11 @@ def train(
         scenario: str,
         tune_hyperparameters: bool | None,
         hyperparameter_trials: int | None,
-        save: bool = True,
-        geocode: bool = False
+        save: bool = True
 ) -> None:
     """
     The function first checks for the existence of the training data, and builds it if 
-    it doesn't find the file. Then it checks for a saved model. If it doesn't find a model, 
+    it doesn't find it locally. Then it checks for a saved model. If it doesn't find a model,
     it will go on to build one, tune its hyperparameters, save the resulting model.
 
     Args:
@@ -67,22 +66,16 @@ def train(
         hyperparameter_trials (int | None): the number of times that we will try to optimize the hyperparameters
 
         save (bool): whether to save the model (locally and on CometML)
-
-        geocode (bool): whether to geocode during feature engineering
     """
-
     model_fn = get_model(model_name=model_name)
     features, target = get_or_make_training_data(scenario=scenario)
-    engineered_features = perform_feature_engineering(features=features, scenario=scenario, geocode=geocode)
 
-    train_sample_size = int(0.9 * len(engineered_features))
-    x_train, x_test = engineered_features[:train_sample_size], engineered_features[train_sample_size:]
+    train_sample_size = int(0.9 * len(features))
+    x_train, x_test = features[:train_sample_size], features[train_sample_size:]
     y_train, y_test = target[:train_sample_size], target[train_sample_size:]
 
     experiment = Experiment(
-        api_key=config.comet_api_key,
-        workspace=config.comet_workspace,
-        project_name=config.comet_project_name
+        api_key=config.comet_api_key, workspace=config.comet_workspace, project_name=config.comet_project_name
     )
     experiment.add_tags(tags=[model_name, scenario])
 

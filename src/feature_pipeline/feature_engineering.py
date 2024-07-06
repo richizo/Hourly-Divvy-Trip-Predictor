@@ -143,7 +143,7 @@ def add_coordinates_to_dataframe(features: pd.DataFrame, scenario: str) -> pd.Da
     return features
 
 
-def perform_feature_engineering(features: pd.DataFrame, scenario: str, geocode: bool) -> None:
+def perform_feature_engineering(features: pd.DataFrame, scenario: str, geocode: bool) -> pd.DataFrame:
     """
     Initiate a chain of events that results in the accomplishment of the above feature
     engineering steps.
@@ -154,9 +154,8 @@ def perform_feature_engineering(features: pd.DataFrame, scenario: str, geocode: 
         geocode: whether we want to initiate the geocoding procedures.
 
     Returns:
-        None
+        pd.DataFrame: a dataframe containing the pre-existing features as well as the new ones.
     """
-
     logger.warning("Initiating feature engineering...")
     features_with_hours_and_days = add_hours_and_days(features=features, scenario=scenario)
     final_features = add_avg_trips_last_4_weeks(features=features_with_hours_and_days)
