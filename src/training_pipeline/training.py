@@ -36,7 +36,7 @@ def get_or_make_training_data(scenario: str) -> tuple[pd.DataFrame, pd.Series]:
         logger.success("The training data has already been created and saved. Fetched it...")
     else:
         logger.warning("No training data is stored. Creating the dataset will take a long time...")
-        training_sets = DataProcessor(year=config.year).make_training_data()
+        training_sets = DataProcessor(year=config.year).make_training_data(for_feature_store=False, geocode=False)
         training_data = training_sets[0] if scenario.lower() == "start" else training_sets[1]
         logger.success("Training data produced successfully")
 
@@ -60,7 +60,7 @@ def train(
         send_best_model_to_registry: bool = True
 ) -> float:
     """
-    The function first checks for the existence of the training data, and builds it if 
+    The function first checks for the existence of the training data, and builds it if
     it doesn't find it locally. Then it checks for a saved model. If it doesn't find a model,
     it will go on to build one, tune its hyperparameters, save the resulting model.
 
@@ -69,7 +69,7 @@ def train(
 
         scenario:   a string indicating whether we are training data on the starts or ends of trips.
                     The only accepted answers are "start" and "end"
-        
+
         tune_hyperparameters (bool | None, optional): whether to tune hyperparameters or not.
 
         hyperparameter_trials (int | None): the number of times that we will try to optimize the hyperparameters
@@ -136,20 +136,39 @@ def train(
     if save_model_locally:
         tuned_or_not = "tuned" if tune_hyperparameters else "Not tuned"
         model_file_name = f"Best_{tuned_or_not}_{model_name}_model_for_{scenario}s.pkl"
-        with open(MODELS_DIR/model_file_name, mode="wb") as file:
+        with open(MODELS_DIR / model_file_name, mode="wb") as file:
             pickle.dump(obj=model_fn, file=file)
         logger.success("Saved model to disk")
+
+    if send_best_model_to_registry:
+        log_best_model_to_registry(
+            scenario=scenario,
+            test_error=test_error,
+            model_name=model_name,
+            x_train=x_train,
+            y_train=y_train
+        )
 
     return test_error
 
 
-def run_make_train(command_target: str):
-    command = ["make", command_target]
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    logger.info("Running the ")
+def log_best_model_to_registry(scenario: str, test_error: float, model_name: str, x_train, y_train) -> None:
+    api = create_hopsworks_api_object(scenario=scenario)
+    project = api.login_to_hopsworks()
+    model_registry = project.get_model_registry()
+    logger.success("Connected to Hopsworks' model registry")
+
+    model = model_registry.sklearn.create_model(
+        name=config.comet_project_name,
+        metrics={"Test M.A.E": test_error},
+        description=model_name,
+        input_example=x_train.sample(),
+        model_schema=provide_model_schema(x_train=x_train, y_train=y_train)
+    )
+    logger.success("Logged")
 
 
-def arg_parse() -> None:
+if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--scenario", type=str)
     parser.add_argument("--model", type=str, default="lightgbm")
@@ -161,27 +180,8 @@ def arg_parse() -> None:
         model_name=args.model,
         scenario=args.scenario,
         tune_hyperparameters=args.tune_hyperparameters,
-        hyperparameter_trials=args.hyperparameter_trials
+        hyperparameter_trials=args.hyperparameter_trials,
+        save_model_locally=False,
+        send_best_model_to_registry=True
     )
-
-
-def log__best_model_to_registry(test_error: float, model_name: str, x_train, y_train) -> None:
-    api = create_hopsworks_api_object(scenario=scenario)
-    project = api.login_to_hopsworks()
-    model_registry = project.get_model_registry()
-
-    model = model_registry.sklearn.create_model(
-        name=config.comet_project_name,
-        metrics={"Test M.A.E": test_error},
-        description=model_name,
-        input_example=x_train.sample(),
-        model_schema=provide_model_schema(x_train=x_train, y_train=y_train)
-    )
-
-
-
-
-
-if __name__ == "__main__":
-
 

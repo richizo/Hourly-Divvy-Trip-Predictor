@@ -21,3 +21,7 @@ train-all-not-tuned:
 	poetry run python training.py --scenario end --model lightgbm
 	poetry run python training.py --scenario start --model xgboost
 	poetry run python training.py --scenario end --model xgboost
+
+
+train-all:
+	poetry run python src/training_pipeline/training.py --scenario start --model base
