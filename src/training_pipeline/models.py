@@ -7,8 +7,9 @@ from datetime import datetime
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 from sklearn.linear_model import Lasso
-from sklearn.metrics import mean_absolute_error
+
 from sklearn.pipeline import Pipeline
+from sklearn.metrics import mean_absolute_error
 
 from src.setup.paths import TRAINING_DATA, MODELS_DIR
 
@@ -76,8 +77,9 @@ def get_model(model_name: str) -> callable:
         return models_and_names[model_name.lower()]
 
 
-def load_local_model(model_name: str) -> Pipeline:
-    model_file = MODELS_DIR / f"{model_name}.pkl"
-    with open(model_file, "wb") as file:
-        model: Pipeline = pickle.load(file)
-    return model
+def load_local_model(model_name: str, scenario: str, tuned_or_not: str) -> Pipeline:
+    model_file_name = f"{model_name.title()}({tuned_or_not} for {scenario}s).pkl"
+    model_file = MODELS_DIR/model_file_name
+    with open(model_file, "rb") as file:
+        return pickle.load(file)
+

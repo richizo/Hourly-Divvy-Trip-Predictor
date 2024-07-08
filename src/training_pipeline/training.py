@@ -36,6 +36,7 @@ class Trainer:
         self.scenario = scenario
         self.tune_hyperparameters = tune_hyperparameters
         self.hyperparameter_trials = hyperparameter_trials
+        self.tuned_or_not = "Tuned" if self.tune_hyperparameters else "Untuned"
 
     def get_or_make_training_data(self) -> tuple[pd.DataFrame, pd.Series]:
         """
@@ -124,20 +125,15 @@ class Trainer:
         self.save_model_locally(model_fn=model_fn, model_name=model_name)
         experiment.log_metric(name="Test M.A.E", value=test_error)
         experiment.end()
-
         return test_error
 
     def save_model_locally(self, model_fn: callable, model_name: str):
-        tuned_or_not = "tuned" if self.tune_hyperparameters else "Not tuned"
-        model_file_name = f"Best_{tuned_or_not}_{model_name}_model_for_{self.scenario}s.pkl"
-        with open(MODELS_DIR / model_file_name, mode="wb") as file:
+        model_file_name = f"{model_name.title()}({self.tuned_or_not} for {self.scenario}s).pkl"
+        with open(MODELS_DIR/model_file_name, mode="wb") as file:
             pickle.dump(obj=model_fn, file=file)
         logger.success("Saved model to disk")
 
-    def train_multiple(
-            self,
-            model_names: list[str]
-    ):
+    def train_multiple(self, model_names: list[str]) -> None:
         """
         Train the named models, identify the best performer (on the test data) and
         return
@@ -146,10 +142,10 @@ class Trainer:
             model_names:
 
         Returns:
+            None
 
         """
         models_and_errors = {}
-
         for model_name in model_names:
             test_error = self.train(model_name=model_name)
             models_and_errors[model_name] = test_error
@@ -158,7 +154,8 @@ class Trainer:
         for model_name in model_names:
             if models_and_errors[model_name] == min(test_errors):
                 logger.info(f"The best performing model is {model_name} -> Pushing it to the CometML model registry")
-                model = load_local_model(model_name=model_name)
+                model = load_local_model(model_name=model_name, scenario=self.scenario, tuned_or_not=self.tuned_or_not)
+
                 api = ModelRegistryAPI(model_name=model_name, model=model)
                 api.push_model_to_registry(status="Production")
 
