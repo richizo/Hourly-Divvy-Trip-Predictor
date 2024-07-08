@@ -1,4 +1,5 @@
-import numpy as np 
+import pickle
+import numpy as np
 import pandas as pd 
 
 from datetime import datetime
@@ -7,8 +8,9 @@ from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 from sklearn.linear_model import Lasso
 from sklearn.metrics import mean_absolute_error
+from sklearn.pipeline import Pipeline
 
-from src.setup.paths import TRAINING_DATA
+from src.setup.paths import TRAINING_DATA, MODELS_DIR
 
 
 class BaseModel:
@@ -54,7 +56,7 @@ class BaseModel:
         return mean_absolute_error(y_true=y_true, y_pred=y_pred)
 
 
-def get_model(model_name: str) -> BaseModel | XGBRegressor | LGBMRegressor:
+def get_model(model_name: str) -> callable:
     """
     
     Args:
@@ -72,3 +74,10 @@ def get_model(model_name: str) -> BaseModel | XGBRegressor | LGBMRegressor:
     }
     if model_name.lower() in models_and_names.keys():
         return models_and_names[model_name.lower()]
+
+
+def load_local_model(model_name: str) -> Pipeline:
+    model_file = MODELS_DIR / f"{model_name}.pkl"
+    with open(model_file, "wb") as file:
+        model: Pipeline = pickle.load(file)
+    return model

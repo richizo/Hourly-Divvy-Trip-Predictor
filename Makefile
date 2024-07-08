@@ -24,4 +24,4 @@ train-all-not-tuned:
 
 
 train-all:
-	poetry run python src/training_pipeline/training.py --scenario start --model base
+	poetry run python src/training_pipeline/training.py --scenario start --models base lightgbm

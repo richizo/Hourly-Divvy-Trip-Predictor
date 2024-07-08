@@ -1,5 +1,4 @@
 import hopsworks
-from hsfs.util import datetime, date
 
 from loguru import logger
 from hsfs.feature_store import FeatureStore
