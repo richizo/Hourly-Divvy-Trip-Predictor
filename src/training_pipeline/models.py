@@ -57,7 +57,7 @@ class BaseModel:
         return mean_absolute_error(y_true=y_true, y_pred=y_pred)
 
 
-def get_model(model_name: str) -> callable:
+def get_model(model_name: str) -> BaseModel | Lasso | LGBMRegressor | XGBRegressor:
     """
     
     Args:
@@ -78,8 +78,7 @@ def get_model(model_name: str) -> callable:
 
 
 def load_local_model(model_name: str, scenario: str, tuned_or_not: str) -> Pipeline:
-    model_file_name = f"{model_name.title()}({tuned_or_not} for {scenario}s).pkl"
+    model_file_name = f"{model_name.title()} ({tuned_or_not} for {scenario}s).pkl"
     model_file = MODELS_DIR/model_file_name
     with open(model_file, "rb") as file:
         return pickle.load(file)
-

@@ -5,16 +5,16 @@ from pathlib import Path
 from loguru import logger
 from comet_ml import Experiment
 from argparse import ArgumentParser
-from sklearn.pipeline import make_pipeline
 from sklearn.metrics import mean_absolute_error
+from sklearn.pipeline import Pipeline, make_pipeline
 
 from src.setup.config import config
-from src.setup.paths import MODELS_DIR, TRAINING_DATA
+from src.setup.paths import MODELS_DIR, TRAINING_DATA, make_fundamental_paths
 from src.feature_pipeline.preprocessing import DataProcessor
 from src.training_pipeline.models import BaseModel, get_model, load_local_model
 from src.training_pipeline.hyperparameter_tuning import optimise_hyperparameters
 
-from src.inference_pipeline.model_registry_api import ModelRegistryAPI
+from src.inference_pipeline.model_registry_api import ModelRegistry
 
 
 class Trainer:
@@ -37,6 +37,7 @@ class Trainer:
         self.tune_hyperparameters = tune_hyperparameters
         self.hyperparameter_trials = hyperparameter_trials
         self.tuned_or_not = "Tuned" if self.tune_hyperparameters else "Untuned"
+        make_fundamental_paths()  # Ensure that all the relevant directories exist.
 
     def get_or_make_training_data(self) -> tuple[pd.DataFrame, pd.Series]:
         """
@@ -122,42 +123,53 @@ class Trainer:
         y_pred = pipeline.predict(x_test)
         test_error = mean_absolute_error(y_true=y_test, y_pred=y_pred)
 
-        self.save_model_locally(model_fn=model_fn, model_name=model_name)
+        self.save_model_locally(model_fn=pipeline, model_name=model_name)
         experiment.log_metric(name="Test M.A.E", value=test_error)
         experiment.end()
         return test_error
 
-    def save_model_locally(self, model_fn: callable, model_name: str):
-        model_file_name = f"{model_name.title()}({self.tuned_or_not} for {self.scenario}s).pkl"
+    def save_model_locally(self, model_fn: Pipeline, model_name: str):
+        model_file_name = f"{model_name.title()} ({self.tuned_or_not} for {self.scenario}s).pkl"
         with open(MODELS_DIR/model_file_name, mode="wb") as file:
             pickle.dump(obj=model_fn, file=file)
         logger.success("Saved model to disk")
 
-    def train_multiple(self, model_names: list[str]) -> None:
+    def train_models_and_register_best(
+            self,
+            model_names: list[str],
+            version: str,
+            status: str
+    ) -> None:
         """
         Train the named models, identify the best performer (on the test data) and
         return
 
         Args:
-            model_names:
-
+            model_names: the names of the models under consideration
+            version:
+            status:  the registered status of the m
         Returns:
             None
-
         """
+        assert status in ["staging", "production"], 'The status must be either "staging" or "production"'
         models_and_errors = {}
         for model_name in model_names:
             test_error = self.train(model_name=model_name)
             models_and_errors[model_name] = test_error
 
-        test_errors = list(models_and_errors.values())
+        test_errors = models_and_errors.values()
         for model_name in model_names:
             if models_and_errors[model_name] == min(test_errors):
                 logger.info(f"The best performing model is {model_name} -> Pushing it to the CometML model registry")
                 model = load_local_model(model_name=model_name, scenario=self.scenario, tuned_or_not=self.tuned_or_not)
 
-                api = ModelRegistryAPI(model_name=model_name, model=model)
-                api.push_model_to_registry(status="Production")
+                api = ModelRegistry(
+                    model=model,
+                    model_name=model_name,
+                    scenario=self.scenario,
+                    tuned_or_not=self.tuned_or_not
+                )
+                api.push_model_to_registry(status=status.title(), version=version)
 
 
 if __name__ == "__main__":
@@ -174,4 +186,4 @@ if __name__ == "__main__":
         hyperparameter_trials=args.hyperparameter_trials
     )
 
-    trainer.train_multiple(model_names=args.models)
+    trainer.train_models_and_register_best(model_names=args.models, version="1.0.0", status="production")
