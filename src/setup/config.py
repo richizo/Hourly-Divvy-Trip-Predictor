@@ -1,10 +1,9 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
 from src.setup.paths import PARENT_DIR
 
 
 class GeneralConfig(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="allow")
+    model_config = SettingsConfigDict(env_file=f"{PARENT_DIR}/.env", env_file_encoding="utf-8", extra="allow")
 
     # Names
     year: int

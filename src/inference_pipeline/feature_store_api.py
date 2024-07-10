@@ -55,8 +55,8 @@ class FeatureStoreAPI:
             name=self.feature_group_name,
             version=self.feature_group_version,
             description=f"Hourly time series data showing when trips {self.scenario}",
-            primary_key=[f"{self.scenario}_timestamp", f"{self.scenario}_station_id"],
-            event_time=f"{self.scenario}_timestamp"
+            primary_key=[f"timestamp", f"{self.scenario}_station_id"],
+            event_time="timestamp"
         )
         return feature_group
 
