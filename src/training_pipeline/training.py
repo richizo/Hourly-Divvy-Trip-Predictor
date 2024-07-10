@@ -5,6 +5,9 @@ from pathlib import Path
 from loguru import logger
 from comet_ml import Experiment
 from argparse import ArgumentParser
+
+from xgboost import XGBRegressor
+
 from sklearn.metrics import mean_absolute_error
 from sklearn.pipeline import Pipeline, make_pipeline
 
@@ -21,8 +24,8 @@ class Trainer:
     def __init__(
             self,
             scenario: str,
-            tune_hyperparameters: bool,
-            hyperparameter_trials: int
+            hyperparameter_trials: int,
+            tune_hyperparameters: bool | None = True
     ):
         """
         Args:
@@ -73,7 +76,7 @@ class Trainer:
         Returns:
             float: the error of the chosen model on the test dataset.
         """
-        model_fn = get_model(model_name=model_name)
+        model_fn: callable = get_model(model_name=model_name)
         features, target = self.get_or_make_training_data()
 
         train_sample_size = int(0.9 * len(features))
@@ -87,17 +90,16 @@ class Trainer:
         )
         experiment.add_tags(tags=[model_name, self.scenario])
 
-        if isinstance(model_fn, BaseModel):
-            self.tune_hyperparameters = False
-        #    self.hyperparameter_trials = None
-
         if not self.tune_hyperparameters:
             experiment.set_name(name=f"{model_name.title()}(not tuned) model for the {self.scenario}s of trips")
             logger.info("Using the default hyperparameters")
             if model_name == "base":
                 pipeline = make_pipeline(model_fn(scenario=self.scenario))
             else:
-                pipeline = make_pipeline(model_fn())
+                if isinstance(model_fn, XGBRegressor):
+                    pipeline = make_pipeline(model_fn)
+                else:
+                    pipeline = make_pipeline(model_fn())
 
         else:
             experiment.set_name(name=f"{model_name.title()}(Tuned) model for the {self.scenario}s of trips")
@@ -134,7 +136,7 @@ class Trainer:
             pickle.dump(obj=model_fn, file=file)
         logger.success("Saved model to disk")
 
-    def train_models_and_register_best(
+    def train_and_register_models(
             self,
             model_names: list[str],
             version: str,
@@ -151,7 +153,7 @@ class Trainer:
         Returns:
             None
         """
-        assert status in ["staging", "production"], 'The status must be either "staging" or "production"'
+        assert status.lower() in ["staging", "production"], 'The status must be either "staging" or "production"'
         models_and_errors = {}
         for model_name in model_names:
             test_error = self.train(model_name=model_name)
@@ -175,7 +177,7 @@ class Trainer:
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--scenario", type=str)
-    parser.add_argument("--models", type=str, nargs="+", required=True)
+    parser.add_argument("--models", type=str, nargs="+", required=True, default="lasso")
     parser.add_argument("--tune_hyperparameters", action="store_true")
     parser.add_argument("--hyperparameter_trials", type=int, default=15)
     args = parser.parse_args()
@@ -186,4 +188,4 @@ if __name__ == "__main__":
         hyperparameter_trials=args.hyperparameter_trials
     )
 
-    trainer.train_models_and_register_best(model_names=args.models, version="1.0.0", status="production")
+    trainer.train_and_register_models(model_names=args.models, version="1.0.0", status="production")
