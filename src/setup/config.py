@@ -7,6 +7,7 @@ class GeneralConfig(BaseSettings):
 
     # Names
     year: int
+    n_features: int
     email: str
 
     # CometML
@@ -23,7 +24,7 @@ class GeneralConfig(BaseSettings):
 
 class FeatureGroupConfig(BaseSettings):
     name: str
-    version: str
+    version: int
     primary_key: list[str]
     event_time: str
     online_enabled: bool | None = False  # because this is a batch ML system. 
@@ -36,3 +37,9 @@ class FeatureViewConfig(BaseSettings):
 
 
 config = GeneralConfig()
+
+feature_group_predictions_metadata = FeatureGroupConfig(
+    name="model_predictions_feature_group",
+    version=1,
+
+)

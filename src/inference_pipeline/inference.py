@@ -1,40 +1,114 @@
+import numpy as np
 import pandas as pd
 
 from datetime import datetime, timedelta
+from hsfs.feature_group import FeatureGroup
 from hsfs.feature_view import FeatureView
 
 from src.setup.config import FeatureGroupConfig, FeatureViewConfig, config
-from src.inference_pipeline.feature_store_api import FeatureStoreAPI, create_hopsworks_api_object
+from src.inference_pipeline.feature_store_api import FeatureStoreAPI
 
 
 class FeatureLoader:
     def __init__(self, scenario: str) -> None:
         self.scenario = scenario
-        self.feature_store_api: FeatureStoreAPI = create_hopsworks_api_object(scenario=scenario)
+        self.n_features = config.n_features
 
-#        self.feature_group_metadata = FeatureGroupConfig(
-#            name=f"{self.scenario}_feature_group",
-#            version=config.feature_group_version
-#        )
-#
-#        self.feature_view_metadata = FeatureViewConfig(
-#            name=f"{self.scenario}_feature_view",
-#            version=config.feature_view_version
-#        )
+        self.feature_store_api = FeatureStoreAPI(
+            scenario=self.scenario,
+            api_key=config.hopsworks_api_key,
+            project_name=config.hopsworks_project_name
+        )
 
-    def load_batch_of_features_from_store(self, target_date: datetime) -> pd.DataFrame:
+        self.feature_group_metadata = FeatureGroupConfig(
+            name=f"{scenario}_feature_group",
+            version=config.feature_group_version,
+            primary=["timestamp", f"{self.scenario}_station_id"],
+            event_time="timestamp"
+        )
+
+    def _make_features(self, station_ids: list[int], time_series_data: pd.DataFrame) -> pd.DataFrame:
         """
 
         Args:
-            target_date:
+            station_ids: the list of unique station IDs
+            time_series_data: the time series data that is store on the feature store
 
         Returns:
-            pd.DataFrame
+            pd.DataFrame: the dataframe consisting of the features
         """
-        fetch_data_from = target_date - timedelta(days=28)     
+        x = np.ndarray(
+            shape=(len(station_ids), self.n_features), dtype=np.float64
+        )
+
+        for i, station_id in enumerate(station_ids):
+            ts_data_i = time_series_data.loc[
+                time_series_data[f"{self.scenario}_station_id"] == station_id, :
+            ]
+
+            ts_data_i = ts_data_i.sort_values(
+                by=[f"{self.scenario}_hour"]
+            )
+
+            ts_data_i[i, :] = ts_data_i["trips"].values
+
+        features = pd.DataFrame(
+            x,
+            columns=[f"rides_previous_{i+1}_hour" for i in reversed(range(self.n_features))]
+        )
+
+        return features
+
+    def load_batch_of_features_from_store(self, target_date: datetime) -> pd.DataFrame:
+
+        fetch_data_from = target_date - timedelta(days=28)
         fetch_data_to = target_date - timedelta(hours=1)
         feature_view: FeatureView = self.feature_store_api.get_or_create_feature_view()
 
-        ts_data = feature_view.get_batch_data(start_time=fetch_data_from, end_time=fetch_data_to)
-        ts_start_date = int(ts_data["timestamp"])
+        ts_data: pd.DataFrame = feature_view.get_batch_data(start_time=fetch_data_from, end_time=fetch_data_to)
+        ts_first_date = int(fetch_data_from.timestamp())
+        ts_last_date = int(fetch_data_to.timestamp())
 
+        ts_data = ts_data[
+            ts_data["timestamp"].between(left=ts_first_date, right=ts_last_date)
+        ]
+
+        ts_data = ts_data.sort_values(
+            by=[f"{self.scenario}_station_id", f"{self.scenario}_hour"]
+        )
+
+        # Check that the data fetched from the feature store contains no missing data.
+        station_ids = ts_data[f"{self.scenario}"].unique()
+        assert len(ts_data) == config.n_features * len(station_ids), \
+            "The time series data is incomplete on the feature store. Please review the feature pipeline."
+
+        features = self._make_features(station_ids=station_ids, time_series_data=ts_data)
+        features[f"{self.scenario}_hour"] = target_date
+        features[f"{self.scenario}_station_id"] = station_ids
+
+        return features.sort_values(
+            by=[f"{self.scenario}_location_id"]
+        )
+
+    def create_predictions_feature_view(self):
+        self.feature_store_api.get_or_create_feature_view()
+
+    def load_predictions_from_store(z
+            self,
+            model_name: str,
+            from_hour:
+            datetime,
+            to_hour: datetime
+    ) -> pd.DataFrame:
+
+        feature_group: FeatureGroup = self.feature_store_api.get_or_create_feature_group(
+            name=self.feature_group_metadata.name,
+            version=self.feature_group_metadata.version,
+            description=f"Hourly time series data showing when trips {self.scenario}s"
+        )
+
+        predictions_feature_view: FeatureView = self.feature_store_api.get_or_create_feature_view(
+            name=f"{model_name}_predictions_from_feature_store",
+            version=1,
+            feature_group=feature_group
+        )

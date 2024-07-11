@@ -25,8 +25,12 @@ def backfill_feature_store(scenario: str) -> None:
         project_name=config.hopsworks_project_name,
         feature_group_name=f"{scenario}_feature_group",
         feature_group_version=config.feature_group_version,
+        feature_group_description=f"Hourly time series data showing when trips {scenario}",
         feature_view_name=f"{scenario}_feature_view",
-        feature_view_version=config.feature_view_version
+        feature_view_version=config.feature_view_version,
+        primary_key=[f"timestamp", f"{self.scenario}_station_id"],
+
+
     )
 
     processor = DataProcessor(year=config.year)
@@ -40,7 +44,7 @@ def backfill_feature_store(scenario: str) -> None:
             else processor.make_training_data(for_feature_store=True, geocode=False)[1]
 
     ts_data["timestamp"] = ts_data[f"{scenario}_hour"].astype(int) // 10**6  # Express in milliseconds
-    ts_data = ts_data.drop(f"{scenario}_hour", axis=1)
+    #  ts_data = ts_data.drop(f"{scenario}_hour", axis=1)
     feature_group = api.get_or_create_feature_group()
     feature_group.insert(ts_data, write_options={"wait_for_job": True})  # Push time series data to the feature group
 

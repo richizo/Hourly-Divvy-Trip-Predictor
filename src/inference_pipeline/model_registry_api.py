@@ -63,11 +63,11 @@ class ModelRegistry:
         experiment.log_model(name=self._set_registered_name(), file_or_folder=str(model_file))
         logger.success(f"Finished logging the {self.model_name} model")
 
-   #     if len(self.get_registered_model_versions(status=status)) != 0:
-   #         logger.warning("There is a pre-existing model")
-   #         latest_model_version = self.get_latest_model_version(status=status)
-   #         if latest_model_version <= version:
-   #             version = latest_model_version.replace(latest_model_version[-1], "2")
+    #     if len(self.get_registered_model_versions(status=status)) != 0:
+    #         logger.warning("There is a pre-existing model")
+    #         latest_model_version = self.get_latest_model_version(status=status)
+    #         if latest_model_version <= version:
+    #             version = latest_model_version.replace(latest_model_version[-1], "2")
 
         logger.info(f'Pushing version {version} model to the registry under "{status.title()}"...')
         experiment.register_model(model_name=self._set_registered_name(), status=status, version=version)
