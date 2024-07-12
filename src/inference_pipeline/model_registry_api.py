@@ -1,11 +1,12 @@
 import pickle
-from loguru import logger
+from pathlib import Path
 
+from loguru import logger
 from sklearn.pipeline import Pipeline
-from comet_ml import Experiment, ExistingExperiment, get_global_experiment, API
+from comet_ml import ExistingExperiment, get_global_experiment, API
 
 from src.setup.config import config
-from src.setup.paths import MODELS_DIR
+from src.setup.paths import COMET_SAVE_DIR, LOCAL_SAVE_DIR
 from src.training_pipeline.models import load_local_model
 
 
@@ -19,11 +20,6 @@ class ModelRegistry:
 
     def _set_registered_name(self) -> str:
         return f"{self.model_name.title()} ({self.tuned_or_not} for {self.scenario}s)"
-
-    def _load_local_model(self) -> Pipeline:
-        with open(MODELS_DIR/self.registered_name, "wb") as file:
-            model = pickle.load(file)
-        return model
 
     def get_registered_model_versions(self, status: str) -> list:
         api = API(api_key=config.comet_api_key)
@@ -59,7 +55,7 @@ class ModelRegistry:
         experiment = ExistingExperiment(api_key=stale_experiment.api_key, experiment_key=stale_experiment.id)
 
         logger.info("Logging model to Comet ML")
-        model_file = MODELS_DIR/f"{self._set_registered_name()}.pkl"
+        model_file = LOCAL_SAVE_DIR/f"{self._set_registered_name()}.pkl"
         experiment.log_model(name=self._set_registered_name(), file_or_folder=str(model_file))
         logger.success(f"Finished logging the {self.model_name} model")
 
@@ -89,10 +85,15 @@ class ModelRegistry:
             workspace=config.comet_workspace,
             registry_name=self.registered_name,
             version=self.get_latest_model_version(status=status),
-            output_path=MODELS_DIR,
+            output_path=COMET_SAVE_DIR,
             expand=unzip,
             stage=status
         )
 
-        model = load_local_model(model_name=self.model_name, scenario=self.scenario, tuned_or_not=self.tuned_or_not)
+        model = load_local_model(
+            directory=COMET_SAVE_DIR,
+            model_name=self.model_name,
+            scenario=self.scenario,
+            tuned_or_not=self.tuned_or_not
+        )
         return model

@@ -8,6 +8,9 @@ os.chdir(PARENT_DIR)
 DATA_DIR = PARENT_DIR/"data"
 RAW_DATA_DIR = DATA_DIR/"raw"
 MODELS_DIR = PARENT_DIR/"models"
+LOCAL_SAVE_DIR = MODELS_DIR/"locally_created"
+COMET_SAVE_DIR = MODELS_DIR/"comet_downloads"
+
 TEMPORARY_DATA = DATA_DIR/"temporary"
 
 PARQUETS = RAW_DATA_DIR/"Parquets"
@@ -23,7 +26,7 @@ TRAINING_DATA = TRANSFORMED_DATA/"training data"
 def make_fundamental_paths() -> None:
     for path in [
         DATA_DIR, CLEANED_DATA, RAW_DATA_DIR, PARQUETS, GEOGRAPHICAL_DATA, TRANSFORMED_DATA, TIME_SERIES_DATA,
-        TRAINING_DATA, MODELS_DIR
+        TRAINING_DATA, MODELS_DIR, LOCAL_SAVE_DIR, COMET_SAVE_DIR
     ]: 
         if not Path(path).exists():
             os.mkdir(path)

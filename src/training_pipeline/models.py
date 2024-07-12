@@ -2,6 +2,7 @@ import pickle
 import numpy as np
 import pandas as pd 
 
+from pathlib import Path
 from datetime import datetime
 
 from xgboost import XGBRegressor
@@ -11,7 +12,7 @@ from sklearn.linear_model import Lasso
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import mean_absolute_error
 
-from src.setup.paths import TRAINING_DATA, MODELS_DIR
+from src.setup.paths import TRAINING_DATA
 
 
 class BaseModel:
@@ -77,8 +78,25 @@ def get_model(model_name: str) -> BaseModel | Lasso | LGBMRegressor | XGBRegress
         return models_and_names[model_name.lower()]
 
 
-def load_local_model(model_name: str, scenario: str, tuned_or_not: str) -> Pipeline:
+def load_local_model(directory: Path, model_name: str, scenario: str, tuned_or_not: str) -> Pipeline:
+    """
+    Allows for model objects that have been downloaded from the model registry, or created locally to be loaded
+    and returned for inference or other purpose. It was important that the function be global and that it allow
+    models to be loaded from either of the directories that correspond to each model source.
+
+    Args:
+        directory: the directory where the models are being stored
+        model_name: the name of the sought model
+        scenario: "start" or "end" data
+        tuned_or_not: whether we seek the tuned or untuned version of each model. The accepted entries are "tuned" and
+                      "untuned".
+
+    Returns:
+        Pipeline: the model as an object of the sklearn.pipeline.Pipeline class.
+    """
+    assert model_name.lower() in ["base", "lasso", "lightgbm", "xgboost"], \
+        "The requested model is not currently among those implemented"
     model_file_name = f"{model_name.title()} ({tuned_or_not} for {scenario}s).pkl"
-    model_file = MODELS_DIR/model_file_name
+    model_file = directory / model_file_name
     with open(model_file, "rb") as file:
         return pickle.load(file)

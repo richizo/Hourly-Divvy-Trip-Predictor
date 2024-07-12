@@ -12,7 +12,7 @@ from sklearn.metrics import mean_absolute_error
 from sklearn.pipeline import Pipeline, make_pipeline
 
 from src.setup.config import config
-from src.setup.paths import MODELS_DIR, TRAINING_DATA, make_fundamental_paths
+from src.setup.paths import TRAINING_DATA, LOCAL_SAVE_DIR, make_fundamental_paths
 from src.feature_pipeline.preprocessing import DataProcessor
 from src.training_pipeline.models import BaseModel, get_model, load_local_model
 from src.training_pipeline.hyperparameter_tuning import optimise_hyperparameters
@@ -132,7 +132,7 @@ class Trainer:
 
     def save_model_locally(self, model_fn: Pipeline, model_name: str):
         model_file_name = f"{model_name.title()} ({self.tuned_or_not} for {self.scenario}s).pkl"
-        with open(MODELS_DIR/model_file_name, mode="wb") as file:
+        with open(LOCAL_SAVE_DIR/model_file_name, mode="wb") as file:
             pickle.dump(obj=model_fn, file=file)
         logger.success("Saved model to disk")
 
@@ -163,7 +163,12 @@ class Trainer:
         for model_name in model_names:
             if models_and_errors[model_name] == min(test_errors):
                 logger.info(f"The best performing model is {model_name} -> Pushing it to the CometML model registry")
-                model = load_local_model(model_name=model_name, scenario=self.scenario, tuned_or_not=self.tuned_or_not)
+                model = load_local_model(
+                    directory=LOCAL_SAVE_DIR,
+                    model_name=model_name,
+                    scenario=self.scenario,
+                    tuned_or_not=self.tuned_or_not
+                )
 
                 api = ModelRegistry(
                     model=model,

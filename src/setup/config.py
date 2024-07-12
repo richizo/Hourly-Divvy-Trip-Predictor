@@ -37,9 +37,3 @@ class FeatureViewConfig(BaseSettings):
 
 
 config = GeneralConfig()
-
-feature_group_predictions_metadata = FeatureGroupConfig(
-    name="model_predictions_feature_group",
-    version=1,
-
-)
