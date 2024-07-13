@@ -9,7 +9,7 @@ from pathlib import Path
 
 from src.setup.miscellaneous import (
     add_column_of_rounded_points, add_column_of_ids, make_dict_of_new_station_ids,
-    add_rounded_coordinates_to_dataframe, save_dict
+    add_rounded_coordinates_to_dataframe, save_geodata_dict
 )
 
 from src.feature_pipeline.data_extraction import load_raw_data
@@ -408,7 +408,7 @@ class DataProcessor:
                     dictionaries.append(origins_or_destinations_and_ids)
 
                     # Critical for recovering the (rounded) coordinates and their corresponding IDs later.
-                    save_dict(
+                    save_geodata_dict(
                         dictionary=origins_or_destinations_and_ids,
                         folder=GEOGRAPHICAL_DATA,
                         file_name=f"rounded_{start_or_end}_points_and_new_ids"

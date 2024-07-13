@@ -1,7 +1,7 @@
 import pandas as pd 
 from datetime import timedelta
 
-import plotly.express as plotx
+import plotly.express as plot
 
 
 def plot_one_sample(
@@ -36,9 +36,9 @@ def plot_one_sample(
 
     if display_title:
 
-        #title = f'{scenario}_hour = {features_[{scenario}]}_hour, station_id = {features_[f"{scenario}_station_id"]}'
+        #  title = f'{scenario}_hour = {features_[{scenario}]}_hour, station_id = {features_[f"{scenario}_station_id"]}'
 
-        fig = plotx.line(
+        fig = plot.line(
             x=dates, y=values, 
             template="plotly_dark",
             markers=True
@@ -48,7 +48,8 @@ def plot_one_sample(
     if targets is not None:
 
         fig.add_scatter(
-            x=dates[-1:], y = [target_],
+            x=dates[-1:],
+            y=[target_],
             line_color="green", mode="markers",
             marker_size=10, name="Actual Number of Rides"
         )

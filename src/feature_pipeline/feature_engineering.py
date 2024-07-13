@@ -156,7 +156,7 @@ def perform_feature_engineering(features: pd.DataFrame, scenario: str, geocode: 
     Returns:
         pd.DataFrame: a dataframe containing the pre-existing features as well as the new ones.
     """
-    logger.warning("Initiating feature engineering...")
+    logger.warning(f"Initiating feature engineering on the {scenario} data...")
     features_with_hours_and_days = add_hours_and_days(features=features, scenario=scenario)
     final_features = add_avg_trips_last_4_weeks(features=features_with_hours_and_days)
 

@@ -1,6 +1,11 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from src.setup.paths import PARENT_DIR
 
+from dotenv import load_dotenv
+
+
+load_dotenv(f".env")
+
 
 class GeneralConfig(BaseSettings):
     model_config = SettingsConfigDict(env_file=f"{PARENT_DIR}/.env", env_file_encoding="utf-8", extra="allow")

@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 
-from loguru import logger
 from comet_ml import API
+from loguru import logger
 from datetime import datetime, timedelta
 from hsfs.feature_group import FeatureGroup
 from hsfs.feature_view import FeatureView
@@ -99,7 +99,7 @@ class InferenceModule:
         ts_data = ts_data.sort_values(
             by=[f"{self.scenario}_station_id", f"{self.scenario}_hour"]
         )
-
+        
         # Check that the data fetched from the feature store contains no missing data.
         station_ids = ts_data[f"{self.scenario}"].unique()
         assert len(ts_data) == config.n_features * len(station_ids), \

@@ -1,11 +1,12 @@
+import json
 import random
-import pickle
 import pathlib
 
 import numpy as np
 import pandas as pd
 
 from tqdm import tqdm
+import geopandas as gpd
 
 
 def view_memory_usage(data: pd.DataFrame, column: str) -> pd.Series:
@@ -24,18 +25,20 @@ def change_column_data_type(data: pd.DataFrame, columns: list, to_format: str):
     data[columns] = data[columns].astype(to_format)
 
 
-def save_dict(dictionary: dict, folder: pathlib.PosixPath, file_name: str):
+def save_geodata_dict(dictionary: dict, folder: pathlib.PosixPath, file_name: str):
     """
-    Save a dictionary (as a .pkl file) into a specified folder,
-    and with a specified file name
+    Save the geographical data which consists of the station IDs and their corresponding
+    coordinates as a geojson file. It was necessary to swap the keys and values (the coordinates
+    and IDs respectively) because json.dump() does not allow tuples to be keys.
 
     Args:
         dictionary (dict): the target dictionary
         folder (pathlib.PosixPath): the directory where the file is to be saved
         file_name (str): the name of the .pkl file
     """
-    with open(f"{folder}/{file_name}", "wb") as file:
-        pickle.dump(dictionary, file)
+    swapped_dict = {station_id: point for point, station_id in dictionary.items()}
+    with open(f"{folder}/{file_name}.geojson", "w") as file:
+        json.dump(swapped_dict, file)
 
 
 def add_rounded_coordinates_to_dataframe(data: pd.DataFrame, decimal_places: int, scenario: str):

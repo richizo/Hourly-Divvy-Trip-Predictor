@@ -16,3 +16,6 @@ train-end-tuned:
  	--tune_hyperparameters --hyperparameter_trials 15
 
 train-all: train-start-untuned train-end-untuned train-start-tuned train-end-tuned
+
+run-frontend:
+	poetry run streamlit run src/inference_pipeline/frontend.py
