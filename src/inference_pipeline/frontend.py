@@ -1,9 +1,12 @@
-import pandas as pd
+import json
 import pydeck
+import numpy as np
+import pandas as pd
 import streamlit as st
 import geopandas as gpd
 
 from datetime import datetime, timedelta
+from streamlit_option_menu import option_menu
 
 from src.setup.paths import GEOGRAPHICAL_DATA
 from src.inference_pipeline.inference import InferenceModule
@@ -11,15 +14,22 @@ from src.inference_pipeline.inference import InferenceModule
 
 class Page:
     def __init__(self):
+        self.n_steps = None
+        self.progress_bar = None
         st.title("Divvy Trip Activity Predictor")
+
         self.current_date = pd.to_datetime(datetime.utcnow()).floor("H")
-
         st.header(f"{self.current_date} UTC")
-        self.progress_bar = st.sidebar.header("⚙️ Working Progress")
-        self.progress_bar = st.sidebar.progress(value=0)
-        self.n_steps = 7
 
-        st.map()
+    @staticmethod
+    def make_main_menu():
+        with st.sidebar:
+            return option_menu(
+                menu_title="Main Menu",
+                options=["Plots", "Predictions"],
+                menu_icon="list_nested",
+                icons=["bar-chart-fill", "bullseye"]
+            )
 
     @st.cache_data
     def _load_features_from_store(self, scenario: str, current_date: datetime) -> pd.DataFrame:
@@ -58,13 +68,18 @@ class Page:
     @staticmethod
     def load_geodata(scenario: str) -> pd.DataFrame:
         with open(GEOGRAPHICAL_DATA / f"rounded_{scenario}_points_and_new_ids.geojson") as file:
-            points_and_ids = gpd.read_file(file)
-        return pd.DataFrame(points_and_ids)
+            points_and_ids = json.load(file)
+            geodata = pd.DataFrame(
+                {"IDs": points_and_ids.keys(), "Coordinates": points_and_ids.values()}
+            )
+
+        return geodata
 
     def update_page_after_fetching_geodata_and_predictions(self, scenario: str, model_name: str):
         with st.spinner(text="Getting the coordinates of each station ID..."):
             geo_df = self.load_geodata(scenario=scenario)
             st.sidebar.write("✅ Coordinates obtained...")
+
 
         with st.spinner(text="Fetching model predictions from the feature store..."):
             predictions = self._load_predictions_from_store(
@@ -199,3 +214,42 @@ class Page:
             features = self._load_features_from_store(scenario=scenario, current_date=self.current_date)
             st.sidebar.write("✅ Features fetched from the store for inference")
             self.progress_bar.progress(5/self.n_steps)
+
+    def plot_time_series(self, scenario: str, predictions: pd.DataFrame):
+
+        with st.spinner(text="Plotting time series data..."):
+            row_indices = np.argsort(predictions[f"predicted_{scenario}s"].values)[::-1]
+            n_to_plot = 10
+
+            for index in row_indices[:n_to_plot]:
+                station_id = predictions[f"{scenario}_station_id"].iloc[index]
+
+    def construct_page(self):
+        menu_options = self.make_main_menu()
+
+        if menu_options == "Plots":
+            pass  # Just for now. Plotting logic will be provided later
+        elif menu_options == "Predictions":
+            self.progress_bar = st.sidebar.header("⚙️ Working Progress")
+            self.progress_bar = st.sidebar.progress(value=0)
+            self.n_steps = 7
+
+            scenarios_and_choices = {"start": "Arrivals", "end": "Departures"}
+            user_scenario_choice = st.sidebar.multiselect(
+                label="Do you want predictions for the number of arrivals at or the departures from each station?",
+                options=["Arrivals", "Departures"],
+                placeholder="Please select one of the two options."
+            )
+
+            for scenario in scenarios_and_choices.keys():
+                if scenarios_and_choices[scenario] in user_scenario_choice:
+                    predictions = self._load_predictions_from_store(
+                        scenario=scenario,
+                        from_hour=self.current_date - timedelta(hours=1),
+                        to_hour=self.current_date
+                    )
+
+
+if __name__ == "__main__":
+    page = Page()
+    page.construct_page()
