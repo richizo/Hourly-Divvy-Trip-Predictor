@@ -1,23 +1,25 @@
 import pickle
 import pandas as pd
 
+# Standard utilities
 from pathlib import Path
-from loguru import logger
-from comet_ml import Experiment
 from argparse import ArgumentParser
 
-from xgboost import XGBRegressor
+# Experiment tracking
+from comet_ml import Experiment
 
+# Models
+from xgboost import XGBRegressor
 from sklearn.metrics import mean_absolute_error
 from sklearn.pipeline import Pipeline, make_pipeline
 
+# Custom code
 from src.setup.config import config
 from src.setup.paths import TRAINING_DATA, LOCAL_SAVE_DIR, make_fundamental_paths
 from src.feature_pipeline.preprocessing import DataProcessor
+from src.inference_pipeline.model_registry_api import ModelRegistry
 from src.training_pipeline.models import BaseModel, get_model, load_local_model
 from src.training_pipeline.hyperparameter_tuning import optimise_hyperparameters
-
-from src.inference_pipeline.model_registry_api import ModelRegistry
 
 
 class Trainer:
@@ -162,7 +164,9 @@ class Trainer:
         test_errors = models_and_errors.values()
         for model_name in model_names:
             if models_and_errors[model_name] == min(test_errors):
+                
                 logger.info(f"The best performing model is {model_name} -> Pushing it to the CometML model registry")
+                
                 model = load_local_model(
                     directory=LOCAL_SAVE_DIR,
                     model_name=model_name,

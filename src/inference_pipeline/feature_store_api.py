@@ -1,6 +1,6 @@
-import hopsworks
-
 from loguru import logger
+
+import hopsworks
 from hsfs.feature_view import FeatureView
 from hsfs.feature_store import FeatureStore
 from hsfs.feature_group import FeatureGroup
@@ -12,8 +12,8 @@ class FeatureStoreAPI:
             api_key: str,
             scenario: str,
             project_name: str,
-            primary_key: list[str],
-            event_time: str
+            primary_key: list[str] | None,
+            event_time: str | None
     ) -> None:
         self.api_key = api_key
         self.scenario = scenario

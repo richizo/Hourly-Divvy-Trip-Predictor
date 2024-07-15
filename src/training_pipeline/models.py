@@ -12,7 +12,7 @@ from sklearn.linear_model import Lasso
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import mean_absolute_error
 
-from src.setup.paths import TRAINING_DATA
+from src.setup.paths import TRAINING_DATA, MODELS_DIR, make_fundamental_paths
 
 
 class BaseModel:
@@ -94,9 +94,13 @@ def load_local_model(directory: Path, model_name: str, scenario: str, tuned_or_n
     Returns:
         Pipeline: the model as an object of the sklearn.pipeline.Pipeline class.
     """
+    if not Path(MODELS_DIR).exists():
+        make_fundamental_paths()
+
     assert model_name.lower() in ["base", "lasso", "lightgbm", "xgboost"], \
         "The requested model is not currently among those implemented"
-    model_file_name = f"{model_name.title()} ({tuned_or_not} for {scenario}s).pkl"
+
+    model_file_name = f"{model_name.title()} ({tuned_or_not.title()} for {scenario}s).pkl"
     model_file = directory / model_file_name
     with open(model_file, "rb") as file:
         return pickle.load(file)

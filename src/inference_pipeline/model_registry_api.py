@@ -1,3 +1,13 @@
+"""
+
+
+-fetch a specified model from the Comet ML model registry
+
+Returns:
+    _type_: _description_
+"""
+
+
 import pickle
 from pathlib import Path
 
@@ -6,39 +16,31 @@ from sklearn.pipeline import Pipeline
 from comet_ml import ExistingExperiment, get_global_experiment, API
 
 from src.setup.config import config
-from src.setup.paths import COMET_SAVE_DIR, LOCAL_SAVE_DIR
+from src.setup.paths import COMET_SAVE_DIR, LOCAL_SAVE_DIR, make_fundamental_paths
 from src.training_pipeline.models import load_local_model
 
 
 class ModelRegistry:
-    def __init__(self, scenario: str, model_name: str, tuned_or_not: str, model: Pipeline) -> None:
-        self.model = model
+    def __init__(self, scenario: str, model_name: str, tuned_or_not: str) -> None:
         self.scenario = scenario
         self.model_name = model_name
         self.tuned_or_not = tuned_or_not
         self.registered_name = self._set_registered_name()
 
     def _set_registered_name(self) -> str:
-        return f"{self.model_name.title()} ({self.tuned_or_not} for {self.scenario}s)"
+        return f"{self.model_name.title()} ({self.tuned_or_not.title()} for {self.scenario}s)"
 
-    def get_registered_model_versions(self, status: str) -> list:
+    def get_registered_model_version(self, status: str) -> list:
         api = API(api_key=config.comet_api_key)
-        model_details = api.get_registry_model_details(
-            workspace=config.comet_workspace, registry_name=self.registered_name)["versions"]
-
-        model_versions = [detail["version"]for detail in model_details if detail["status"] == status]
+        
+        model_details: dict[list | dict] = api.get_registry_model_details(
+            workspace=config.comet_workspace, 
+            registry_name=self.registered_name
+        )
+        
+        # This particular choice resulted from an inspection of the model details object
+        model_versions = model_details["versions"][0]["version"]
         return model_versions
-
-    def get_latest_model_version(self, status: str) -> str:
-        """
-        Get the latest version of the requested model.
-        Args:
-            status: the registered status of the model on CometML
-
-        Returns:
-            int: the version of the latest model
-        """
-        return max(self.get_registered_model_versions(status=status))
 
     def push_model_to_registry(self, status: str, version: str) -> None:
         """
@@ -59,7 +61,7 @@ class ModelRegistry:
         experiment.log_model(name=self._set_registered_name(), file_or_folder=str(model_file))
         logger.success(f"Finished logging the {self.model_name} model")
 
-    #     if len(self.get_registered_model_versions(status=status)) != 0:
+    #     if len(self.get_registered_model_version(status=status)) != 0:
     #         logger.warning("There is a pre-existing model")
     #         latest_model_version = self.get_latest_model_version(status=status)
     #         if latest_model_version <= version:
@@ -80,15 +82,18 @@ class ModelRegistry:
         Returns:
             Pipeline: the original model file
         """
+        make_fundamental_paths()
+
         api = API(api_key=config.comet_api_key)
-        api.download_registry_model(
-            workspace=config.comet_workspace,
-            registry_name=self.registered_name,
-            version=self.get_latest_model_version(status=status),
-            output_path=COMET_SAVE_DIR,
-            expand=unzip,
-            stage=status
-        )
+
+        if not Path(COMET_SAVE_DIR/self.registered_name).exists():
+            api.download_registry_model(
+                workspace=config.comet_workspace,
+                registry_name=self.registered_name,
+                version=self.get_registered_model_version(status=status),
+                output_path=COMET_SAVE_DIR,
+                expand=unzip
+            )
 
         model = load_local_model(
             directory=COMET_SAVE_DIR,

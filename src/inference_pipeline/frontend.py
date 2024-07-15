@@ -5,11 +5,12 @@ import pandas as pd
 import streamlit as st
 import geopandas as gpd
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from streamlit_option_menu import option_menu
 
 from src.setup.paths import GEOGRAPHICAL_DATA
 from src.inference_pipeline.inference import InferenceModule
+from src.inference_pipeline.model_registry_api import ModelRegistry
 
 
 class Page:
@@ -18,7 +19,7 @@ class Page:
         self.progress_bar = None
         st.title("Divvy Trip Activity Predictor")
 
-        self.current_date = pd.to_datetime(datetime.utcnow()).floor("H")
+        self.current_date = pd.to_datetime(datetime.now(UTC)).floor("H")
         st.header(f"{self.current_date} UTC")
 
     @staticmethod
@@ -32,7 +33,7 @@ class Page:
             )
 
     @st.cache_data
-    def _load_features_from_store(self, scenario: str, current_date: datetime) -> pd.DataFrame:
+    def _load_time_series_from_store(self, scenario: str, current_date: datetime) -> pd.DataFrame:
         """
 
         Args:
@@ -41,7 +42,7 @@ class Page:
         Returns:
             pd.DataFrame
         """
-        return InferenceModule(scenario=scenario).load_batch_of_features_from_store(target_date=current_date)
+        return InferenceModule(scenario=scenario).load_time_series_from_store(target_date=current_date)
 
     @staticmethod
     @st.cache_data
@@ -80,7 +81,6 @@ class Page:
             geo_df = self.load_geodata(scenario=scenario)
             st.sidebar.write("✅ Coordinates obtained...")
 
-
         with st.spinner(text="Fetching model predictions from the feature store..."):
             predictions = self._load_predictions_from_store(
                 scenario=scenario,
@@ -100,14 +100,19 @@ class Page:
 
         if next_hour_predictions_ready:
             predictions = predictions[predictions[f"{scenario}_hour"] == self.current_date]
+
         elif previous_hour_predictions_ready:
-            predictions = predictions[predictions[f"{scenario}_hour"] == self.current_date - timedelta(hours=1)]
+            predictions = predictions[
+                predictions[f"{scenario}_hour"] == self.current_date - timedelta(hours=1)
+            ]
+
             st.subheader("⚠️ Data from the current hour is not available. Using data from an hour ago.")
+
         else:
             raise Exception("Unable to find predictions for the current hour or the previous one.")
 
     @staticmethod
-    def pseudocolour(value: int, min_value: int, max_value: int, start_colour: tuple, stop_colour: tuple):
+    def color_scaling(value: int, min_value: int, max_value: int, start_colour: tuple, stop_colour: tuple):
         """
         Use linear interpolation to perform colour scaling on the predicted values. This provides us
         with a spectrum of colours for the prediction values.
@@ -160,7 +165,7 @@ class Page:
 
         #  Perform color scaling
         data["fill_colour"] = data["colour_scaling"].apply(
-            func=lambda x: self.pseudocolour(
+            func=lambda x: self.color_scaling(
                 value=x,
                 min_value=min_prediction,
                 max_value=max_prediction,
@@ -169,7 +174,7 @@ class Page:
             )
         )
 
-        self.progress_bar.progress(3/self.n_steps)
+        self.progress_bar.progress(3 / self.n_steps)
 
     def make_map(self, geodata: pd.DataFrame) -> None:
         """
@@ -199,7 +204,7 @@ class Page:
         )
 
         st.pydeck_chart(r)
-        self.progress_bar.progress(4/self.n_steps)
+        self.progress_bar.progress(4 / self.n_steps)
 
     def fetch_features(self, scenario: str) -> None:
         """
@@ -211,9 +216,9 @@ class Page:
             None
         """
         with st.spinner(text="Getting a batch of features"):
-            features = self._load_features_from_store(scenario=scenario, current_date=self.current_date)
+            features = self._load_time_series_from_store(scenario=scenario, current_date=self.current_date)
             st.sidebar.write("✅ Features fetched from the store for inference")
-            self.progress_bar.progress(5/self.n_steps)
+            self.progress_bar.progress(5 / self.n_steps)
 
     def plot_time_series(self, scenario: str, predictions: pd.DataFrame):
 
@@ -244,6 +249,7 @@ class Page:
             for scenario in scenarios_and_choices.keys():
                 if scenarios_and_choices[scenario] in user_scenario_choice:
                     predictions = self._load_predictions_from_store(
+                        model_name="lightgbm",
                         scenario=scenario,
                         from_hour=self.current_date - timedelta(hours=1),
                         to_hour=self.current_date

@@ -1,3 +1,12 @@
+"""
+This module contains code that:
+- fetches time series data from the Hopsworks feature store.
+- makes that time series data into features.
+- loads model predictions from the Hopsworks feature store.
+- performs inference on features
+"""
+
+
 import numpy as np
 import pandas as pd
 
@@ -39,7 +48,7 @@ class InferenceModule:
             description=f"Hourly time series data showing when trips {self.scenario}s"
         )
 
-    def _make_features(self, station_ids: list[int], time_series_data: pd.DataFrame) -> pd.DataFrame:
+    def make_features(self, station_ids: list[int], time_series_data: pd.DataFrame) -> pd.DataFrame:
         """
 
         Args:
@@ -71,7 +80,7 @@ class InferenceModule:
 
         return features
 
-    def load_batch_of_features_from_store(self, target_date: datetime) -> pd.DataFrame:
+    def load_time_series_from_store(self, target_date: datetime) -> pd.DataFrame:
         """
 
         Args:
@@ -82,6 +91,7 @@ class InferenceModule:
         """
         fetch_data_from = target_date - timedelta(days=28)
         fetch_data_to = target_date - timedelta(hours=1)
+
         feature_view: FeatureView = self.feature_store_api.get_or_create_feature_view(
             name=self.feature_group_metadata.name,
             version=self.feature_group.version,
@@ -101,16 +111,16 @@ class InferenceModule:
         )
         
         # Check that the data fetched from the feature store contains no missing data.
-        station_ids = ts_data[f"{self.scenario}"].unique()
+        station_ids = ts_data[f"{self.scenario}_station_id"].unique()
         assert len(ts_data) == config.n_features * len(station_ids), \
             "The time series data is incomplete on the feature store. Please review the feature pipeline."
 
-        features = self._make_features(station_ids=station_ids, time_series_data=ts_data)
-        features[f"{self.scenario}_hour"] = target_date
-        features[f"{self.scenario}_station_id"] = station_ids
+        features = self.make_features(station_ids=station_ids, time_series_data=ts_data)
+        #  features[f"{self.scenario}_hour"] = target_date
+        #  features[f"{self.scenario}_station_id"] = station_ids
 
         return features.sort_values(
-            by=[f"{self.scenario}_location_id"]
+            by=[f"{self.scenario}_station_id"]
         )
 
     def load_predictions_from_store(
@@ -151,6 +161,7 @@ class InferenceModule:
         )
 
         return predictions
+
 
     def get_model_predictions(self, model: Pipeline, features: pd.DataFrame) -> pd.DataFrame:
         """

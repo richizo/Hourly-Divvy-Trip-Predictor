@@ -73,7 +73,7 @@ class DataProcessor:
                 step_size=24
             )
 
-            logger.info("Saving the data so that we don't have to do this again...")
+            logger.success("Saving the data so that we don't have to do this again...")
             training_data.to_parquet(path=TRAINING_DATA/f"{scenario}s.parquet")
             training_sets.append(training_data)
 
@@ -98,7 +98,9 @@ class DataProcessor:
                 destinations. If any of these rows have available station names, then geocoding
                 can be used to get the coordinates. At the current time however, all rows with
                 missing coordinates also have missing station names, rendering those rows
-                irreparably lacking. We locate and delete these points.
+                irreparably lacking. 
+                
+                We locate and delete these points with this function.
 
                 Returns:
                     pd.DataFrame: the data, absent the aforementioned rows.
