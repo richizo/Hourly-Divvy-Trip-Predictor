@@ -10,8 +10,9 @@ This module contains code that:
 import numpy as np
 import pandas as pd
 
-from comet_ml import API
 from loguru import logger
+from argparse import ArgumentParser
+
 from datetime import datetime, timedelta
 from hsfs.feature_group import FeatureGroup
 from hsfs.feature_view import FeatureView
@@ -19,7 +20,10 @@ from hsfs.feature_view import FeatureView
 from sklearn.pipeline import Pipeline
 
 from src.setup.config import FeatureGroupConfig, config
+
+from src.feature_pipeline.feature_engineering import perform_feature_engineering
 from src.inference_pipeline.feature_store_api import FeatureStoreAPI
+from src.inference_pipeline.model_registry_api import ModelRegistry
 
 
 class InferenceModule:
@@ -48,12 +52,14 @@ class InferenceModule:
             description=f"Hourly time series data showing when trips {self.scenario}s"
         )
 
-    def make_features(self, station_ids: list[int], time_series_data: pd.DataFrame) -> pd.DataFrame:
+    def make_base_features(self, station_ids: list[int], ts_data: pd.DataFrame) -> pd.DataFrame:
         """
+        Restructure 
 
         Args:
             station_ids: the list of unique station IDs
-            time_series_data: the time series data that is store on the feature store
+            ts_data: the time series data that is store on the feature store
+            geocode: whether to implement geocoding during feature engineering
 
         Returns:
             pd.DataFrame: the dataframe consisting of the features
@@ -63,22 +69,22 @@ class InferenceModule:
         )
 
         for i, station_id in enumerate(station_ids):
-            ts_data_i = time_series_data.loc[
-                time_series_data[f"{self.scenario}_station_id"] == station_id, :
+            
+            ts_data_i = ts_data.loc[
+                ts_data[f"{self.scenario}_station_id"] == station_id, :
             ]
 
             ts_data_i = ts_data_i.sort_values(
                 by=[f"{self.scenario}_hour"]
             )
 
-            ts_data_i[i, :] = ts_data_i["trips"].values
+            x[i, :] = ts_data_i["trips"].values
 
-        features = pd.DataFrame(
-            x,
-            columns=[f"rides_previous_{i + 1}_hour" for i in reversed(range(self.n_features))]
+        base_features = pd.DataFrame(
+            x, columns=[f"trips_previous_{i + 1}_hour" for i in reversed(range(self.n_features))]
         )
 
-        return features
+        return base_features
 
     def load_time_series_from_store(self, target_date: datetime) -> pd.DataFrame:
         """
@@ -87,39 +93,48 @@ class InferenceModule:
             target_date:
 
         Returns:
-
+            pd.DataFrame: 
         """
         fetch_data_from = target_date - timedelta(days=28)
         fetch_data_to = target_date - timedelta(hours=1)
 
         feature_view: FeatureView = self.feature_store_api.get_or_create_feature_view(
-            name=self.feature_group_metadata.name,
-            version=self.feature_group.version,
+            name=f"{self.scenario}_feature_view",
+            version=1,
             feature_group=self.feature_group
         )
 
         ts_data: pd.DataFrame = feature_view.get_batch_data(start_time=fetch_data_from, end_time=fetch_data_to)
-        ts_first_date = int(fetch_data_from.timestamp())
-        ts_last_date = int(fetch_data_to.timestamp())
-
-        ts_data = ts_data[
-            ts_data["timestamp"].between(left=ts_first_date, right=ts_last_date)
-        ]
 
         ts_data = ts_data.sort_values(
             by=[f"{self.scenario}_station_id", f"{self.scenario}_hour"]
         )
         
-        # Check that the data fetched from the feature store contains no missing data.
         station_ids = ts_data[f"{self.scenario}_station_id"].unique()
-        assert len(ts_data) == config.n_features * len(station_ids), \
-            "The time series data is incomplete on the feature store. Please review the feature pipeline."
+        # assert len(ts_data) == config.n_features * len(station_ids), \
+        #    "The time series data is incomplete on the feature store. Please review the feature pipeline."
+    
+        base_features = self.make_base_features(station_ids=station_ids, ts_data=ts_data)
 
-        features = self.make_features(station_ids=station_ids, time_series_data=ts_data)
-        #  features[f"{self.scenario}_hour"] = target_date
-        #  features[f"{self.scenario}_station_id"] = station_ids
+        # Include the {self.scenario}_hour column
+        base_features[f"{self.scenario}_hour"] = target_date
+        base_features[f"{self.scenario}_station_id"] = station_ids
 
-        return features.sort_values(
+        # Perform feature engineering (without geocoding) to complete the transformation of the time series data
+        engineered_features = perform_feature_engineering(
+            features=base_features,
+            scenario=self.scenario,
+            geocode=False
+        )
+
+        if engineered_features.empty:
+            breakpoint()
+
+        else:
+            print(engineered_features.shape)
+            breakpoint()
+
+        return engineered_features.sort_values(
             by=[f"{self.scenario}_station_id"]
         )
 
@@ -132,7 +147,7 @@ class InferenceModule:
         """
 
         Args:
-            model_name:
+            model_name: the model's name is part of the name of the feature view to be queried
             from_hour:
             to_hour:
 

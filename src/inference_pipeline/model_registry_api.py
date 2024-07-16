@@ -83,19 +83,18 @@ class ModelRegistry:
             Pipeline: the original model file
         """
         make_fundamental_paths()
+        if not Path(COMET_SAVE_DIR/f"{self.registered_name}.pkl").exists():
 
-        api = API(api_key=config.comet_api_key)
-
-        if not Path(COMET_SAVE_DIR/self.registered_name).exists():
+            api = API(api_key=config.comet_api_key)
             api.download_registry_model(
-                workspace=config.comet_workspace,
+                workspace=config.comet_workspace,   
                 registry_name=self.registered_name,
                 version=self.get_registered_model_version(status=status),
                 output_path=COMET_SAVE_DIR,
                 expand=unzip
             )
 
-        model = load_local_model(
+        model: Pipeline = load_local_model(
             directory=COMET_SAVE_DIR,
             model_name=self.model_name,
             scenario=self.scenario,

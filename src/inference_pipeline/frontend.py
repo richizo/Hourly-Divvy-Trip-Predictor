@@ -46,7 +46,7 @@ class Page:
 
     @staticmethod
     @st.cache_data
-    def _load_predictions_from_store(
+    def load_predictions(
             scenario: str,
             model_name: str,
             from_hour: datetime,
@@ -64,7 +64,13 @@ class Page:
 
         """
         inference = InferenceModule(scenario=scenario)
-        return inference.load_predictions_from_store(from_hour=from_hour, to_hour=to_hour, model_name=model_name)
+        
+        predictions = inference.load_predictions_from_store(
+            model_name=model_name,
+            from_hour=from_hour, 
+            to_hour=to_hour
+        )
+        return predictions
 
     @staticmethod
     def load_geodata(scenario: str) -> pd.DataFrame:
@@ -77,20 +83,33 @@ class Page:
         return geodata
 
     def update_page_after_fetching_geodata_and_predictions(self, scenario: str, model_name: str):
+        """
+
+
+        Args:
+            scenario (str): 
+            model_name (str): _description_
+
+        Raises:
+            Exception: _description_
+        """
         with st.spinner(text="Getting the coordinates of each station ID..."):
             geo_df = self.load_geodata(scenario=scenario)
-            st.sidebar.write("✅ Coordinates obtained...")
+            st.sidebar.write("✅ Coordinates Obtained...")
 
         with st.spinner(text="Fetching model predictions from the feature store..."):
-            predictions = self._load_predictions_from_store(
+            predictions: pd.DataFrame = self.load_predictions(
                 scenario=scenario,
                 model_name=model_name,
                 from_hour=self.current_date - timedelta(hours=1),
                 to_hour=self.current_date
             )
 
-            st.write("✅ Model predictions received...")
-            self.progress_bar.progress(2 / self.n_steps)
+            if not predictions.empty:
+                st.sidebar.write("✅ Model predictions received...")
+
+                # self is not hashable by the cacher. Made the prediction loader static and moved this line here.
+                self.progress_bar.progress(2 / self.n_steps)
 
         next_hour_predictions_ready = \
             False if predictions[predictions[f"{scenario}_hour"] == self.current_date].empty else True
@@ -106,11 +125,11 @@ class Page:
                 predictions[f"{scenario}_hour"] == self.current_date - timedelta(hours=1)
             ]
 
-            st.subheader("⚠️ Data from the current hour is not available. Using data from an hour ago.")
+            st.subheader("⚠️ Predictions for the current hour are unavailable. Using those from an hour ago.")
 
         else:
             raise Exception("Unable to find predictions for the current hour or the previous one.")
-
+            
     @staticmethod
     def color_scaling(value: int, min_value: int, max_value: int, start_colour: tuple, stop_colour: tuple):
         """
@@ -229,33 +248,36 @@ class Page:
             for index in row_indices[:n_to_plot]:
                 station_id = predictions[f"{scenario}_station_id"].iloc[index]
 
-    def construct_page(self):
+    def construct_page(self, model_name: str):
         menu_options = self.make_main_menu()
 
         if menu_options == "Plots":
             pass  # Just for now. Plotting logic will be provided later
+
         elif menu_options == "Predictions":
+
             self.progress_bar = st.sidebar.header("⚙️ Working Progress")
             self.progress_bar = st.sidebar.progress(value=0)
             self.n_steps = 7
 
-            scenarios_and_choices = {"start": "Arrivals", "end": "Departures"}
+            scenarios_and_choices = {"start": "Departures", "end": "Arrivals"}
+            
             user_scenario_choice = st.sidebar.multiselect(
                 label="Do you want predictions for the number of arrivals at or the departures from each station?",
                 options=["Arrivals", "Departures"],
                 placeholder="Please select one of the two options."
             )
 
-            for scenario in scenarios_and_choices.keys():
-                if scenarios_and_choices[scenario] in user_scenario_choice:
-                    predictions = self._load_predictions_from_store(
-                        model_name="lightgbm",
-                        scenario=scenario,
-                        from_hour=self.current_date - timedelta(hours=1),
-                        to_hour=self.current_date
-                    )
+            with st.spinner(text="Fetching model predictions from the store"):
+                for scenario in scenarios_and_choices.keys():
+                    
+                    if scenarios_and_choices[scenario] in user_scenario_choice:
+                        self.update_page_after_fetching_geodata_and_predictions(
+                            scenario=scenario, 
+                            model_name=model_name
+                        )
 
 
 if __name__ == "__main__":
     page = Page()
-    page.construct_page()
+    page.construct_page(model_name="lightgbm")

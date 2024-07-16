@@ -24,10 +24,10 @@ from src.training_pipeline.hyperparameter_tuning import optimise_hyperparameters
 
 class Trainer:
     def __init__(
-            self,
-            scenario: str,
-            hyperparameter_trials: int,
-            tune_hyperparameters: bool | None = True
+        self,
+        scenario: str,
+        hyperparameter_trials: int,
+        tune_hyperparameters: bool | None = True
     ):
         """
         Args:
@@ -53,6 +53,7 @@ class Trainer:
         """
         assert self.scenario.lower() == "start" or self.scenario.lower() == "end"
         data_path = TRAINING_DATA / f"{self.scenario}s.parquet"
+        
         if Path(data_path).is_file():
             training_data = pd.read_parquet(path=data_path)
             logger.success("The training data has already been created and saved. Fetched it...")
@@ -133,6 +134,12 @@ class Trainer:
         return test_error
 
     def save_model_locally(self, model_fn: Pipeline, model_name: str):
+        """
+
+        Args:
+            model_fn (Pipeline): the model object to be stored
+            model_name (str): the name of the model to be saved
+        """
         model_file_name = f"{model_name.title()} ({self.tuned_or_not} for {self.scenario}s).pkl"
         with open(LOCAL_SAVE_DIR/model_file_name, mode="wb") as file:
             pickle.dump(obj=model_fn, file=file)
@@ -146,16 +153,15 @@ class Trainer:
     ) -> None:
         """
         Train the named models, identify the best performer (on the test data) and
-        return
+        register it to the CometML model registry.
 
         Args:
             model_names: the names of the models under consideration
-            version:
-            status:  the registered status of the m
-        Returns:
-            None
+            version: the version of the registered model on CometML.
+            status:  the registered status of the model on CometML.
         """
         assert status.lower() in ["staging", "production"], 'The status must be either "staging" or "production"'
+        
         models_and_errors = {}
         for model_name in model_names:
             test_error = self.train(model_name=model_name)
@@ -164,7 +170,6 @@ class Trainer:
         test_errors = models_and_errors.values()
         for model_name in model_names:
             if models_and_errors[model_name] == min(test_errors):
-                
                 logger.info(f"The best performing model is {model_name} -> Pushing it to the CometML model registry")
                 
                 model = load_local_model(

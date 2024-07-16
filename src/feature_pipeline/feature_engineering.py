@@ -163,6 +163,7 @@ def perform_feature_engineering(features: pd.DataFrame, scenario: str, geocode: 
     assert "day_of_the_week" and "average_trips_last_4_weeks" in final_features.columns
     assert final_features["day_of_the_week"].isna().sum() == 0 and \
            final_features["average_trips_last_4_weeks"].isna().sum() == 0
+
     if geocode:
         final_features = add_coordinates_to_dataframe(features=features, scenario=scenario)
     return final_features
