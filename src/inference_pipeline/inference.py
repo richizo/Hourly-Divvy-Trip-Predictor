@@ -54,12 +54,12 @@ class InferenceModule:
 
     def make_base_features(self, station_ids: list[int], ts_data: pd.DataFrame) -> pd.DataFrame:
         """
-        Restructure 
+        Restructure the time series data into features in a way that aligns with the features 
+        of the original training data.
 
         Args:
             station_ids: the list of unique station IDs
             ts_data: the time series data that is store on the feature store
-            geocode: whether to implement geocoding during feature engineering
 
         Returns:
             pd.DataFrame: the dataframe consisting of the features
@@ -78,6 +78,9 @@ class InferenceModule:
                 by=[f"{self.scenario}_hour"]
             )
 
+            print(len(ts_data_i["trips"].values))
+            breakpoint()
+
             x[i, :] = ts_data_i["trips"].values
 
         base_features = pd.DataFrame(
@@ -86,14 +89,18 @@ class InferenceModule:
 
         return base_features
 
-    def load_time_series_from_store(self, target_date: datetime) -> pd.DataFrame:
+    def fetch_time_series_and_make_features(self, target_date: datetime, geocode: bool) -> pd.DataFrame:
         """
+        Queries the offline feature store for time series data within a certain timeframe, and creates features
+        features from that data. We then apply feature engineering so that the data aligns with the features from
+        the original training data.
 
         Args:
-            target_date:
+            target_date: the date for which we seek predictions.
+            geocode: whether to implement geocoding during feature engineering
 
         Returns:
-            pd.DataFrame: 
+            pd.DataFrame:
         """
         fetch_data_from = target_date - timedelta(days=28)
         fetch_data_to = target_date - timedelta(hours=1)
@@ -105,14 +112,17 @@ class InferenceModule:
         )
 
         ts_data: pd.DataFrame = feature_view.get_batch_data(start_time=fetch_data_from, end_time=fetch_data_to)
-
         ts_data = ts_data.sort_values(
             by=[f"{self.scenario}_station_id", f"{self.scenario}_hour"]
         )
+
+        print(ts_data.shape)
+        breakpoint()
         
         station_ids = ts_data[f"{self.scenario}_station_id"].unique()
-        # assert len(ts_data) == config.n_features * len(station_ids), \
-        #    "The time series data is incomplete on the feature store. Please review the feature pipeline."
+
+        assert len(ts_data) == config.n_features * len(station_ids), \
+            "The time series data is incomplete on the feature store. Please review the feature pipeline."
     
         base_features = self.make_base_features(station_ids=station_ids, ts_data=ts_data)
 
@@ -124,15 +134,8 @@ class InferenceModule:
         engineered_features = perform_feature_engineering(
             features=base_features,
             scenario=self.scenario,
-            geocode=False
+            geocode=False 
         )
-
-        if engineered_features.empty:
-            breakpoint()
-
-        else:
-            print(engineered_features.shape)
-            breakpoint()
 
         return engineered_features.sort_values(
             by=[f"{self.scenario}_station_id"]
@@ -145,13 +148,15 @@ class InferenceModule:
             to_hour: datetime
     ) -> pd.DataFrame:
         """
+        Load predictions from their dedicated feature group in the offline feature store.
 
         Args:
             model_name: the model's name is part of the name of the feature view to be queried
-            from_hour:
-            to_hour:
+            from_hour: the first hour for which we want the predictions
+            to_hour: the last hour for would like to receive predictions.
 
         Returns:
+            pd.DataFrame: the dataframe containing predictions.
 
         """
         predictions_feature_view: FeatureView = self.feature_store_api.get_or_create_feature_view(
@@ -176,7 +181,6 @@ class InferenceModule:
         )
 
         return predictions
-
 
     def get_model_predictions(self, model: Pipeline, features: pd.DataFrame) -> pd.DataFrame:
         """

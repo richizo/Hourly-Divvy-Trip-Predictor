@@ -42,7 +42,8 @@ class Page:
         Returns:
             pd.DataFrame
         """
-        return InferenceModule(scenario=scenario).load_time_series_from_store(target_date=current_date)
+        inferrer = InferenceModule(scenario=scenario)
+        return inferrer.fetch_time_series_and_make_features(target_date=current_date, geocode=False)
 
     @staticmethod
     @st.cache_data

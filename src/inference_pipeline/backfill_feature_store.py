@@ -97,7 +97,7 @@ class BackFiller:
         model = registry.download_latest_model(status="production", unzip=True)
 
         inferrer = InferenceModule(scenario=self.scenario)
-        engineered_features = inferrer.load_time_series_from_store(target_date=target_date)
+        engineered_features = inferrer.fetch_time_series_and_make_features(target_date=target_date)
         predictions = inferrer.get_model_predictions(model=model, features=engineered_features)
 
         predictions_feature_group: FeatureGroup = self.api.get_or_create_feature_group(

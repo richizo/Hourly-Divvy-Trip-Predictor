@@ -7,7 +7,7 @@ from tqdm import tqdm
 from loguru import logger
 from pathlib import Path
 
-from src.setup.miscellaneous import (
+from src.feature_pipeline.miscellaneous import (
     add_column_of_rounded_points, add_column_of_ids, make_dict_of_new_station_ids,
     add_rounded_coordinates_to_dataframe, save_geodata_dict
 )
