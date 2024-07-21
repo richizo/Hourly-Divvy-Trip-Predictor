@@ -60,6 +60,7 @@ class Trainer:
             logger.success("The training data has already been created and saved. Fetched it...")
         else:
             logger.warning("No training data is stored. Creating the dataset will take a long time...")
+            
             training_sets = DataProcessor(year=config.year).make_training_data(
                 provide_ts_only_for_inference=False,
                 geocode=False

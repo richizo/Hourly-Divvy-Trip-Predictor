@@ -1,12 +1,41 @@
+# Utilities
 import json
 import random
 import pathlib
+from tqdm import tqdm
 
+# Config
+from src.setup.config import config
+
+# Data Manipulation and Access
 import numpy as np
 import pandas as pd
 
-from tqdm import tqdm
-import geopandas as gpd
+# Reverse Geocoding
+from geopy import Photon
+
+
+class ReverseGeocoder:
+    def __init__(self, geo_data: pd.DataFrame) -> None:
+        self.geo_data = geo_data
+        self.coordinates = geo_data["coordinates"].unique().tolist()
+    
+    def reverse_geocode(self) -> dict[str, list[float]]:
+        """
+        Perform reverse geocoding of the coordinates in the dataframe.
+
+        Returns:
+            dict[str, list[float]]: the station IDs obtained from reverse geocoding, and the original
+                                    coordinates.
+        """
+        places_and_points = {} 
+        geocoder = Photon(user_agent=config.email)
+
+        for coordinate in self.coordinates:
+            places_and_points[coordinate] = geocoder.reverse(query=coordinate, timeout=120)
+
+        return places_and_points
+        
 
 
 def view_memory_usage(data: pd.DataFrame, column: str) -> pd.Series:
@@ -150,3 +179,4 @@ def add_column_of_ids(data: pd.DataFrame, scenario: str, points_and_ids: dict):
         value=pd.Series(location_ids),
         allow_duplicates=False
     )
+

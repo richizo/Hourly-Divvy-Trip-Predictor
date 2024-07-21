@@ -8,7 +8,8 @@ import geopandas as gpd
 from datetime import datetime, timedelta, UTC
 from streamlit_option_menu import option_menu
 
-from src.setup.paths import GEOGRAPHICAL_DATA
+from src.plot import plot_one_sample
+from src.setup.paths import GEOGRAPHICAL_DATA, INFERENCE_DATA
 from src.inference_pipeline.inference import InferenceModule
 from src.inference_pipeline.model_registry_api import ModelRegistry
 
@@ -17,10 +18,11 @@ class Page:
     def __init__(self):
         self.n_steps = None
         self.progress_bar = None
+        self.this_hour = pd.to_datetime(datetime.now(UTC)).floor("H")
+        self.displayed_scenario_names = {"start": "Departures", "end": "Arrivals"}
+            
         st.title("Divvy Trip Activity Predictor")
-
-        self.current_date = pd.to_datetime(datetime.now(UTC)).floor("H")
-        st.header(f"{self.current_date} UTC")
+        st.header(f"{self.this_hour} UTC")
 
     @staticmethod
     def make_main_menu():
@@ -33,59 +35,83 @@ class Page:
             )
 
     @st.cache_data
-    def _load_time_series_from_store(self, scenario: str, current_date: datetime) -> pd.DataFrame:
+    def provide_features(self, scenario: str, target_date: datetime) -> pd.DataFrame:
         """
+        Initiate an inference object and use it to get features until the target date.
+        features that we will use to fuel the model and produce predictions.
 
         Args:
-            current_date:
+            scenario (str): _description_
+            target_date (datetime): _description_
 
         Returns:
-            pd.DataFrame
+            pd.DataFrame: the created (or fetched) features
         """
-        inferrer = InferenceModule(scenario=scenario)
-        return inferrer.fetch_time_series_and_make_features(target_date=current_date, geocode=False)
+        with st.spinner(text="Getting a batch of features from the store..."):
+            inferrer = InferenceModule(scenario=scenario)
+            features = inferrer.fetch_time_series_and_make_features(target_date=target_date, geocode=False)
 
-    @staticmethod
+            st.sidebar.write("✅ Fetched features for inference")
+            self.progress_bar.progress(5 / self.n_steps)
+            return features 
+
     @st.cache_data
-    def load_predictions(
-            scenario: str,
-            model_name: str,
-            from_hour: datetime,
-            to_hour: datetime
+    def get_hourly_predictions(self,
+        scenario: str, 
+        model_name: str, 
+        from_hour: datetime = self.this_hour-timedelta(hours=1),
+        to_hour: datetime = self.this_hour
     ) -> pd.DataFrame:
         """
+        Initialise an inference object, and load a dataframe of predictions from a dedicated feature group
+        on the offline feature store. We then fetch the most recent prediction if it is available, or the second
+        most recent (the one from an hour before)
 
         Args:
-            scenario:
-            model_name:
-            from_hour:
-            to_hour:
+            scenario (str): "start" for departures and "stop" for arrivals
+            model_name (str): the name of the model to be used to perform the predictions
+            from_hour (datetime): the starting ime from which we want to start making predictions
+            to_hour (datetime): the hour with respect to which we want predictions. 
+
+        Raises:
+            Exception: In the event that the predictions for the current hour, or the previous one cannot be obtained.
+                       This exception suggests that the feature pipeline may not be working properly.
 
         Returns:
-
+            pd.DataFrame: dataframe containing hourly predicted arrivals or departures.
         """
         inference = InferenceModule(scenario=scenario)
-        
-        predictions = inference.load_predictions_from_store(
+
+        predictions_df: pd.DataFrame = inference.load_predictions_from_store(
             model_name=model_name,
             from_hour=from_hour, 
             to_hour=to_hour
         )
-        return predictions
+
+        for time in [from_hour, to_hour]:
+            prediction_to_use = predictions_df[predictions_df[f"{scenario}_hour"] == time]
+
+            if time == self.this_hour and prediction_to_use.empty: 
+                st.subheader("⚠️ Predictions for the current hour are unavailable. Checking for those from an hour ago.")
+                continue
+            elif time == self.this_hour-timedelta(hours=1) and prediction_to_use.empty:
+                raise Exception("Cannot get predictions for either hour. The feature pipeline may not be working")
+
+            return prediction_to_use
 
     @staticmethod
     def load_geodata(scenario: str) -> pd.DataFrame:
         with open(GEOGRAPHICAL_DATA / f"rounded_{scenario}_points_and_new_ids.geojson") as file:
             points_and_ids = json.load(file)
-            geodata = pd.DataFrame(
-                {"IDs": points_and_ids.keys(), "Coordinates": points_and_ids.values()}
+            return pd.DataFrame(
+                {
+                    f"{scenario}_station_id": points_and_ids.keys(), 
+                    "coordinates": points_and_ids.values()
+                }
             )
-
-        return geodata
-
+                        
     def update_page_after_fetching_geodata_and_predictions(self, scenario: str, model_name: str):
         """
-
 
         Args:
             scenario (str): 
@@ -96,43 +122,30 @@ class Page:
         """
         with st.spinner(text="Getting the coordinates of each station ID..."):
             geo_df = self.load_geodata(scenario=scenario)
-            st.sidebar.write("✅ Coordinates Obtained...")
+            st.sidebar.write("✅ Station IDs & Coordinates Obtained...")
 
         with st.spinner(text="Fetching model predictions from the feature store..."):
-            predictions: pd.DataFrame = self.load_predictions(
+            predictions_df: pd.DataFrame = self.load_predictions(
                 scenario=scenario,
                 model_name=model_name,
-                from_hour=self.current_date - timedelta(hours=1),
-                to_hour=self.current_date
+                from_hour=self.this_hour - timedelta(hours=1),
+                to_hour=self.this_hour
             )
 
-            if not predictions.empty:
-                st.sidebar.write("✅ Model predictions received...")
+            if not predictions_df.empty:
+                st.sidebar.write("✅ Dataframe containing the model's predictions received...")
 
                 # self is not hashable by the cacher. Made the prediction loader static and moved this line here.
                 self.progress_bar.progress(2 / self.n_steps)
-
-        next_hour_predictions_ready = \
-            False if predictions[predictions[f"{scenario}_hour"] == self.current_date].empty else True
-
-        previous_hour_predictions_ready = False if \
-            predictions[predictions[f"{scenario}_hour"] == self.current_date - timedelta(hours=1)].empty else True
-
-        if next_hour_predictions_ready:
-            predictions = predictions[predictions[f"{scenario}_hour"] == self.current_date]
-
-        elif previous_hour_predictions_ready:
-            predictions = predictions[
-                predictions[f"{scenario}_hour"] == self.current_date - timedelta(hours=1)
-            ]
-
-            st.subheader("⚠️ Predictions for the current hour are unavailable. Using those from an hour ago.")
-
-        else:
-            raise Exception("Unable to find predictions for the current hour or the previous one.")
             
     @staticmethod
-    def color_scaling(value: int, min_value: int, max_value: int, start_colour: tuple, stop_colour: tuple):
+    def color_scaling_map_locations(
+        value: int, 
+        min_value: int,
+        max_value: int, 
+        start_colour: tuple, 
+        stop_colour: tuple
+        ) -> tuple[float]:
         """
         Use linear interpolation to perform colour scaling on the predicted values. This provides us
         with a spectrum of colours for the prediction values.
@@ -140,16 +153,16 @@ class Page:
         Credit to Pau Labarta Bajo and https://stackoverflow.com/a/10907855
 
         Args:
-            value:
-            min_value:
-            max_value:
-            start_colour:
-            stop_colour:
+            value (int): _description_
+            min_value (int): _description_
+            max_value (int): _description_
+            start_colour (tuple): _description_
+            stop_colour (tuple): _description_
 
         Returns:
-
+            tuple[float]: _description_
         """
-
+        
         f = float(
             (value - min_value) / (max_value - min_value)
         )
@@ -158,7 +171,38 @@ class Page:
             f * (b - a) + a for (a, b) in zip(start_colour, stop_colour)
         )
 
-    def prep_data_for_plots(self, scenario: str, predictions: pd.DataFrame, geodata: pd.DataFrame) -> None:
+    def make_map(self, geodata: pd.DataFrame) -> None:
+        """
+
+        Args:
+            geodata:
+
+        Returns:
+            None
+        """
+        # Selected a random coordinate to use as a start position
+        start_position = pydeck.ViewState(
+            latitude=41.872866,
+            longitude=-87.63363,
+            zoom=10,
+            max_zoom=20,
+            pitch=45,
+            bearing=0
+        )
+
+        geojson = pydeck.Layer(type="GeoJsonLayer", data=geodata)
+        tooltip = {"html": "<b>Zone:</b> [{StationID}]{zone} <br /> <b>Predicted rides:</b> {predicted_trips}"}
+
+        deck = pydeck.Deck(
+            layers=[geojson],
+            initial_view_state=start_position,
+            tooltip=tooltip
+        )
+
+        st.pydeck_chart(pydeck_obj=deck)
+        self.progress_bar.progress(4/self.n_steps)
+
+    def prep_data_for_plotting(self, scenario: str, predictions: pd.DataFrame, geodata: pd.DataFrame) -> None:
         """
 
         Args:
@@ -196,85 +240,55 @@ class Page:
 
         self.progress_bar.progress(3 / self.n_steps)
 
-    def make_map(self, geodata: pd.DataFrame) -> None:
-        """
-
-        Args:
-            geodata:
-
-        Returns:
-            None
-        """
-        start_position = pydeck.ViewState(
-            latitude=41.872866,
-            longitude=-87.63363,
-            zoom=10,
-            max_zoom=20,
-            pitch=45,
-            bearing=0
-        )
-
-        geojson = pydeck.Layer(type="GeoJsonLayer", data=geodata)
-        tooltip = {"html": "<b>Zone:</b> [{StationID}]{zone} <br /> <b>Predicted rides:</b> {predicted_trips}"}
-
-        r = pydeck.Deck(
-            layers=[geojson],
-            initial_view_state=start_position,
-            tooltip=tooltip
-        )
-
-        st.pydeck_chart(r)
-        self.progress_bar.progress(4 / self.n_steps)
-
-    def fetch_features(self, scenario: str) -> None:
-        """
-
-        Args:
-            scenario:
-
-        Returns:
-            None
-        """
-        with st.spinner(text="Getting a batch of features"):
-            features = self._load_time_series_from_store(scenario=scenario, current_date=self.current_date)
-            st.sidebar.write("✅ Features fetched from the store for inference")
-            self.progress_bar.progress(5 / self.n_steps)
-
-    def plot_time_series(self, scenario: str, predictions: pd.DataFrame):
+    def plot_time_series(self, scenario: str, features: pd.DataFrame, predictions: pd.DataFrame):
 
         with st.spinner(text="Plotting time series data..."):
             row_indices = np.argsort(predictions[f"predicted_{scenario}s"].values)[::-1]
             n_to_plot = 10
 
-            for index in row_indices[:n_to_plot]:
-                station_id = predictions[f"{scenario}_station_id"].iloc[index]
+            for row in row_indices[:n_to_plot]:
+                station_id = predictions[f"{scenario}_station_id"].iloc[row]
+
+
+                prediction = predictions[f"predicted_{scenario}s"].iloc[row]
+
+                st.metric(
+                    label=f"Predicted {self.displayed_scenario_names[scenario]}", 
+                    value=int(prediction)
+                )
+
+                fig = plot_one_sample(
+                    example_station=row,
+                    features=features,
+                    targets=predictions[f"predicted_{scenario}s"],
+                    display_title=False
+                )
+
+                st.plotly_chart(figure_or_data=fig, theme="streamlit", use_container_width=True, width=1000)
+            
+            self.progress_bar.progress(6/self.n_steps)
 
     def construct_page(self, model_name: str):
         menu_options = self.make_main_menu()
 
         if menu_options == "Plots":
             pass  # Just for now. Plotting logic will be provided later
-
         elif menu_options == "Predictions":
-
             self.progress_bar = st.sidebar.header("⚙️ Working Progress")
             self.progress_bar = st.sidebar.progress(value=0)
             self.n_steps = 7
 
-            scenarios_and_choices = {"start": "Departures", "end": "Arrivals"}
-            
-            user_scenario_choice = st.sidebar.multiselect(
+            user_scenario_choice: list[str] = st.sidebar.multiselect(
                 label="Do you want predictions for the number of arrivals at or the departures from each station?",
                 options=["Arrivals", "Departures"],
                 placeholder="Please select one of the two options."
             )
 
-            with st.spinner(text="Fetching model predictions from the store"):
-                for scenario in scenarios_and_choices.keys():
-                    
+            with st.spinner(text="Fetching model predictions from the store..."):
+                for scenario in self.displayed_scenario_names.keys():
                     if scenarios_and_choices[scenario] in user_scenario_choice:
                         self.update_page_after_fetching_geodata_and_predictions(
-                            scenario=scenario, 
+                            scenario=scenario,
                             model_name=model_name
                         )
 

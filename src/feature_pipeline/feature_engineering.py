@@ -7,7 +7,7 @@ from geopy.geocoders import Nominatim, Photon
 from src.setup.config import config
 
 
-class GeoData:
+class GeoCoding:
     """
     The code that makes up what is now this class was created in order to geocode an older version
     of this dataset which did not contain the coordinates of each station. In 2024's data, coordinates are
@@ -49,7 +49,7 @@ class GeoData:
                 place_names: the names of the places that are to be geocoded.
 
             Returns:
-
+                dict: 
             """
             places_and_points = {}
             for place in place_names:
@@ -134,7 +134,7 @@ def add_coordinates_to_dataframe(features: pd.DataFrame, scenario: str) -> pd.Da
     the latitudes, and longitudes and places them in appropriately named columns of
     a target dataframe.
     """
-    geodata = GeoData(data=features, scenario=scenario)
+    geodata = GeoCoding(data=features, scenario=scenario)
     places_and_points = geodata.geocode()
 
     for place in geodata.place_names:

@@ -103,8 +103,8 @@ class InferenceModule:
         of the original training data.
 
         Args:
-            station_ids: the list of unique station IDs
-            ts_data: the time series data that is store on the feature store
+            station_ids: the list of unique station IDs.
+            ts_data: the time series data that is store on the feature store.
 
         Returns:
             pd.DataFrame: the dataframe consisting of the features
@@ -128,7 +128,8 @@ class InferenceModule:
             to_hour: datetime
     ) -> pd.DataFrame:
         """
-        Load predictions from their dedicated feature group in the offline feature store.
+        Load a dataframe containing predictions from their dedicated feature group on the offline feature store.
+        This dataframe will contain predicted values between the specified hours. 
 
         Args:
             model_name: the model's name is part of the name of the feature view to be queried
@@ -138,6 +139,10 @@ class InferenceModule:
         Returns:
             pd.DataFrame: the dataframe containing predictions.
         """
+        # Ensure these times are datatimes
+        from_hour = pd.to_datetime(from_hour, utc=True)
+        to_hour = pd.to_datetime(to_hour, utc=True)
+
         predictions_feature_view: FeatureView = self.feature_store_api.get_or_create_feature_view(
             name=f"{model_name}_predictions_from_feature_store",
             version=1,
@@ -145,21 +150,12 @@ class InferenceModule:
         )
 
         logger.info(f'Fetching predictions for "{self.scenario}_hours" between {from_hour} and {to_hour}')
-        predictions = predictions_feature_view.get_batch_data(start_time=from_hour, end_time=to_hour)
+        predictions_df = predictions_feature_view.get_batch_data(start_time=from_hour, end_time=to_hour)
+        predictions_df[f"{self.scenario}_hour"] = pd.to_datetime(predictions_df[f"{self.scenario}_hour"], utc=True)
 
-        predictions[f"{self.scenario}_hour"] = pd.to_datetime(predictions[f"{self.scenario}_hour"], utc=True)
-        from_hour = pd.to_datetime(from_hour, utc=True)
-        to_hour = pd.to_datetime(to_hour, utc=True)
-
-        predictions = predictions[
-            predictions[f"{self.scenario}_hour"].between(from_hour, to_hour)
-        ]
-
-        predictions = predictions.sort_values(
+        return predictions_df.sort_values(
             by=[f"{self.scenario}_hour", f"{self.scenario}_station_id"]
         )
-
-        return predictions
 
     def get_model_predictions(self, model: Pipeline, features: pd.DataFrame) -> pd.DataFrame:
         """

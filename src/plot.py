@@ -12,26 +12,25 @@ def plot_one_sample(
     predictions: pd.Series = None,
     display_title: bool = True
 ):
-
-    """Credit to Pau Labarta Bajo"""
-
-    features_ = features.iloc[example_station]
-
+    """
+  
+    
+    Credit to Pau Labarta Bajo
+    """
     if targets is not None:
         target_ = targets.iloc[example_station]
-
     else:
         target_ = None
 
-    columns = [
-        column for column in features.columns if column.startswith("trips_previous_")
-    ]
-    
+
+    features_ = features.iloc[example_station]
+    columns = [column for column in features.columns if column.startswith("trips_previous_")]
     values = [features[column] for column in columns] + [target_]
 
     dates = pd.date_range(
-        features_[f"{scenario}_hour"] - timedelta(hours=len(columns)),
-        features_[f"{scenario}_hour"], freq="h"
+        start=features_[f"{scenario}_hour"] - timedelta(hours=len(columns)),
+        end=features_[f"{scenario}_hour"], 
+        freq="h"
     )
 
     if display_title:
@@ -39,7 +38,8 @@ def plot_one_sample(
         #  title = f'{scenario}_hour = {features_[{scenario}]}_hour, station_id = {features_[f"{scenario}_station_id"]}'
 
         fig = plot.line(
-            x=dates, y=values, 
+            x=dates, 
+            y=values, 
             template="plotly_dark",
             markers=True
         )
@@ -50,13 +50,14 @@ def plot_one_sample(
         fig.add_scatter(
             x=dates[-1:],
             y=[target_],
-            line_color="green", mode="markers",
-            marker_size=10, name="Actual Number of Rides"
+            mode="markers",
+            marker_size=10, 
+            line_color="green",
+            name="Actual Number of Trips"
         )
 
     # Plot predicted values if available
     if predictions is not None:
-
         predictions_ = predictions.iloc[example_station]
         
         fig.add_scatter(
