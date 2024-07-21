@@ -1,5 +1,14 @@
 .env
 
+# Artifacts
+ca_chain
+certfile
+keyfile
+
+# Folders
+/.idea
 /data
 /models
 **/__pycache__
+
+**debugging.ipynb

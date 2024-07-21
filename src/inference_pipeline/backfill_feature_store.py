@@ -3,14 +3,12 @@ from pathlib import Path
 from datetime import datetime
 from argparse import ArgumentParser
 
-
 from loguru import logger
 from hsfs.feature_group import FeatureGroup
 from hsfs.feature_view import FeatureView
 
-
 from src.setup.config import config
-from src.setup.paths import TIME_SERIES_DATA, PARENT_DIR
+from src.setup.paths import TIME_SERIES_DATA, PARENT_DIR, INFERENCE_DATA
 from src.feature_pipeline.preprocessing import DataProcessor
 from src.inference_pipeline.feature_store_api import FeatureStoreAPI
 from src.inference_pipeline.model_registry_api import ModelRegistry
@@ -33,7 +31,7 @@ class BackFiller:
             scenario=self.scenario,
             api_key=config.hopsworks_api_key,
             project_name=config.hopsworks_project_name,
-            event_time="timestamp",
+            event_time=None,
             primary_key=None
         )
 
@@ -44,16 +42,19 @@ class BackFiller:
         Returns:
             None
         """
+        self.api.event_time = "timestamp"
         self.api.primary_key = ["timestamp", f"{self.scenario}_station_id"]
-        file_path = TIME_SERIES_DATA / f"{self.scenario}s_ts.parquet"
+        ts_data_path = TIME_SERIES_DATA/f"{self.scenario}s_ts.parquet"
 
-        if Path(file_path).is_file():
-            ts_data = pd.read_parquet(file_path)
+        if Path(ts_data_path).is_file():
+            ts_data = pd.read_parquet(ts_data_path)
             logger.success("Retrieved the time series data")
         else:
             processor = DataProcessor(year=config.year)
             logger.warning(f"There is no saved time series data for the {self.scenario}s of trips -> Building it...")
-            ts_data = processor.make_time_series()[0] if self.scenario.lower() == "start" else processor.make_time_series()[1]
+
+            ts_data = processor.make_time_series()[0] if self.scenario.lower() == "start" else \
+                processor.make_time_series()[1]
 
         ts_data["timestamp"] = ts_data[f"{scenario}_hour"].astype(int) // 10 ** 6  # Express in milliseconds
 
@@ -79,18 +80,30 @@ class BackFiller:
 
         Args:
             target_date (datetime): the date up to which we want our predictions.
+            
             model_name (str, optional): the shorthand name of the model we will use. Defaults to "lightgbm",
                                         because the best performing models (for arrivals and departures) were
                                         LGBMRegressors.
         """
-        # The best model for (arrivals) departures was (un)tuned 
+        self.api.primary_key = [f"{self.scenario}_station_id"]
+
+        # The best model for (arrivals) departures was (un)tuned
         tuned_or_not = "tuned" if self.scenario == "start" else "untuned"
         
+        inferrer = InferenceModule(scenario=self.scenario)
         registry = ModelRegistry(scenario=self.scenario, model_name=model_name, tuned_or_not=tuned_or_not)
         model = registry.download_latest_model(status="production", unzip=True)
 
-        inferrer = InferenceModule(scenario=self.scenario)
-        engineered_features = inferrer.fetch_time_series_and_make_features(target_date=target_date, geocode=False)
+        local_feature_path = INFERENCE_DATA/f"{self.scenario}s.parquet"
+
+        if Path(local_feature_path).is_file():
+            engineered_features = pd.read_parquet(local_feature_path)
+        else:
+            engineered_features = inferrer.fetch_time_series_and_make_features(
+                target_date=datetime.now(),
+                geocode=False
+            )
+
         predictions = inferrer.get_model_predictions(model=model, features=engineered_features)
 
         predictions_feature_group: FeatureGroup = self.api.get_or_create_feature_group(
@@ -114,18 +127,13 @@ if __name__ == "__main__":
     args = parser.parse_args()    
     
     for scenario in args.scenarios:
-        
         filler = BackFiller(scenario=scenario)
         logger.info(f"Working on the {scenario}s of trips...")
-        logger.info(f"Pushing {args.target} to the offline feature store...")
 
         if args.target.lower() == "features":
             filler.backfill_features()
         elif args.target.lower() == "predictions":
             filler.backfill_predictions(target_date=datetime.now())
-            
         else:
-            raise Exception(
-                'The only acceptable backfilling targets are "features" and "predictions"'
-            )
+            raise Exception('The only acceptable backfilling targets are "features" and "predictions"')
     

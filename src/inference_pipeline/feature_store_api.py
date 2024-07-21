@@ -8,12 +8,12 @@ from hsfs.feature_group import FeatureGroup
 
 class FeatureStoreAPI:
     def __init__(
-            self,
-            api_key: str,
-            scenario: str,
-            project_name: str,
-            event_time: str,
-            primary_key: list[str] | None
+        self,
+        api_key: str,
+        scenario: str,
+        project_name: str,
+        event_time: str | None,
+        primary_key: list[str] | None
     ) -> None:
         self.api_key = api_key
         self.scenario = scenario
@@ -22,10 +22,7 @@ class FeatureStoreAPI:
         self.project_name = project_name
 
     def login_to_hopsworks(self) -> any:
-        project = hopsworks.login(
-            project=self.project_name, 
-            api_key_value=self.api_key
-        )
+        project = hopsworks.login(project=self.project_name, api_key_value=self.api_key)
         return project
 
     def get_feature_store(self) -> FeatureStore:

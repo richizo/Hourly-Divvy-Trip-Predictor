@@ -6,9 +6,11 @@ This module contains code that:
 - performs inference on features
 """
 
+from pathlib import Path 
 
 import numpy as np
 import pandas as pd
+
 
 from loguru import logger
 from argparse import ArgumentParser
@@ -34,10 +36,10 @@ class InferenceModule:
 
         self.feature_store_api = FeatureStoreAPI(
             scenario=self.scenario,
+            event_time="timestamp",
             api_key=config.hopsworks_api_key,
             project_name=config.hopsworks_project_name,
-            primary_key=[f"{self.scenario}_station_id"],
-            event_time="timestamp"
+            primary_key=[f"{self.scenario}_station_id", f"{self.scenario}_hour"],
         )
 
         self.feature_group_metadata = FeatureGroupConfig(
@@ -59,42 +61,37 @@ class InferenceModule:
         features from that data. We then apply feature engineering so that the data aligns with the features from
         the original training data.
 
+        My initial intent was to fetch time series data the 28 days prior to the target date. However, the class
+        method that I am using to convert said data into features requires a larger dataset to work (see the while 
+        loop in the get_cutoff_indices method from the preprocessing module). So after some experimentation, I 
+        decided to go with 168 days of prior time series data. I will look to play around this number in the future.
+
         Args:
             target_date: the date for which we seek predictions.
             geocode: whether to implement geocoding during feature engineering
 
         Returns:
             pd.DataFrame:
-        """
-        fetch_data_from = target_date - timedelta(days=28)
-        fetch_data_to = target_date - timedelta(hours=1)
-
+        """ 
         feature_view: FeatureView = self.feature_store_api.get_or_create_feature_view(
             name=f"{self.scenario}_feature_view",
             feature_group=self.feature_group,
             version=1
         )
 
-        # Following Pau's convention of including additional days to avoid losing valuable observation
-        ts_data: pd.DataFrame = feature_view.get_batch_data(
-            start_time=fetch_data_from - timedelta(days=1),
-            end_time=fetch_data_to + timedelta(days=1)
-        )
+        logger.info("Fetching time series data from the offline feature store...")
+        fetch_from = target_date - timedelta(days=168)
+        ts_data: pd.DataFrame = feature_view.get_batch_data(start_time=fetch_from, end_time=target_date)
 
         ts_data = ts_data.sort_values(
             by=[f"{self.scenario}_station_id", f"{self.scenario}_hour"]
         )
 
         station_ids = ts_data[f"{self.scenario}_station_id"].unique()
-
-        # assert len(ts_data) == config.n_features * len(station_ids), \
-        #   "The time series data is incomplete on the feature store. Please review the feature pipeline."
-
         features = self.make_features(station_ids=station_ids, ts_data=ts_data, geocode=False)
 
         # Include the {self.scenario}_hour column and the IDs
         features[f"{self.scenario}_hour"] = target_date
-        features[f"{self.scenario}_station_id"] = station_ids
 
         return features.sort_values(
             by=[f"{self.scenario}_station_id"]
@@ -115,15 +112,14 @@ class InferenceModule:
         processor = DataProcessor(year=config.year, bypass=True)
 
         # Perform transformation of the time series data with feature engineering
-        data = processor.transform_ts_into_training_data(
+        return processor.transform_ts_into_training_data(
             ts_data=ts_data,
-            geocode=geocode, 
+            geocode=geocode,
+            for_inference=True, 
             scenario=self.scenario, 
-            step_size=24,
-            input_seq_len=24 * 28 * 1
+            input_seq_len=config.n_features,
+            step_size=24
         )
-
-        return data.drop("trips_next_hour", axis = 1)
 
     def load_predictions_from_store(
             self,
@@ -177,8 +173,8 @@ class InferenceModule:
             pd.DataFrame: the model's predictions
         """
         predictions = model.predict(features)
-
         prediction_per_station = pd.DataFrame()
+
         prediction_per_station[f"{self.scenario}_station_id"] = features[f"{self.scenario}_station_id"].values
         prediction_per_station[f"predicted_{self.scenario}s"] = predictions.round(decimals=0)
 

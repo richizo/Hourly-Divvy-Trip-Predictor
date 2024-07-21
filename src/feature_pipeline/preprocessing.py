@@ -17,6 +17,7 @@ from src.feature_pipeline.miscellaneous import (
     add_rounded_coordinates_to_dataframe, save_geodata_dict
 )
 
+from src.setup.config import config
 from src.feature_pipeline.data_extraction import load_raw_data
 from src.feature_pipeline.feature_engineering import perform_feature_engineering
 
@@ -29,7 +30,7 @@ class DataProcessor:
 
         self.data = pd.concat(list(load_raw_data(year=year))) if not bypass else None
 
-    def make_training_data(self, geocode: bool, for_inference: bool) -> list[pd.DataFrame] | tuple[pd.DataFrame, pd.DataFrame]:
+    def make_training_data(self, geocode: bool) -> list[pd.DataFrame] | tuple[pd.DataFrame, pd.DataFrame]:
         """
         Extract raw data, clean it, transform it into time series data, and transform that in turn into
         training data which is subsequently saved.
@@ -37,9 +38,6 @@ class DataProcessor:
         Args:
             geocode (bool): whether to geocode when performing feature engineering.
             
-            for_inference (bool): whether we are generating this data as part of the inference pipeline, 
-                                  or feature pipeline.
-
         Returns:
             list[pd.DataFrame]: a list containing the datasets for the starts and ends of trips.
         """
@@ -52,15 +50,13 @@ class DataProcessor:
                 
             training_data = self.transform_ts_into_training_data(
                 ts_data=ts_data_per_scenario[scenario],
+                for_inference=False,
                 geocode=geocode,
                 scenario=scenario,
-                input_seq_len=24 * 28 * 1,
+                input_seq_len=config.n_features,
                 step_size=24
             )
 
-            logger.success("Saving the data so we (hopefully) won't have to do that again...")
-            training_data_root_path = INFERENCE_DATA if for_inference else TRAINING_DATA
-            training_data.to_parquet(path=training_data_root_path/f"{scenario}s.parquet")
             training_sets.append(training_data)
 
         return training_sets
@@ -86,7 +82,6 @@ class DataProcessor:
         logger.info("Transforming the data into a time series...")
         starts_ts, ends_ts = self.transform_cleaned_data_into_ts_data(start_df=starts, end_df=ends)
         return starts_ts, ends_ts
-
 
     def clean(self, patient: bool = False, save: bool = True) -> pd.DataFrame:
 
@@ -498,22 +493,24 @@ class DataProcessor:
         return _get_ts_or_begin_transformation(start_ts_path=self.starts_ts_path, end_ts_path=self.ends_ts_path)
 
     @staticmethod
-    def get_cutoff_indices(ts_data: pd.DataFrame, input_seq_len: int, step_size_len: int) -> list:
+    def get_cutoff_indices(ts_data: pd.DataFrame, input_seq_len: int, step_size: int) -> list:
         """
         Starts by taking a certain number of rows of a given dataframe as an input, and the
         indices of the row on which the selected rows start and end. These will be placed
         in the first and second positions of a three element tuple. The third position of
         said tuple will be occupied by the index of the row that comes after.
 
-        Then the function will slide "step_size_len" steps and repeat the process. The function
+        Then the function will slide "step_size" steps and repeat the process. The function
         terminates once it reaches the last row of the dataframe.
 
         Credit to Pau Labarta Bajo.
 
         Args:
             ts_data (pd.DataFrame): the time series dataset that serves as the input
+            
             input_seq_len (int): the number of rows to be considered at any one time
-            step_size_len (int): how many rows down we move as we repeat the process
+
+            step_size (int): how many rows down we move as we repeat the process
 
         Returns:
             list: the list of cutoff indices
@@ -522,20 +519,20 @@ class DataProcessor:
         stop_position = len(ts_data) - 1
 
         # These numbers will be the first, second, and third elements of each tuple of indices.
-        subseq_first_index = 0
-        subseq_mid_index = input_seq_len
-        subseq_last_index = input_seq_len + 1
+        subsequence_first_index = 0
+        subsequence_mid_index = input_seq_len
+        subsequence_last_index = input_seq_len + 1
 
         indices = []
 
-        while subseq_last_index <= stop_position:
+        while subsequence_last_index <= stop_position:
             indices.append(
-                (subseq_first_index, subseq_mid_index, subseq_last_index)
+                (subsequence_first_index, subsequence_mid_index, subsequence_last_index)
             )
 
-            subseq_first_index += step_size_len
-            subseq_mid_index += step_size_len
-            subseq_last_index += step_size_len
+            subsequence_first_index += step_size
+            subsequence_mid_index += step_size
+            subsequence_last_index += step_size
 
         return indices
 
@@ -553,10 +550,19 @@ class DataProcessor:
 
         Args:
             scenario: a string that indicates whether we are dealing with the starts or ends of trips
+            
             geocode:
-            step_size:
+            
+            step_size:from src.setup.config import config
+
+            
             input_seq_len:
+
             ts_data: the time series data
+
+            for_inference (bool): whether we are generating this data as part of the inference pipeline, 
+                            or feature pipeline.
+
 
         Returns:
             pd.DataFrame: the training data
@@ -573,6 +579,7 @@ class DataProcessor:
         targets = pd.DataFrame()
 
         for station_id in tqdm(station_ids):
+            
             # Isolate a part of the dataframe that relates to each station ID
             ts_data_per_station = ts_data.loc[
                 ts_data[f"{scenario}_station_id"] == station_id, [f"{scenario}_hour", "trips"]
@@ -580,9 +587,7 @@ class DataProcessor:
 
             # Compute cutoff indices
             indices = self.get_cutoff_indices(
-                ts_data=ts_data_per_station,
-                input_seq_len=input_seq_len,
-                step_size_len=step_size
+                ts_data=ts_data_per_station, input_seq_len=input_seq_len, step_size=step_size
             )
 
             num_indices = len(indices)
@@ -596,7 +601,7 @@ class DataProcessor:
                 y[i] = ts_data_per_station[index[1]:index[2]]["trips"].values[0]
 
                 # Append the "hours" list with the appropriate entry at the intersection
-                # of row "index[1]" and the appropriate scenario's column
+                # of row "index[1]" and scenario_hour's column
                 hours.append(
                     ts_data_per_station.iloc[index[1]][f"{scenario}_hour"]
                 )
@@ -607,10 +612,13 @@ class DataProcessor:
                     f"trips_previous_{i + 1}_hour" for i in reversed(range(input_seq_len))
                 ]
             )
-
+            
             features_per_location[f"{scenario}_hour"] = hours
             features_per_location[f"{scenario}_station_id"] = station_id
-            targets_per_location = pd.DataFrame(y, columns=["trips_next_hour"])
+            
+            targets_per_location = pd.DataFrame(
+                y, columns=["trips_next_hour"]
+            )
 
             with warnings.catch_warnings():
 
@@ -623,16 +631,21 @@ class DataProcessor:
 
         features = features.reset_index(drop=True)
         targets = targets.reset_index(drop=True)
-        engineered_features = perform_feature_engineering(features=features, scenario=scenario, geocode=geocode)
+        engineered_features = perform_feature_engineering(features=features, scenario=scenario, geocode=geocode) 
 
-        training_data = pd.concat(
-            [engineered_features, targets["trips_next_hour"]], axis=1
-        )
+        if not for_inference:
+            data_to_save = pd.concat([engineered_features, targets["trips_next_hour"]], axis=1)
+        else:
+            data_to_save = engineered_features
 
-        return training_data
+        logger.success("Saving the data so we (hopefully) won't have to do that again...")
+
+        final_data_path = INFERENCE_DATA if for_inference else TRAINING_DATA   
+        data_to_save.to_parquet(path=final_data_path/f"{scenario}s.parquet")
+        return data_to_save
 
 
 if __name__ == "__main__":
     make_fundamental_paths()
     trips_2024 = DataProcessor(year=2024)
-    trips_2024.make_training_data(geocode=False, for_inference=False)
+    trips_2024.make_training_data(geocode=False)
