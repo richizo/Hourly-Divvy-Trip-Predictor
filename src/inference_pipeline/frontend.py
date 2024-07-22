@@ -10,6 +10,7 @@ from streamlit_option_menu import option_menu
 
 from src.plot import plot_one_sample
 from src.setup.paths import GEOGRAPHICAL_DATA, INFERENCE_DATA
+from src.feature_pipeline.miscellaneous import ReverseGeocoder
 from src.inference_pipeline.inference import InferenceModule
 from src.inference_pipeline.model_registry_api import ModelRegistry
 
@@ -100,15 +101,38 @@ class Page:
             return prediction_to_use
 
     @staticmethod
-    def load_geodata(scenario: str) -> pd.DataFrame:
+    def prepare_geodata(scenario: str) -> pd.DataFrame:
+        """
+
+
+        Args:
+            scenario (str): _description_
+
+        Returns:
+            pd.DataFrame: 
+        """
+
         with open(GEOGRAPHICAL_DATA / f"rounded_{scenario}_points_and_new_ids.geojson") as file:
             points_and_ids = json.load(file)
-            return pd.DataFrame(
-                {
-                    f"{scenario}_station_id": points_and_ids.keys(), 
-                    "coordinates": points_and_ids.values()
-                }
-            )
+
+        loaded_geodata = pd.DataFrame(
+            {
+                f"{scenario}_station_id": points_and_ids.keys(), 
+                "coordinates": points_and_ids.values()
+            }
+        )
+
+        reverse_geocoding = ReverseGeocoder(scenario=scenario, geo_data=loaded_geodata)
+        station_names_and_locations = reverse_geocoding.reverse_geocode()
+
+        updated_geodata = reverse_geocoding.put_station_names_in_geodata(
+            station_names_and_coordinates=station_names_and_locations
+        )
+
+        return updated_geodata
+
+
+
                         
     def update_page_after_fetching_geodata_and_predictions(self, scenario: str, model_name: str):
         """
