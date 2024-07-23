@@ -13,14 +13,21 @@ With that being said, I'm interested in seeing what a model based on data from s
 2021 would perform, so I've included code that would allow for that data to be 
 downloaded
 """
+# Utilities
 import os
 import requests
+from zipfile import ZipFile
+
+# Data Manipulation and Access
 import pandas as pd
 
+# Logging
 from loguru import logger
-from zipfile import ZipFile
+
+# Dates
 from datetime import datetime as dt
 
+# Custom Code
 from src.setup.paths import RAW_DATA_DIR, make_fundamental_paths
 
 
@@ -32,8 +39,7 @@ def download_one_file_of_raw_data(year: int, month: int = None) -> None:
     Args:
         year (int): the year in question
         
-        month (int, optional): the month for which we want that data. 
-                               Defaults to None.
+        month (int, optional): the month for which we want that data. Defaults to None.
     """
 
     def __download_and_extract_zipfile(
