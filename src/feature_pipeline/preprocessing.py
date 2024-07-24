@@ -1,23 +1,23 @@
+# Utilities 
 import os
 import warnings
-import numpy as np
-import pandas as pd
-
 from tqdm import tqdm
 from loguru import logger
 from pathlib import Path
 
+# Data Manipulation & Access
+import numpy as np
+import pandas as pd
+
 # Custom code 
-from src.setup.paths import (
-    CLEANED_DATA, TRAINING_DATA, TIME_SERIES_DATA, GEOGRAPHICAL_DATA, make_fundamental_paths,
-    INFERENCE_DATA
-)
-
-from src.feature_pipeline.miscellaneous import RoundingCoordinates
-
 from src.setup.config import config
 from src.feature_pipeline.data_extraction import load_raw_data
+from src.feature_pipeline.miscellaneous import RoundingCoordinates, DirectIndexing
 from src.feature_pipeline.feature_engineering import perform_feature_engineering
+
+from src.setup.paths import (
+    CLEANED_DATA, TRAINING_DATA, TIME_SERIES_DATA, GEOGRAPHICAL_DATA, INFERENCE_DATA, make_fundamental_paths
+)
 
 
 class DataProcessor:
@@ -129,9 +129,9 @@ class DataProcessor:
             def _delete_rows_with_missing_station_names_and_coordinates() -> pd.DataFrame:
                 """
                 There are rows with missing latitude and longitude values for the various
-                destinations. If any of these rows have available station names, then geocoding
+                stations. If any of these rows have available station names, then geocoding
                 can be used to get the coordinates. At the current time however, all rows with
-                missing coordinates also have missing station names, rendering those rows
+                missing coordinates also have missing station names, rendering these rows
                 irreparably lacking. 
                 
                 We locate and delete these points with this function.
@@ -149,18 +149,15 @@ class DataProcessor:
                         desc=f"Targeting rows with missing station names and coordinates for deletion ({scenario}s)"
                     )
 
-                    rows = []
+                    rows_to_delete = []
                     for row in all_rows:
                         if (
                                 pd.isnull(self.data.iloc[row, station_names_col])
                                 and pd.isnull(self.data.iloc[row, lats]) and pd.isnull(self.data.iloc[row, longs])
                         ):
-                            rows.append(row)
-
-                    # Check that all rows with missing latitudes and longitudes also have missing station names
-                    assert len(rows) == self.data.isna().sum()[f"{scenario}_lat"] == self.data.isna().sum()[
-                        f"{scenario}_lng"]
-                    self.data = self.data.drop(self.data.index[rows], axis=0)
+                            rows_to_delete.append(row)
+                    
+                    self.data = self.data.drop(self.data.index[rows_to_delete], axis=0)
 
                 return self.data
 
@@ -257,7 +254,7 @@ class DataProcessor:
 
                 return self.data
 
-            self.data = _delete_rows_with_missing_station_names_and_coordinates()
+            self.data = _delete_rows_with_missing_station_names_and_coordinates()   
 
             if patient:
 
@@ -356,7 +353,7 @@ class DataProcessor:
             dictionaries: list[dict] = []
             interim_dataframes: list[pd.DataFrame] = []
 
-            def __round_coordinates_and_make_ids(
+            def __investigate_making_new_station_ids(
                     cleaned_data: pd.DataFrame,
                     decimal_places: int,
                     start_or_end: str
@@ -381,7 +378,7 @@ class DataProcessor:
                 of rows that feature such indices exceeds a certain hardcoded threshold (I chose 50%),
                 we will use the custom procedures (again see the aforementioned class method).
 
-                As of early July 2024, 60% of the IDs (for origin and destination stations) have long string
+                As of late July 2024, 60% of the IDs (for origin and destination stations) have long string
                 or missing indices. It is therefore unlikely that we will need an alternative method. However, 
                 I will write one eventually. Most likely it will involve simply applying the custom procedure to only that 
                 problematic minority of indices,to generate
@@ -389,49 +386,37 @@ class DataProcessor:
 
                 Args:
                     cleaned_data (pd.DataFrame): the version of the dataset that has been cleaned
+
                     decimal_places (int): the number of decimal places to which we may round the coordinates.
                                           Choosing 6 decimal places will result in no rounding at all.
+                    
                     start_or_end (str): whether we are looking at the starts or ends of trips.
 
                 Returns:
                     pd.DataFrame: the data after the inclusion of the possibly rounded coordinates.
                 """
-                if self.use_custom_station_indexing(data=cleaned_data, scenario=start_or_end) and self.tie_ids_to_unique_coordinates():
+                logger.info(f"Recording the hour during which each trip {start_or_end}s...")
+                cleaned_data.insert(
+                    loc=cleaned_data.shape[1],
+                    column=f"{start_or_end}_hour",
+                    value=cleaned_data.loc[:, f"{start_or_end}ed_at"].dt.floor("h"),
+                    allow_duplicates=False
+                )
 
-                    cleaned_data = cleaned_data.drop(f"{start_or_end}_station_id", axis=1)
-                    logger.info(f"Recording the hour during which each trip {start_or_end}s...")
+                cleaned_data = cleaned_data.drop(f"{start_or_end}ed_at", axis=1) #  Column no longer needed
 
-                    cleaned_data.insert(
-                        loc=cleaned_data.shape[1],
-                        column=f"{start_or_end}_hour",
-                        value=cleaned_data.loc[:, f"{start_or_end}ed_at"].dt.floor("h"),
-                        allow_duplicates=False
-                    )
+                if self.use_custom_station_indexing(data=cleaned_data, scenario=start_or_end) and \
+                    self.tie_ids_to_unique_coordinates():
 
-                    cleaned_data = cleaned_data.drop(f"{start_or_end}ed_at", axis=1)
+                    cleaned_data = cleaned_data.drop(columns=f"{start_or_end}_station_id", axis=1)
                     logger.info(f"Approximating the coordinates of the location where each trip {start_or_end}s...")
 
                     coordinate_approximator = RoundingCoordinates(
-                        scenario=start_or_end,
-                        data=cleaned_data,
-                        decimal_places=decimal_places
+                        scenario=start_or_end, data=cleaned_data, decimal_places=decimal_places
                     )
 
-                    # Round the lats and longs down to the specified dp, and add the rounded values to the data
-                    coordinate_approximator.add_rounded_coordinates_to_dataframe()
-
-                    cleaned_data.drop(
-                        columns=[f"{start_or_end}_lat", f"{start_or_end}_lng"],
-                        inplace=True
-                    )
-
-                    # Add the rounded coordinates to the dataframe as a column.
-                    coordinate_approximator.add_column_of_rounded_points()
-
-                    cleaned_data.drop(
-                        columns=[f"rounded_{start_or_end}_lat", f"rounded_{start_or_end}_lng"],
-                        inplace=True
-                    )
+                    # Round the coordinates down to the specified dp, and add these rounded coordinates to the data 
+                    coordinate_approximator.add_column_of_rounded_coordinates_to_dataframe()
 
                     interim_dataframes.append(cleaned_data)
                     logger.info("Matching up approximate locations with generated IDs...")
@@ -449,29 +434,18 @@ class DataProcessor:
 
                     logger.success(f"Done creating IDs for the approximate locations ({start_or_end}s of the trips)")
                     return cleaned_data
-
-                
-                elif self.use_custom_station_indexing(data=cleaned_data) and not self.tie_ids_to_unique_coordinates():
+   
+                #elif self.use_custom_station_indexing(data=cleaned_data) and not self.tie_ids_to_unique_coordinates():
                     
-                    unique_old_ids = cleaned_data[f"{start_or_end}_station_id"].unique()
-                    new_ids = range(len(unique_old_ids))
 
-                    old_ids_and_their_replacements = {
-                        unique_old_id: new_id for unique_old_id, new_id in zip(unique_old_ids, new_ids)
-                    }
+                    
 
-                    for old_id in cleaned_data.loc[:, f"{start_or_end}_station_id"]:
+                    
 
-                        cleaned_data = cleaned_data.replace(
-                            to_replace=old_id,
-                            value=old_ids_and_their_replacements[old_id]
-                        )
-
-                    unique_station_names = cleaned_data[f"{start_or_end}_station_name"].unique()
+                    
 
 
 
-                        
 
 
                 elif not self.use_custom_station_indexing(data=cleaned_data):
@@ -506,7 +480,7 @@ class DataProcessor:
             if missing_scenario == "both":
                 for data, scenario in zip([start_df, end_df], ["start", "end"]):
                     # The coordinates are in 6 dp, so no rounding is happening here.
-                    __round_coordinates_and_make_ids(cleaned_data=data, start_or_end=scenario, decimal_places=6)
+                    __investigate_making_new_station_ids(cleaned_data=data, start_or_end=scenario, decimal_places=6)
 
                 # Get all the coordinates that are common to both dictionaries
                 common_points = [point for point in dictionaries[0].keys() if point in dictionaries[1].keys()]
@@ -531,7 +505,7 @@ class DataProcessor:
 
             elif missing_scenario == "start" or "end":
                 data = start_df if missing_scenario == "start" else end_df
-                data = __round_coordinates_and_make_ids(
+                data = __investigate_making_new_station_ids(
                     cleaned_data=data,
                     start_or_end=missing_scenario,
                     decimal_places=5

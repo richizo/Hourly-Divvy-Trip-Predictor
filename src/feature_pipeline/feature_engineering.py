@@ -75,6 +75,64 @@ class GeoCoding:
         return final_places_and_points
 
 
+class ReverseGeocoding:
+    def __init__(self, scenario: str, geodata: pd.DataFrame, simple: bool = True) -> None:
+        self.geodata = geodata
+        self.simple = simple
+        self.scenario = scenario
+        self.coordinates = geodata["coordinates"].values
+        self.station_ids = geodata[f"{scenario}_station_id"].unique()
+
+    def find_points_simply(self) -> dict[int, list[float]]:
+
+        simple_match = {}
+        number_of_rows = self.geodata.shape[0]
+
+        for code in tqdm(range(number_of_rows)):
+            for station_id in self.station_ids:
+                if station_id not in simple_match.keys() and station_id == self.geodata.iloc[code, 0]:
+                    simple_match[station_id] = self.geodata.iloc[code, 1]
+
+        return simple_match
+
+    def reverse_geocode(self, save: bool = True) -> dict[str, list[float]]:
+        """
+        Perform reverse geocoding of each coordinate in the dataframe (avoiding duplicates), and make 
+        a dictionary of coordinates and their station addresses. That dictionary can then be saved, and 
+        is returned.
+
+        Returns:
+            dict[str, list[float]]: the station IDs obtained from reverse geocoding, and the original
+                                    coordinates.
+        """
+        addresses_and_points = {}
+        geocoder = Photon(user_agent=config.email)
+        
+        coordinate_source = self.find_points_simply().values() if self.simple else self.coordinates
+        coordinates = tqdm(iterable=coordinate_source, desc="Reverse geocoding the coordinates")
+
+        for coordinate in coordinates:
+            if coordinate in addresses_and_points.values():
+                addresses_and_points[str(geocoder.reverse(query=coordinate, timeout=120))] = coordinate
+        if save:    
+            with open(GEOGRAPHICAL_DATA/f"{self.scenario}_station_names_and_coordinates.json", mode="w") as file:
+                json.dump(addresses_and_points, file)
+
+        return addresses_and_points
+
+    def put_station_names_in_geodata(self, station_names_and_coordinates: dict) -> pd.DataFrame:
+        
+        station_names_to_add = []
+
+        for coordinate in self.geodata["coordinates"]:  
+            if coordinate in station_names_and_coordinates.values():
+                station_names_to_add.append(station_names_and_coordinates[coordinate])
+
+        return pd.concat(
+                [self.geodata, pd.Series(data=station_names_to_add)]
+            )
+
+
 def add_avg_trips_last_4_weeks(features: pd.DataFrame) -> pd.DataFrame:
     """
     Include a column for the average number of trips in the past 4 weeks.
