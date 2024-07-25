@@ -16,20 +16,20 @@ from src.feature_pipeline.miscellaneous import RoundingCoordinates, DirectIndexi
 from src.feature_pipeline.feature_engineering import perform_feature_engineering
 
 from src.setup.paths import (
-    CLEANED_DATA, TRAINING_DATA, TIME_SERIES_DATA, GEOGRAPHICAL_DATA, INFERENCE_DATA, make_fundamental_paths
+    CLEANED_DATA, TRAINING_DATA, TIME_SERIES_DATA, INDEXER_ONE, INDEXER_TWO, INFERENCE_DATA, make_fundamental_paths
 )
 
 
 class DataProcessor:
-    def __init__(self, year: int, for_inference: bool = False):    
+    def __init__(self, year: int, for_inference: bool):    
         self.station_ids = None
+        self.scenarios = ["start", "end"]
         self.starts_ts_path = TIME_SERIES_DATA/"starts_ts.parquet"
         self.ends_ts_path = TIME_SERIES_DATA/"ends_ts.parquet"
 
         self.data = pd.concat(list(load_raw_data(year=year))) if not for_inference else None
 
-    @staticmethod
-    def use_custom_station_indexing(data: pd.DataFrame, scenario: str) -> bool:
+    def use_custom_station_indexing(self, scenario: str, data: pd.DataFrame) -> bool:
         """
         Certain characteristics of the data will lead to the selection of one of two custom methods of indexing 
         the station IDs. This is necessary because there are several station IDs such as "KA1504000135" (dubbed 
@@ -42,7 +42,7 @@ class DataProcessor:
         the two custom indexing methods mentioned before. Which of these methods will be used will depend on the number
         of rows in the data. 
         
-        With a large enough dataset (subjectively determined to be one that has more than 30M rows), it will become
+        With a large enough dataset (subjectively determined to be one that has more than 20M rows), it will become
         necessary to round the coordinates of each station to make the preprocessing operations that follow less taxing
         in terms of time and system memory. A number is then be assigned to each unique coordinate which will function
         as the new ID for that station. 
@@ -59,12 +59,12 @@ class DataProcessor:
             if len(str(station_id)) > 7 and not pd.isnull(station_id):
                 long_id_counter += 1
 
-        num_missing_indices = data[f"{start_or_end}_station_id"].isna().sum()
+        num_missing_indices = data[f"{scenario}_station_id"].isna().sum()
         return True if (num_missing_indices + long_id_counter) / data.shape[0] >= 0.5 else False
 
     @staticmethod
     def tie_ids_to_unique_coordinates(data: pd.DataFrame) -> bool:
-        return True if len(data) > 30_000_000 else False
+        return True if len(data) > 20_000_000 else False
 
     def make_training_data(self, geocode: bool) -> list[pd.DataFrame] | tuple[pd.DataFrame, pd.DataFrame]:
         """
@@ -107,13 +107,25 @@ class DataProcessor:
         logger.info("Cleaning dataframe")
         self.data = self.clean()
 
-        start_df = self.data[
-            ["started_at", "start_lat", "start_lng", "start_station_id"]
-        ]
+        if self.use_custom_station_indexing(scenario="start", data=self.data) and \
+            self.use_custom_station_indexing(scenario="end", data=self.data) and \
+            not self.tie_ids_to_unique_coordinates(data=self.data):
+            start_df = self.data[
+                ["started_at", "start_lat", "start_lng", "start_station_id", "start_station_name"]
+            ]
 
-        end_df = self.data[
-            ["ended_at", "end_lat", "end_lng", "end_station_id"]
-        ]
+            end_df = self.data[
+                ["ended_at", "end_lat", "end_lng", "end_station_id", "end_station_name"]
+            ]
+
+        else:
+            start_df = self.data[
+                ["started_at", "start_lat", "start_lng", "start_station_id"]
+            ]   
+
+            end_df = self.data[
+                ["ended_at", "end_lat", "end_lng", "end_station_id"]
+            ]
 
         logger.info("Transforming the data into a time series...")
         starts_ts, ends_ts = self.transform_cleaned_data_into_ts_data(start_df=start_df, end_df=end_df)
@@ -139,7 +151,7 @@ class DataProcessor:
                 Returns:
                     pd.DataFrame: the data, absent the aforementioned rows.
                 """
-                for scenario in ["start", "end"]:
+                for scenario in self.scenarios:
                     lats = self.data.columns.get_loc(f"{scenario}_lat")
                     longs = self.data.columns.get_loc(f"{scenario}_lng")
                     station_names_col = self.data.columns.get_loc(f"{scenario}_station_name")
@@ -258,7 +270,7 @@ class DataProcessor:
 
             if patient:
 
-                for scenario in ["start", "end"]:
+                for scenario in self.scenarios:
                     rows_missing_station_names_ids = _find_rows_with_missing_station_names_and_ids(scenario=scenario)
 
                     known_lats, known_longs, known_station_ids, known_station_names = \
@@ -279,10 +291,10 @@ class DataProcessor:
                 )
 
             else:
-                if self.use_custom_station_indexing(data=self.data, scenario=scenario) and self.tie_ids_to_unique_coordinates():
+                if self.use_custom_station_indexing(data=self.data) and self.tie_ids_to_unique_coordinates(data=self.data):
                     columns_to_drop = ["ride_id", "rideable_type", "member_casual"]
                 else:
-                    columns_to_drop = ["ride_id", "rideable_type", "member_casual", "start_station_name", "end_station_name"]
+                    columns_to_drop = ["ride_id", "rideable_type", "member_casual"]
 
                 self.data = self.data.drop(columns=columns_to_drop)
 
@@ -405,38 +417,53 @@ class DataProcessor:
 
                 cleaned_data = cleaned_data.drop(f"{start_or_end}ed_at", axis=1) #  Column no longer needed
 
-                if self.use_custom_station_indexing(data=cleaned_data, scenario=start_or_end) and \
-                    self.tie_ids_to_unique_coordinates():
+                logger.info("Determining the method of dealing with invalid station indices...")
+                
+                if self.use_custom_station_indexing(scenario=start_or_end, data=cleaned_data) and \
+                    self.tie_ids_to_unique_coordinates(data=cleaned_data):
 
+                    logger.success("Custom station indexer required: tying new station IDs to unique coordinates")
+                        
                     cleaned_data = cleaned_data.drop(columns=f"{start_or_end}_station_id", axis=1)
                     logger.info(f"Approximating the coordinates of the location where each trip {start_or_end}s...")
 
-                    coordinate_approximator = RoundingCoordinates(
+                    indexer = RoundingCoordinates(
                         scenario=start_or_end, data=cleaned_data, decimal_places=decimal_places
                     )
 
                     # Round the coordinates down to the specified dp, and add these rounded coordinates to the data 
-                    coordinate_approximator.add_column_of_rounded_coordinates_to_dataframe()
+                    indexer.add_column_of_rounded_coordinates_to_dataframe()
 
                     interim_dataframes.append(cleaned_data)
                     logger.info("Matching up approximate locations with generated IDs...")
 
                     # Make a list of dictionaries of start points and IDs
-                    origins_or_destinations_and_ids = coordinate_approximator.make_station_ids_from_unique_coordinates()
+                    origins_or_destinations_and_ids = indexer.make_station_ids_from_unique_coordinates()
                     dictionaries.append(origins_or_destinations_and_ids)
 
                     # Critical for recovering the (rounded) coordinates and their corresponding IDs later.
-                    coordinate_approximator.save_geodata_dict(
+                    indexer.save_geodata_dict(
                         points_and_ids=origins_or_destinations_and_ids,
-                        folder=GEOGRAPHICAL_DATA,
+                        folder=INDEXER_ONE,
                         file_name=f"rounded_{start_or_end}_points_and_new_ids"
                     )
 
                     logger.success(f"Done creating IDs for the approximate locations ({start_or_end}s of the trips)")
                     return cleaned_data
-   
-                #elif self.use_custom_station_indexing(data=cleaned_data) and not self.tie_ids_to_unique_coordinates():
-                    
+
+                elif self.use_custom_station_indexing(data=cleaned_data, scenario=start_or_end) and \
+                    not self.tie_ids_to_unique_coordinates(data=cleaned_data):
+
+                    logger.success("Custom station indexer required: NOT tying new IDs to unique coordinates")
+
+                    indexer = DirectIndexing(scenario=start_or_end, data=cleaned_data)
+                    indexer.replace_missing_station_names_and_ids()
+
+                    print(
+                        cleaned_data.isna().sum()
+                    )
+
+                    breakpoint()
 
                     
 
@@ -478,7 +505,7 @@ class DataProcessor:
                 return agg_data
 
             if missing_scenario == "both":
-                for data, scenario in zip([start_df, end_df], ["start", "end"]):
+                for data, scenario in zip([start_df, end_df], self.scenarios):
                     # The coordinates are in 6 dp, so no rounding is happening here.
                     __investigate_making_new_station_ids(cleaned_data=data, start_or_end=scenario, decimal_places=6)
 
@@ -675,5 +702,5 @@ class DataProcessor:
 
 if __name__ == "__main__":
     make_fundamental_paths()
-    trips_2024 = DataProcessor(year=2024)
+    trips_2024 = DataProcessor(year=2024, for_inference=False)
     trips_2024.make_training_data(geocode=False)
