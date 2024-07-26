@@ -3,11 +3,8 @@ import json
 import random
 
 from tqdm import tqdm
-from loguru import logger 
+from loguru import logger
 from pathlib import Path, PosixPath
-
-# Config
-from src.setup.config import config
 
 # Data Manipulation and Access
 import numpy as np
@@ -26,6 +23,7 @@ class RoundingCoordinates:
     poses a such a problem (in terms of memory and time) that the compromise of geographical accuracy 
     resulting from its use can be justified.
     """
+
     def __init__(self, scenario: str, data: pd.DataFrame, decimal_places: int | None) -> None:
         """
         Args:
@@ -38,11 +36,9 @@ class RoundingCoordinates:
 
             scenario (str): whether we are looking at "start" (departures) or "end" (arrival) data.
         """
-        self.data = data 
-        self.scenario = scenario
         self.decimal_places = decimal_places
 
-    def add_column_of_rounded_coordinates_to_dataframe(self) -> None:
+    def add_column_of_rounded_coordinates_to_dataframe(self, scenario: str, data: pd.DataFrame) -> None:
         """
         This function takes the latitude and longitude columns of a dataframe, rounds them down to a 
         specified number of decimal places, and makes a column which consists of points containing the 
@@ -52,12 +48,12 @@ class RoundingCoordinates:
         new_longitudes = []
 
         latitudes = tqdm(
-            iterable=self.data[f"{self.scenario}_lat"].values,
+            iterable=data[f"{scenario}_lat"].values,
             desc="Working on latitudes"
         )
 
         longitudes = tqdm(
-            iterable=self.data[f"{self.scenario}_lng"].values,
+            iterable=data[f"{scenario}_lng"].values,
             desc="Working on longitudes"
         )
 
@@ -72,37 +68,37 @@ class RoundingCoordinates:
             )
 
         for coordinate_name, coordinate in zip(
-            ["lat", "lng"], [new_latitudes, new_longitudes]
+                ["lat", "lng"], [new_latitudes, new_longitudes]
         ):
-            self.data.insert(
-                loc=self.data.shape[1],
-                column=f"rounded_{self.scenario}_{coordinate_name}",
+            data.insert(
+                loc=data.shape[1],
+                column=f"rounded_{scenario}_{coordinate_name}",
                 value=pd.Series(coordinate),
                 allow_duplicates=False
             )
 
         # Remove the original latitudes and longitudes
-        cleaned_data = cleaned_data.drop(
-            columns=[f"{start_or_end}_lat", f"{start_or_end}_lng"]
+        data = data.drop(
+            columns=[f"{scenario}_lat", f"{scenario}_lng"]
         )
 
         rounded_points = list(
             zip(
-                self.data[f"rounded_{self.scenario}_lat"], self.data[f"rounded_{self.scenario}_lng"]
+                data[f"rounded_{scenario}_lat"], data[f"rounded_{scenario}_lng"]
             )
         )
 
         # Insert the rounded() coordinates as points
-        self.data.insert(
-            loc=self.data.shape[1],
-            column=f"rounded_{self.scenario}_points",
+        data.insert(
+            loc=data.shape[1],
+            column=f"rounded_{scenario}_points",
             value=pd.Series(rounded_points),
             allow_duplicates=False
         )
 
         # Remove the rounded latitudes and longitudes that we added
-        cleaned_data.drop(
-            columns=[f"rounded_{start_or_end}_lat", f"rounded_{start_or_end}_lng"],
+        data = data.drop(
+            columns=[f"rounded_{scenario}_lat", f"rounded_{scenario}_lng"],
             inplace=True
         )
 
@@ -129,7 +125,7 @@ class RoundingCoordinates:
 
         return points_and_new_ids
 
-    def add_column_of_ids(self, points_and_ids: dict) -> None:
+    def add_column_of_ids(self, data: pd.DataFrame, scenario: str, points_and_ids: dict) -> None:
         """
         Take each point, and the ID which corresponds to it (within its dictionary),
         and put those IDs in the relevant dataframe (in a manner that matches each 
@@ -139,13 +135,13 @@ class RoundingCoordinates:
             points_and_ids (dict): dictionary of unique coordinates and IDs.
         """
         station_ids = [
-            points_and_ids[point] for point in list(self.data.loc[:, f"rounded_{self.scenario}_points"]) if
+            points_and_ids[point] for point in list(data.loc[:, f"rounded_{scenario}_points"]) if
             point in points_and_ids.keys()
         ]
 
-        self.data.insert(
-            loc=self.data.shape[1],
-            column=f"{self.scenario}_station_id",
+        data.insert(
+            loc=data.shape[1],
+            column=f"{scenario}_station_id",
             value=pd.Series(station_ids),
             allow_duplicates=False
         )
@@ -174,7 +170,7 @@ class RoundingCoordinates:
 
 class DirectIndexing:
     def __init__(self, scenario: str, data: pd.DataFrame) -> None:
-        self.data = data 
+        self.data = data
         self.scenario = scenario
 
         self.latitudes = data.loc[:, f"{scenario}_lat"]
@@ -187,7 +183,8 @@ class DirectIndexing:
         self.station_id_index = data.columns.get_loc(f"{scenario}_station_id")
         self.station_name_index = data.columns.get_loc(f"{scenario}_station_name")
 
-        self.number_of_rows = tqdm(iterable=range(data.shape[0]), desc="Searching through rows...")
+        self.number_of_rows = tqdm(iterable=range(data.shape[0]))
+        self.rows_with_the_issue = self.find_rows_with_missing_ids_and_names()
 
     def found_rows_with_either_missing_ids_or_names(self) -> bool:
         """
@@ -202,13 +199,20 @@ class DirectIndexing:
         for row in self.number_of_rows:
             station_id_for_row = self.data.iloc[row, self.station_id_index]
             station_name_for_row = self.data.iloc[row, self.station_name_index]
-            
+
             if pd.isnull(station_name_for_row) and not pd.isnull(station_id_for_row) \
-                or not pd.isnull(station_name_for_row) and pd.isnull(station_id_for_row):
+                    or not pd.isnull(station_name_for_row) and pd.isnull(station_id_for_row):
                 counter += 1
 
         return True if counter > 0 else False
-    
+
+    def find_rows_with_missing_ids_and_names(self) -> list[int]:
+        logger.info("Searching for rows with missing station names and IDs")
+        return [
+            row for row in self.number_of_rows if pd.isnull(self.data.iloc[row, self.station_id_index]) and
+            pd.isnull(self.data.iloc[row, self.station_name_index])
+        ]
+
     def find_rows_with_known_ids_and_names(self, save: bool = True) -> dict[str, tuple[float]]:
         """
         Find all the coordinates which have a known ID and known station name, and provide a dictionary of
@@ -217,8 +221,8 @@ class DirectIndexing:
         Returns:
             dict[str, tuple[float]]: pairs consisting of row numbers and their respective coordinates.
         """
-        file_path = INDEXER_TWO/f"{self.scenario}_rows_and_coordinates_with_known_ids_names.json"
-        
+        file_path = INDEXER_TWO / f"{self.scenario}_rows_and_coordinates_with_known_ids_names.json"
+
         if Path(file_path, mode="r").exists():
             logger.success("Fetching file containing each row with known station name ID, and its coordinates")
             with open(file_path, mode="r") as file:
@@ -230,9 +234,9 @@ class DirectIndexing:
 
             for row in self.number_of_rows:
 
-                latitude = self.data.iloc[row, self.latitudes_index]            
+                latitude = self.data.iloc[row, self.latitudes_index]
                 longitude = self.data.iloc[row, self.longitudes_index]
-    
+
                 station_id_for_the_row = self.data.iloc[row, self.station_id_index]
                 station_name_for_the_row = self.data.iloc[row, self.station_name_index]
 
@@ -246,139 +250,131 @@ class DirectIndexing:
                 with open(file_path, mode="w") as file:
                     json.dump(rows_and_coordinates_with_known_ids_names, file)
 
-        return rows_and_coordinates_with_known_ids_names 
+        return rows_and_coordinates_with_known_ids_names
 
-    def match_names_and_ids_by_station_proximity(self, save: bool = True) -> dict[int, tuple[float]]:
+    def match_names_and_ids_by_station_proximity(self, save: bool = True) -> dict[int, tuple[str | int, str]]:
         """
-        Based on common sense and confirmation from https://account.divvybikes.com/map, it looks like there are 
-        fingers crossed) no two stations that are within 10m of each other. On those grounds, we can declare that
-        any two coordinates which are within 10m of each other must belong to the same station.
+        Based on common sense, and a perfunctory look at https://account.divvybikes.com/map, it looks like there are 
+        (fingers crossed) no two stations that are within 10m of each other. On those grounds, we can say with some 
+        confidence that any two station coordinates which are within 10m of each other must belong to the same station.
 
         Suppose we have a given coordinate (which we'll call the target coordinate), and we round it down from 6 to
-        5 decimal places. If both coordinates of this rounded target coordinate are equal to the rounded version of 
+        4 decimal places. If both coordinates of this rounded target coordinate are equal to the rounded version of 
         some other coordinate (on some other row) which has a known ID and known station name (we've confirmed that 
-        it can't be one or the other), then the row of the target coordinate will assciated with the ID and station 
+        it can't be one or the other), then the row of the target coordinate will be associated with the ID and station
         name of the coordinate we found.
+
+        Args:
+            save (bool, optional): whether to save the final output. Defaults to True.
+
+        Returns:
+            dict[int, tuple[str|int, str]]: key, value pairs of row indices and their newly discovered station IDs
+                                            and names
         """
-        file_path = INDEXER_TWO/f"matched_{self.scenario}_coordinates_with_new_ids_and_names.json"
+        file_path = INDEXER_TWO / f"matched_{self.scenario}_coordinates_with_new_ids_and_names.json"
 
         if Path(file_path).exists():
+            logger.success("Fortunately for you, the file is already saved locally. You would have sat there for hours")
             with open(file_path, mode="r") as file:
-                rows_and_discovered_ids_and_names = json.load(file)
+                rows_with_the_issue_and_their_discovered_names_and_ids = json.load(file)
 
         else:
             assert not self.found_rows_with_either_missing_ids_or_names(), 'There is now a row which contains a \
-                missing station ID or a station name (not both). This will have occured due to a change in the dataset'
+                missing station ID or a station name (not both). This will have occurred due to a change in the dataset'
 
-            rows_and_discovered_ids_and_names = {}
-            rows_and_coordinates_with_known_ids_names = self.find_rows_with_known_ids_and_names()
+            rows_with_the_issue_and_their_discovered_names_and_ids = {}
+            rows_with_no_issue_and_their_original_coordinates = self.find_rows_with_known_ids_and_names()
             logger.info("Rounding the coordinates in rows with both IDs and names")
-            
-            rows_and_known_rounded_coordinates = {}
-            for row in tqdm(rows_and_coordinates_with_known_ids_names.keys()):
-                    
-                candidate_latitude: float = rows_and_coordinates_with_known_ids_names[row][0]
-                candidate_longitude: float = rows_and_coordinates_with_known_ids_names[row][1]
 
-                rounded_candidate_latitude = np.round(candidate_latitude, decimals=5)
-                rounded_candidate_longitude = np.round(candidate_longitude, decimals=5)
+            rows_with_no_issue_and_their_rounded_coordinates = {}
+            for row in tqdm(rows_with_no_issue_and_their_original_coordinates.keys()):
+                original_coordinate = rows_with_no_issue_and_their_original_coordinates[row]
 
-                rows_and_known_rounded_coordinates[row] = (rounded_candidate_latitude, rounded_candidate_longitude)
+                rounded_candidate_latitude = np.round(original_coordinate[0], decimals=4)
+                rounded_candidate_longitude = np.round(original_coordinate[1], decimals=4)
 
-            logger.info("Searching for rows with missing station IDs and names")
+                rows_with_no_issue_and_their_rounded_coordinates[row] = (
+                    rounded_candidate_latitude, rounded_candidate_longitude)
 
-            rows_to_insert_names_and_ids = [
-                row for row in tqdm(range(self.data.shape[0])) if pd.isnull(self.data.iloc[row, self.station_id_index]) and \
-                    pd.isnull(self.data.iloc[row, self.station_name_index])
-            ]
-
-            counter = 0
             logger.info("Performing the matching operation...")
-            for row in tqdm(rows_to_insert_names_and_ids):
-                
-                rounded_target_latitude = np.round(self.data.iloc[row, self.latitudes_index], decimals=5)
-                rounded_target_longitude = np.round(self.data.iloc[row, self.longitudes_index], decimals=5)
+            for row in tqdm(self.rows_with_the_issue):
 
-                if (rounded_target_latitude, rounded_target_longitude) in rows_and_known_rounded_coordinates.values():
+                if row in rows_with_the_issue_and_their_discovered_names_and_ids.keys():
+                    continue
 
+                rounded_target_latitude = np.round(self.data.iloc[row, self.latitudes_index], decimals=4)
+                rounded_target_longitude = np.round(self.data.iloc[row, self.longitudes_index], decimals=4)
+
+                if (rounded_target_latitude, rounded_target_longitude) in \
+                        rows_with_no_issue_and_their_rounded_coordinates.values():
                     row_of_interest = next(
-                        (int(row) for row, coordinate in rows_and_known_rounded_coordinates.items() if \
-                            coordinate == (rounded_target_latitude, rounded_candidate_longitude)
+                        (
+                            int(row) for row, coordinate in rows_with_no_issue_and_their_rounded_coordinates.items() if
+                            coordinate == (rounded_target_latitude, rounded_target_longitude)
                         )
                     )
-
-                    print(type(row_of_interest))
 
                     found_station_id = self.data.iloc[row_of_interest, self.station_id_index]
                     found_station_name = self.data.iloc[row_of_interest, self.station_name_index]
 
-                    rows_and_discovered_ids_and_names[row_of_interest] = (found_station_id, found_station_name)
-                    counter += 1
-
-                    print("Row", row_of_interest)
-                    print("Rounded lat:", rounded_target_latitude)
-                    print("Rounded lng:", rounded_target_latitude)
-
-                    print("Found ID:", found_station_id)
-                    print("Found Name:", found_station_name)
-
-                    logger.success(f"Row #{row_of_interest} has one")
+                    rows_with_the_issue_and_their_discovered_names_and_ids[row] = (found_station_id, found_station_name)
 
             if save:
-                with open(INDEXER_TWO/f"matched_{self.scenario}_coordinates_with_new_ids_and_names.json", mode="w") as file:
-                    json.dump(rows_and_discovered_ids_and_names, file)
+                with open(file_path, mode="w") as file:
+                    json.dump(rows_with_the_issue_and_their_discovered_names_and_ids, file)
 
-            logger.success(f"Found {counter} station names and IDs")
-            
-        return rows_and_discovered_ids_and_names
-    
-    def replace_missing_station_names_and_ids(self) -> None:
-        """
-        We replace the missing station names and IDs in the dataframe with those that we discovered using our 
-        matching procedure.
-        """
-        rows_with_new_names_and_ids: dict[int, tuple[float]] = self.match_names_and_ids_by_station_proximity()
+            logger.success(f"Found {len(rows_with_the_issue_and_their_discovered_names_and_ids)} station names and IDs")
 
+        return rows_with_the_issue_and_their_discovered_names_and_ids
+
+    def replace_missing_station_names_and_ids(self) -> pd.DataFrame:
+        """
+        Take the row indices, as well as the associated IDs and names that were discovered using the
+        matching procedure. Then replace the missing station names and IDs in these rows of the dataframe 
+        with those that were discovered.
+        """
+        rows_with_new_names_and_ids: dict[int, tuple[str | int, str]] = self.match_names_and_ids_by_station_proximity()
         logger.info(f"Replacing {len(rows_with_new_names_and_ids)} missing IDs and names in the dataset")
-        
+
         for row in rows_with_new_names_and_ids:
             new_station_id = rows_with_new_names_and_ids[row][0]
             new_station_name = rows_with_new_names_and_ids[row][1]
 
-            self.data.replace(
-                to_replace=self.data.loc[:, f"{self.scenario}_station_id"],
-                value=new_station_id
-            )
+            self.data.replace(to_replace=self.data.loc[:, f"{self.scenario}_station_id"], value=new_station_id)
+            self.data.replace(to_replace=self.data.loc[:, f"{self.scenario}_station_name"], value=new_station_name)
 
-            self.data.replace(
-                to_replace=self.data.loc[:, f"{self.scenario}_station_name"],
-                value=new_station_name
-            )
+        return self.data
 
-    def making_new_ids(self) -> dict[str, int]:
+    def make_and_insert_new_ids(self, delete_leftover_rows: bool) -> pd.DataFrame:
+        """
+        Make a new ID for every existing ID, and replace the existing IDs with their replacements.
 
-        unique_old_ids = self.data[f"{start_or_end}_station_id"].unique()
+        Returns:
+            pd.DataFrame: 
+        """
+        self.data = self.replace_missing_station_names_and_ids()
+        print(self.rows_with_the_issue)
+        breakpoint()
+
+        self.data = self.data.drop(self.rows_with_the_issue, axis=0) if delete_leftover_rows else self.data
+
+        unique_old_ids = self.data[f"{self.scenario}_station_id"].unique()
         new_ids = range(len(unique_old_ids))
 
         # Assign new station IDs
-        old_ids_and_their_replacements = {
+        old_ids_and_their_replacements: dict[str | int, int] = {
             unique_old_id: new_id for unique_old_id, new_id in zip(unique_old_ids, new_ids)
         }
 
-        return old_ids_and_their_replacements
-
-
-    def execute(self) -> None:
-
-        old_ids_and_their_replacements = self.making_new_ids()
-
         for row in self.number_of_rows:
+
             for old_id, new_id in zip(old_ids_and_their_replacements.keys(), old_ids_and_their_replacements.values()):
                 if old_id == self.data.loc[row, f"{self.station_id_index}"]:
                     self.data.replace(
                         to_replace=old_id, value=old_ids_and_their_replacements[old_id]
                     )
 
+        return self.data
 
 
 def view_memory_usage(data: pd.DataFrame, column: str) -> pd.Series:
@@ -395,9 +391,3 @@ def change_column_data_type(data: pd.DataFrame, columns: list, to_format: str):
     a given dataframe.
     """
     data[columns] = data[columns].astype(to_format)
-
-
-
-        
-        
-
