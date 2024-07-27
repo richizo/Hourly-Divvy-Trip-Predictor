@@ -10,12 +10,9 @@ from pathlib import Path, PosixPath
 import numpy as np
 import pandas as pd
 
-# Geocoding & Reverse Geocoding
-from geopy import Photon
-
 # Custom modules
 from src.setup.paths import INDEXER_TWO
-
+from src.feature_pipeline.feature_engineering import ReverseGeocoding
 
 class RoundingCoordinates:
     """
@@ -184,7 +181,7 @@ class DirectIndexing:
         self.station_name_index = data.columns.get_loc(f"{scenario}_station_name")
 
         self.number_of_rows = tqdm(iterable=range(data.shape[0]))
-        self.rows_with_the_issue = self.find_rows_with_missing_ids_and_names()
+        self.matched_coordinates_path = INDEXER_TWO/f"matched_{self.scenario}_coordinates_with_new_ids_and_names.json"
 
     def found_rows_with_either_missing_ids_or_names(self) -> bool:
         """
@@ -195,6 +192,7 @@ class DirectIndexing:
             bool: a truth value indicating the existence or lack thereof of such rows. 
         """
         logger.info("Checking for rows that have either missing station names or station IDs")
+
         counter = 0
         for row in self.number_of_rows:
             station_id_for_row = self.data.iloc[row, self.station_id_index]
@@ -207,7 +205,9 @@ class DirectIndexing:
         return True if counter > 0 else False
 
     def find_rows_with_missing_ids_and_names(self) -> list[int]:
+            
         logger.info("Searching for rows with missing station names and IDs")
+        
         return [
             row for row in self.number_of_rows if pd.isnull(self.data.iloc[row, self.station_id_index]) and
             pd.isnull(self.data.iloc[row, self.station_name_index])
@@ -271,16 +271,14 @@ class DirectIndexing:
             dict[int, tuple[str|int, str]]: key, value pairs of row indices and their newly discovered station IDs
                                             and names
         """
-        file_path = INDEXER_TWO / f"matched_{self.scenario}_coordinates_with_new_ids_and_names.json"
-
-        if Path(file_path).exists():
-            logger.success("Fortunately for you, the file is already saved locally. You would have sat there for hours")
-            with open(file_path, mode="r") as file:
+        if Path(self.matched_coordinates_path).exists():
+            logger.success("The matching operation has already been done. Fetching local file...")
+            with open(self.matched_coordinates_path, mode="r") as file:
                 rows_with_the_issue_and_their_discovered_names_and_ids = json.load(file)
 
         else:
             assert not self.found_rows_with_either_missing_ids_or_names(), 'There is now a row which contains a \
-                missing station ID or a station name (not both). This will have occurred due to a change in the dataset'
+                missing station ID or a station name (not both). This will have occurred due to a change in the data'
 
             rows_with_the_issue_and_their_discovered_names_and_ids = {}
             rows_with_no_issue_and_their_original_coordinates = self.find_rows_with_known_ids_and_names()
@@ -320,43 +318,93 @@ class DirectIndexing:
                     rows_with_the_issue_and_their_discovered_names_and_ids[row] = (found_station_id, found_station_name)
 
             if save:
-                with open(file_path, mode="w") as file:
+                with open(self.matched_coordinates_path, mode="w") as file:
                     json.dump(rows_with_the_issue_and_their_discovered_names_and_ids, file)
 
             logger.success(f"Found {len(rows_with_the_issue_and_their_discovered_names_and_ids)} station names and IDs")
 
         return rows_with_the_issue_and_their_discovered_names_and_ids
 
-    def replace_missing_station_names_and_ids(self) -> pd.DataFrame:
+    def replace_missing_station_names_and_ids(self, save: bool = True) -> pd.DataFrame:
         """
         Take the row indices, as well as the associated IDs and names that were discovered using the
         matching procedure. Then replace the missing station names and IDs in these rows of the dataframe 
         with those that were discovered.
         """
-        rows_with_new_names_and_ids: dict[int, tuple[str | int, str]] = self.match_names_and_ids_by_station_proximity()
-        logger.info(f"Replacing {len(rows_with_new_names_and_ids)} missing IDs and names in the dataset")
+        replaced_data_path = INDEXER_TWO/f"{self.scenario}_replaced_missing_names_and_ids.parquet"
 
-        for row in rows_with_new_names_and_ids:
-            new_station_id = rows_with_new_names_and_ids[row][0]
-            new_station_name = rows_with_new_names_and_ids[row][1]
+        if Path(replaced_data_path).exists():    
+            self.data = pd.read_parquet(replaced_data_path)
 
-            self.data.replace(to_replace=self.data.loc[:, f"{self.scenario}_station_id"], value=new_station_id)
-            self.data.replace(to_replace=self.data.loc[:, f"{self.scenario}_station_name"], value=new_station_name)
+        else:
+            rows_with_new_names_and_ids: dict[int, tuple[str | int, str]] = self.match_names_and_ids_by_station_proximity()
+
+            rows_to_replace = tqdm(
+                iterable=rows_with_new_names_and_ids.keys(),
+                desc=f"Replacing missing IDs and names in the dataset"
+            )
+
+            for row in rows_to_replace:
+
+                new_station_id: str = rows_with_new_names_and_ids[row][0]
+                new_station_name: str = rows_with_new_names_and_ids[row][1]
+
+                # Because the row indices in the dictionary are strings, and I don't want the .iloc method to complain.
+                row = int(row)  
+
+                if row <= len(self.data):
+
+                    # These are of type "None", however the replace method of the dataframe class complains if I try to
+                    # replace an object of type "None". So we'll just wrap the objects in their proper types to shut it up.
+                    empty_station_id = str(self.data.iloc[row, self.station_id_index]) 
+                    empty_station_name = str(self.data.iloc[row, self.station_name_index])
+
+                    self.data.replace(to_replace=empty_station_id, value=new_station_id)
+                    self.data.replace(to_replace=empty_station_id, value=new_station_name)
+
+                else:
+                    logger.error(f"Row {row} is not part of the dataset. It was probably removed during an earlier process")
+
+            if save:
+                self.data.to_parquet(path=replaced_data_path)
 
         return self.data
 
-    def make_and_insert_new_ids(self, delete_leftover_rows: bool) -> pd.DataFrame:
+    def make_and_insert_new_ids(
+        self, 
+        delete_leftover_rows: bool | None,
+        reverse_geocode: bool | None,
+    ) -> pd.DataFrame:
         """
         Make a new ID for every existing ID, and replace the existing IDs with their replacements.
 
         Returns:
             pd.DataFrame: 
         """
-        self.data = self.replace_missing_station_names_and_ids()
-        print(self.rows_with_the_issue)
-        breakpoint()
+        assert delete_leftover_rows or reverse_geocode, "You must either choose to delete the leftover rows, or \
+            use reverse geocoding to name their stations/generate IDs"
 
-        self.data = self.data.drop(self.rows_with_the_issue, axis=0) if delete_leftover_rows else self.data
+        self.data = self.replace_missing_station_names_and_ids()
+        leftover_rows = self.find_rows_with_missing_ids_and_names()
+
+        if delete_leftover_rows:
+            self.data = self.data.drop(self.data.index[leftover_rows], axis=0) 
+
+        elif reverse_geocode:
+            coordinate_maker = RoundingCoordinates(decimal_places=6)
+            coordinate_maker.add_column_of_rounded_coordinates_to_dataframe(scenario=self.scenario, data=self.data)
+
+            for column in self.data.columns:
+                if column not in [f"{self.scenario}_station_id", f"rounded_{scenario}_points"]:
+                    self.data = self.data.drop(column, axis = 1)
+
+            self.data.rename(
+                columns={f"rounded_{self.scenario}_points": "coordinates"}
+            )
+
+            reverse_geocoder = ReverseGeocoding(scenario=self.scenario, geodata=self.data)
+
+            # TO DO: COMPLETE THIS PROCEDURE
 
         unique_old_ids = self.data[f"{self.scenario}_station_id"].unique()
         new_ids = range(len(unique_old_ids))
@@ -366,9 +414,11 @@ class DirectIndexing:
             unique_old_id: new_id for unique_old_id, new_id in zip(unique_old_ids, new_ids)
         }
 
+
+        logger.info("Replacing original station IDs with new ones...")
         for row in self.number_of_rows:
 
-            for old_id, new_id in zip(old_ids_and_their_replacements.keys(), old_ids_and_their_replacements.values()):
+            for old_id, new_id in zip(unique_old_ids, new_ids):
                 if old_id == self.data.loc[row, f"{self.station_id_index}"]:
                     self.data.replace(
                         to_replace=old_id, value=old_ids_and_their_replacements[old_id]

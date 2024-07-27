@@ -36,21 +36,14 @@ class DataProcessor:
         Certain characteristics of the data will lead to the selection of one of two custom methods of indexing 
         the station IDs. This is necessary because there are several station IDs such as "KA1504000135" (dubbed 
         long IDs) which we would like to be rid of.  We observe that the vast majority of the IDs contain no more 
-        than 6 or 7 values, while the long IDs are generally longer than 7 characters. 
+        than 6 or 7 values, while the long IDs are generally longer than 7 characters. The second group of 
+        problematic station IDs are, naturally, the missing ones.
         
-        Also problematic are the missing station IDs This function starts by checking which how many of the station
-        IDs fall into either of these two groups. If there are enough of these (subjectively determined to be at least
-        half the total number of IDs), then the station IDs will have to be replaced with numerical values using one of 
-        the two custom indexing methods mentioned before. Which of these methods will be used will depend on the number
-        of rows in the data. 
-        
-        With a large enough dataset (subjectively determined to be one that has more than 20M rows), it will become
-        necessary to round the coordinates of each station to make the preprocessing operations that follow less taxing
-        in terms of time and system memory. A number is then be assigned to each unique coordinate which will function
-        as the new ID for that station. 
-
-        In smaller datasets (which are heavily preferred by the author), the new IDs are created with no connection to
-        the number of unique coordinates.
+        This function starts by checking which how many of the station IDs fall into either of these two groups. 
+        If there are enough of these (subjectively determined to be at least half the total number of IDs), then 
+        the station IDs will have to be replaced with numerical values using one of the two custom indexing methods
+        mentioned before. Which of these methods will be used will depend on the result of the function after this 
+        one.
 
         Returns:
             bool: whether a custom indexing method will be used. 
@@ -72,7 +65,22 @@ class DataProcessor:
 
     @staticmethod
     def tie_ids_to_unique_coordinates(data: pd.DataFrame) -> bool:
-        return True if len(data) > 20_000_000 else False
+        """
+        With a large enough dataset (subjectively determined to be those that has more than 10M rows), the author has 
+        finds it necessary to round the coordinates of each station to make the preprocessing operations that follow 
+        less taxing in terms of time and system memory. Following the rounding operation, a number will be assigned to 
+        each unique coordinate which will function as the new ID for that station. 
+
+        In smaller datasets (which are heavily preferred by the author), the new IDs are created with no connection to
+        the number of unique coordinates.
+
+        Args:
+            data (pd.DataFrame): the dataset to be examined.
+
+        Returns:
+            bool: whether the dataset is deemed to be large enough to trigger the 
+        """
+        return True if len(data) > 10_000_000 else False
 
     def make_training_data(self, geocode: bool) -> list[pd.DataFrame] | tuple[pd.DataFrame, pd.DataFrame]:
         """
@@ -114,8 +122,10 @@ class DataProcessor:
         """
         logger.info("Cleaning dataframe")
         self.data = self.clean()
+    
+        if self.use_custom_station_indexing(scenarios=self.scenarios, data=self.data) \
+            and not self.tie_ids_to_unique_coordinates(data=self.data):
 
-        if self.use_custom_station_indexing(scenarios=["start","end"], data=self.data) and not self.tie_ids_to_unique_coordinates(data=self.data):
             start_df = self.data[
                 ["started_at", "start_lat", "start_lng", "start_station_id", "start_station_name"]
             ]
@@ -138,11 +148,24 @@ class DataProcessor:
         return starts_ts, ends_ts
 
     def clean(self, save: bool = True) -> pd.DataFrame:
-        print(self.data.columns)
-        breakpoint()
 
-        if len(os.listdir(path=CLEANED_DATA)) == 0:
+        if self.use_custom_station_indexing(scenarios=self.scenarios, data=self.data) \
+            and self.tie_ids_to_unique_coordinates(data=self.data):
 
+            cleaned_data_file_path = CLEANED_DATA/"cleaned_data_indexer_one.parquet"
+            
+        elif self.use_custom_station_indexing(scenarios=self.scenarios, data=self.data) \
+            and not self.tie_ids_to_unique_coordinates(data=self.data):
+
+            cleaned_data_file_path = CLEANED_DATA/"cleaned_data_indexer_two.parquet"
+
+        else:
+            raise NotImplementedError(
+                "The majority of Divvy's IDs weren't numerical and valid during initial development."
+            )
+
+        if not Path(cleaned_data_file_path).is_file():
+            
             self.data["started_at"] = pd.to_datetime(self.data["started_at"], format="mixed")
             self.data["ended_at"] = pd.to_datetime(self.data["ended_at"], format="mixed")
 
@@ -171,10 +194,11 @@ class DataProcessor:
 
                     rows_to_delete = []
                     for row in all_rows:
-                        if (
-                                pd.isnull(self.data.iloc[row, station_names_col])
-                                and pd.isnull(self.data.iloc[row, lats]) and pd.isnull(self.data.iloc[row, longs])
-                        ):
+                        station_name = self.data.iloc[row, station_names_col]
+                        row_latitude = self.data.iloc[row, lats]
+                        row_longitude = self.data.iloc[row, longs]
+
+                        if pd.isnull(station_name) and pd.isnull(row_latitude) and pd.isnull(row_longitude):
                             rows_to_delete.append(row)
 
                     self.data = self.data.drop(self.data.index[rows_to_delete], axis=0)
@@ -182,28 +206,25 @@ class DataProcessor:
                 return self.data
 
             self.data = _delete_rows_with_missing_station_names_and_coordinates()
-            columns_to_drop = ["ride_id", "rideable_type", "member_casual"]
+            features_to_drop = ["ride_id", "rideable_type", "member_casual"]
 
-            if self.use_custom_station_indexing(data=self.data, scenarios=["start"]) and \
+            if self.use_custom_station_indexing(data=self.data, scenarios=self.scenarios) and \
                     self.tie_ids_to_unique_coordinates(data=self.data):
                     
-                columns_to_drop.extend(
+                features_to_drop.extend(
                     ["start_station_id", "start_station_name", "end_station_id", "end_station_name"]
                 )
-                    
-            else:
-                columns_to_drop = ["ride_id", "rideable_type", "member_casual"]
 
-            self.data = self.data.drop(columns=columns_to_drop)
+            self.data = self.data.drop(columns=features_to_drop)
 
             if save:
-                self.data.to_parquet(path=CLEANED_DATA / "cleaned.parquet")
+                self.data.to_parquet(path=cleaned_data_file_path)
 
             return self.data
 
         else:
             logger.success("There is already some cleaned data. Fetching it...")
-            return pd.read_parquet(path=CLEANED_DATA / "cleaned.parquet")
+            return pd.read_parquet(path=cleaned_data_file_path)
 
     def transform_cleaned_data_into_ts_data(
             self,
@@ -348,17 +369,22 @@ class DataProcessor:
                     logger.success(f"Done creating IDs for the approximate locations ({start_or_end}s of the trips)")
                     return cleaned_data
 
-                elif self.use_custom_station_indexing(scenario=[start_or_end], data=cleaned_data) and \
+                elif self.use_custom_station_indexing(scenarios=[start_or_end], data=cleaned_data) and \
                         not self.tie_ids_to_unique_coordinates(data=cleaned_data):
 
                     logger.success("Custom station indexer required: NOT tying new IDs to unique coordinates")
-
                     self.indexer = DirectIndexing(scenario=start_or_end, data=cleaned_data)
+                    
+                    cleaned_data = self.indexer.make_and_insert_new_ids(
+                        delete_leftover_rows=True, 
+                        reverse_geocode=False
+                    )
 
-                elif not self.use_custom_station_indexing(scenarios=[start_or_end], data=cleaned_data):
+                    
+
+                else:
                     raise NotImplementedError(
-                        "Not provided logic for the unlikely event that a significant majority of Divvy's IDs are  \
-                        numerical and valid"
+                        "The majority of Divvy's IDs weren't numerical and valid during initial development."
                     )
 
             def __aggregate_final_ts(
@@ -390,12 +416,12 @@ class DataProcessor:
                                 points_and_ids=dictionaries[1]
                             )
 
-                interim_data = interim_data.drop(f"rounded_{start_or_end}_points", axis=1)
-                logger.info(f"Aggregating the final time series data for the {start_or_end}s of trips...")
+                    interim_data = interim_data.drop(f"rounded_{start_or_end}_points", axis=1)
+                    logger.info(f"Aggregating the final time series data for the {start_or_end}s of trips...")
 
                 agg_data = interim_data.groupby(
                     [f"{start_or_end}_hour", f"{start_or_end}_station_id"]).size().reset_index()
-
+                
                 agg_data = agg_data.rename(columns={0: "trips"})
                 return agg_data
 

@@ -85,13 +85,14 @@ class ReverseGeocoding:
 
     def find_points_simply(self) -> dict[int, list[float]]:
 
+        
         simple_match = {}
         number_of_rows = self.geodata.shape[0]
 
-        for code in tqdm(range(number_of_rows)):
+        for row in tqdm(range(number_of_rows)):
             for station_id in self.station_ids:
-                if station_id not in simple_match.keys() and station_id == self.geodata.iloc[code, 0]:
-                    simple_match[station_id] = self.geodata.iloc[code, 1]
+                if station_id not in simple_match.keys() and station_id == self.geodata.iloc[row, 0]:
+                    simple_match[station_id] = self.geodata.iloc[row, 1]
 
         return simple_match
 
@@ -124,7 +125,7 @@ class ReverseGeocoding:
         
         station_names_to_add = []
 
-        for coordinate in self.geodata["coordinates"]:  
+        for coordinate in self.coordinates:  
             if coordinate in station_names_and_coordinates.values():
                 station_names_to_add.append(station_names_and_coordinates[coordinate])
 
