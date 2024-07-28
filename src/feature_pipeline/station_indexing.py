@@ -145,7 +145,7 @@ class RoundingCoordinates:
         )
 
     @staticmethod
-    def save_geodata_dict(points_and_ids: dict, folder: PosixPath, file_name: str):
+    def save_geodata(points_and_ids: dict, folder: PosixPath, file_name: str):
         """
         Save the geographical data which consists of the station IDs and their corresponding
         coordinates as a geojson file. It was necessary to swap the keys and values (the coordinates
@@ -181,7 +181,6 @@ class DirectIndexing:
         self.station_id_index = self.data.columns.get_loc(f"{scenario}_station_id")
         self.station_name_index = self.data.columns.get_loc(f"{scenario}_station_name")
 
-        self.number_of_rows = range(self.data.shape[0])
         self.proper_name_of_scenario = "departure" if self.scenario == "start" else "arrival"
 
     def found_rows_with_either_missing_ids_or_names(self) -> bool:
@@ -194,7 +193,7 @@ class DirectIndexing:
         """
         counter = 0
         for row in tqdm(
-            iterable=self.number_of_rows,
+            iterable=range(self.data.shape[0]),
             desc="Checking for rows that have either missing station names or station IDs"
         ):
             station_id_for_row = self.data.iloc[row, self.station_id_index]
@@ -210,7 +209,7 @@ class DirectIndexing:
         addendum = "still" if repeat else ""
         return [
             row for row in tqdm(
-                iterable=self.number_of_rows, 
+                iterable=range(self.data.shape[0]), 
                 desc=f"Searching for rows that {addendum} have missing station names and IDs"
             )
             
@@ -237,7 +236,7 @@ class DirectIndexing:
             rows_and_coordinates_with_known_ids_names = {}
 
             for row in tqdm(
-                iterable=self.number_of_rows,
+                iterable=range(self.data.shape[0]),
                 desc="Looking for any row that has either a missing station ID OR a missing station name."
             ):
                 latitude = self.data.iloc[row, self.latitudes_index]
@@ -363,7 +362,7 @@ class DirectIndexing:
                 # Because the row indices in the dictionary are strings, and I don't want the iloc method to complain.
                 row = int(row)  
 
-                if row <= len(self.data):
+                if row <= len(self.data):  # In place as a guarantee against an out of bounds error.
 
                     # These are of type "None", however the replace method of the dataframe class complains if I try to
                     # replace an object of type "None". So I'll just wrap the objects in their proper types
@@ -389,7 +388,7 @@ class DirectIndexing:
         Saves the station ID, mame, and coordinates for use in the frontend
         """
         geodata = {}
-        for row in tqdm(iterable=self.number_of_rows, desc="Working through rows to save geodata..."):
+        for row in tqdm(iterable=range(self.data.shape[0]), desc="Working through rows to save geodata..."):
 
             latitude = self.data.iloc[row, self.latitudes_index]
             longitude = self.data.iloc[row, self.longitudes_index]    
@@ -398,7 +397,7 @@ class DirectIndexing:
         
             geodata[station_name] = [(latitude, longitude), station_id]
 
-        with open(INDEXER_TWO/"geodata_indexer_two.json") as file:
+        with open(INDEXER_TWO/f"{self.scenario}_geodata_indexer_two.json", mode="w") as file:
             json.dump(geodata, file)
 
     def full_reindexing(
@@ -431,7 +430,6 @@ class DirectIndexing:
             if delete_leftover_rows:
                 logger.info("Deleting the leftover rows...")
                 self.data = self.data.drop(self.data.index[leftover_rows], axis=0)
-                self.save_geodata()
 
             else:
                 logger.info("Initiating the reverse geocoding procedure for the leftover rows")
@@ -470,6 +468,7 @@ class DirectIndexing:
                             value=old_ids_and_their_replacements[old_id]
                         )
 
+            self.save_geodata()            
             if save:
                 self.data.to_parquet(path=fully_cleaned_data_path)
 
