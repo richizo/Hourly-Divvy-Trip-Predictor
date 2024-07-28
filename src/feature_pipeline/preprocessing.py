@@ -12,7 +12,7 @@ import pandas as pd
 # Custom code 
 from src.setup.config import config
 from src.feature_pipeline.data_extraction import load_raw_data
-from src.feature_pipeline.miscellaneous import RoundingCoordinates, DirectIndexing
+from src.feature_pipeline.station_indexing import RoundingCoordinates, DirectIndexing
 from src.feature_pipeline.feature_engineering import perform_feature_engineering
 
 from src.setup.paths import (
@@ -25,8 +25,8 @@ class DataProcessor:
         self.station_ids = None
         self.indexer = None
         self.scenarios = ["start", "end"]
-        self.starts_ts_path = TIME_SERIES_DATA / "starts_ts.parquet"
-        self.ends_ts_path = TIME_SERIES_DATA / "ends_ts.parquet"
+        self.start_ts_path = TIME_SERIES_DATA / "start_ts.parquet"
+        self.end_ts_path = TIME_SERIES_DATA / "end_ts.parquet"
 
         self.data = pd.concat(list(load_raw_data(year=year))) if not for_inference else None
 
@@ -88,13 +88,13 @@ class DataProcessor:
         training data which is subsequently saved.
 
         Args:
-            geocode (bool): whether to geocode when performing feature engineering.
+            geocode (bool): whether to geocode as part of feature engineering.
             
         Returns:
             list[pd.DataFrame]: a list containing the datasets for the starts and ends of trips.
         """
-        starts_ts, ends_ts = self.make_time_series()
-        ts_data_per_scenario = {"start": starts_ts, "end": ends_ts}
+        start_ts, end_ts = self.make_time_series()
+        ts_data_per_scenario = {"start": start_ts, "end": end_ts}
 
         training_sets = []
         for scenario in ts_data_per_scenario.keys():
@@ -122,42 +122,33 @@ class DataProcessor:
         """
         logger.info("Cleaning dataframe")
         self.data = self.clean()
-    
+
+        start_df_columns = ["started_at", "start_lat", "start_lng", "start_station_id"]
+        end_df_columns = ["ended_at", "end_lat", "end_lng", "end_station_id"]
+
         if self.use_custom_station_indexing(scenarios=self.scenarios, data=self.data) \
-            and not self.tie_ids_to_unique_coordinates(data=self.data):
+                and not self.tie_ids_to_unique_coordinates(data=self.data):
+            start_df_columns.append("start_station_name")
+            end_df_columns.append("end_station_name")
 
-            start_df = self.data[
-                ["started_at", "start_lat", "start_lng", "start_station_id", "start_station_name"]
-            ]
-
-            end_df = self.data[
-                ["ended_at", "end_lat", "end_lng", "end_station_id", "end_station_name"]
-            ]
-
-        else:
-            start_df = self.data[
-                ["started_at", "start_lat", "start_lng", "start_station_id"]
-            ]
-
-            end_df = self.data[
-                ["ended_at", "end_lat", "end_lng", "end_station_id"]
-            ]
+        start_df = self.data[start_df_columns]
+        end_df = self.data[end_df_columns]
 
         logger.info("Transforming the data into a time series...")
-        starts_ts, ends_ts = self.transform_cleaned_data_into_ts_data(start_df=start_df, end_df=end_df)
-        return starts_ts, ends_ts
+        start_ts, end_ts = self.transform_cleaned_data_into_ts_data(start_df=start_df, end_df=end_df)
+        return start_ts, end_ts
 
     def clean(self, save: bool = True) -> pd.DataFrame:
 
         if self.use_custom_station_indexing(scenarios=self.scenarios, data=self.data) \
-            and self.tie_ids_to_unique_coordinates(data=self.data):
+                and self.tie_ids_to_unique_coordinates(data=self.data):
 
-            cleaned_data_file_path = CLEANED_DATA/"cleaned_data_indexer_one.parquet"
-            
+            cleaned_data_file_path = CLEANED_DATA / "cleaned_data_indexer_one.parquet"
+
         elif self.use_custom_station_indexing(scenarios=self.scenarios, data=self.data) \
-            and not self.tie_ids_to_unique_coordinates(data=self.data):
+                and not self.tie_ids_to_unique_coordinates(data=self.data):
 
-            cleaned_data_file_path = CLEANED_DATA/"cleaned_data_indexer_two.parquet"
+            cleaned_data_file_path = CLEANED_DATA / "partially_cleaned_data_indexer_two.parquet"
 
         else:
             raise NotImplementedError(
@@ -165,7 +156,7 @@ class DataProcessor:
             )
 
         if not Path(cleaned_data_file_path).is_file():
-            
+
             self.data["started_at"] = pd.to_datetime(self.data["started_at"], format="mixed")
             self.data["ended_at"] = pd.to_datetime(self.data["ended_at"], format="mixed")
 
@@ -210,7 +201,6 @@ class DataProcessor:
 
             if self.use_custom_station_indexing(data=self.data, scenarios=self.scenarios) and \
                     self.tie_ids_to_unique_coordinates(data=self.data):
-                    
                 features_to_drop.extend(
                     ["start_station_id", "start_station_name", "end_station_id", "end_station_name"]
                 )
@@ -235,23 +225,20 @@ class DataProcessor:
         """
         Converts cleaned data into time series data.
 
-        In addition to the putting the start and end times in hourly form, we approximate
+        In addition to the putting the arrival and departure times in hourly form, we approximate
         the latitudes and longitudes of each point of origin or destination (we are targeting
         no more than a 100m radius of each point, but ideally we would like to maintain a 10m
         radius), and use these to construct new station IDs.
 
         Args:
-            start_df (pd.DataFrame): dataframe consisting of the "started_at", "start_lat",
-                                     and "start_lng" columns.
+            start_df (pd.DataFrame): dataframe of departure data
 
-            end_df (pd.DataFrame): dataframe consisting of the "ended_at", "stop_latitude",
-                                   and "stop_lng" columns.
+            end_df (pd.DataFrame): dataframe of arrival data
 
-            save (bool): whether we wish to save the time series data
+            save (bool): whether we wish to save the generated time series data
 
         Returns:
-            tuple[pd.DataFrame, pd.DataFrame]: the time series datasets on the starts and ends
-                                               of trips.
+            tuple[pd.DataFrame, pd.DataFrame]: the time series datasets on arrivals or departures
         """
 
         def _get_ts_or_begin_transformation(start_ts_path: str, end_ts_path: str) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -268,13 +255,13 @@ class DataProcessor:
                 return start_ts, end_ts
 
             elif not Path(start_ts_path).exists() and Path(end_ts_path).exists():
-                logger.warning("Time series data for trip starts has not been made")
+                logger.warning("Time series data for departures has not been made")
                 start_ts = _begin_transformation(missing_scenario="start")
                 end_ts = pd.read_parquet(path=end_ts_path)
                 return start_ts, end_ts
 
             elif Path(start_ts_path).exists() and not Path(end_ts_path).exists():
-                logger.warning("Time series data for the ends of trips has not been made")
+                logger.warning("Time series data for arrivals has not been made")
                 start_ts = pd.read_parquet(path=start_ts_path)
                 end_ts = _begin_transformation(missing_scenario="end")
                 return start_ts, end_ts
@@ -295,7 +282,7 @@ class DataProcessor:
                     2) mistakes that were deeply embedded in the feature pipeline.
 
                 As a result, I decided to match approximations of each coordinate with an ID of 
-                my own making. thereby reducing the size of the dataset during the aggregation 
+                my own making, thereby reducing the size of the dataset during the aggregation
                 stages of the creation of the training data. This worked well. However, I am no
                 longer in need of any memory conservation measures because I have reduced the size of 
                 the dataset.
@@ -320,7 +307,7 @@ class DataProcessor:
                     decimal_places (int): the number of decimal places to which we may round the coordinates.
                                           Choosing 6 decimal places will result in no rounding at all.
                     
-                    start_or_end (str): whether we are looking at the starts or ends of trips.
+                    start_or_end (str): whether we are looking at arrivals or departures.
 
                 Returns:
                     pd.DataFrame: the data after the inclusion of the possibly rounded coordinates.
@@ -333,8 +320,7 @@ class DataProcessor:
                     allow_duplicates=False
                 )
 
-                cleaned_data = cleaned_data.drop(f"{start_or_end}ed_at", axis=1)  # Column no longer needed
-
+                cleaned_data = cleaned_data.drop(f"{start_or_end}ed_at", axis=1)
                 logger.info("Determining the method of dealing with invalid station indices...")
 
                 if self.use_custom_station_indexing(scenarios=[start_or_end], data=cleaned_data) and \
@@ -374,13 +360,8 @@ class DataProcessor:
 
                     logger.success("Custom station indexer required: NOT tying new IDs to unique coordinates")
                     self.indexer = DirectIndexing(scenario=start_or_end, data=cleaned_data)
-                    
-                    cleaned_data = self.indexer.make_and_insert_new_ids(
-                        delete_leftover_rows=True, 
-                        reverse_geocode=False
-                    )
 
-                    
+                    cleaned_data = self.indexer.full_reindexing(delete_leftover_rows=True)
 
                 else:
                     raise NotImplementedError(
@@ -421,7 +402,7 @@ class DataProcessor:
 
                 agg_data = interim_data.groupby(
                     [f"{start_or_end}_hour", f"{start_or_end}_station_id"]).size().reset_index()
-                
+
                 agg_data = agg_data.rename(columns={0: "trips"})
                 return agg_data
 
@@ -446,8 +427,8 @@ class DataProcessor:
                 )
 
                 if save:
-                    start_ts.to_parquet(TIME_SERIES_DATA / "starts_ts.parquet")
-                    end_ts.to_parquet(TIME_SERIES_DATA / "ends_ts.parquet")
+                    start_ts.to_parquet(TIME_SERIES_DATA / "start_ts.parquet")
+                    end_ts.to_parquet(TIME_SERIES_DATA / "end_ts.parquet")
 
                 return start_ts, end_ts
 
@@ -466,7 +447,7 @@ class DataProcessor:
 
                 return ts_data
 
-        return _get_ts_or_begin_transformation(start_ts_path=self.starts_ts_path, end_ts_path=self.ends_ts_path)
+        return _get_ts_or_begin_transformation(start_ts_path=self.start_ts_path, end_ts_path=self.end_ts_path)
 
     @staticmethod
     def get_cutoff_indices(ts_data: pd.DataFrame, input_seq_len: int, step_size: int) -> list:
