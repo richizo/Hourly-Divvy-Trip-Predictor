@@ -1,4 +1,3 @@
-# Utilities
 import json
 import random
 
@@ -6,11 +5,9 @@ from tqdm import tqdm
 from loguru import logger
 from pathlib import Path, PosixPath
 
-# Data Manipulation and Access
 import numpy as np
 import pandas as pd
 
-# Custom modules
 from src.setup.paths import INDEXER_TWO, CLEANED_DATA
 from src.feature_pipeline.feature_engineering import ReverseGeocoding
 
@@ -34,33 +31,27 @@ class RoundingCoordinates:
 
             scenario (str): whether we are looking at "start" (departures) or "end" (arrival) data.
         """
+        self.scenario = scenario
         self.decimal_places = decimal_places
+        self.data = data.drop(f"{scenario}_station_id", axis=1)
 
-    def add_column_of_rounded_coordinates_to_dataframe(self, scenario: str, data: pd.DataFrame) -> None:
+    def add_column_of_rounded_coordinates_to_dataframe(self) -> None:
         """
         This function takes the latitude and longitude columns of a dataframe, rounds them down to a 
         specified number of decimal places, and makes a column which consists of points containing the 
         rounded latitudes and longitudes.
         """
+        logger.info(f"Approximating the coordinates of the location where each trip {self.scenario}s...")
+
         new_latitudes = []
         new_longitudes = []
 
-        latitudes = tqdm(
-            iterable=data[f"{scenario}_lat"].values,
-            desc="Working on latitudes"
-        )
-
-        longitudes = tqdm(
-            iterable=data[f"{scenario}_lng"].values,
-            desc="Working on longitudes"
-        )
-
-        for latitude in latitudes:
+        for latitude in tqdm(iterable=self.data[f"{self.scenario}_lat"].values, desc="Working on latitudes"):
             new_latitudes.append(
                 np.round(latitude, decimals=self.decimal_places)
             )
 
-        for longitude in longitudes:
+        for longitude in tqdm(iterable=self.data[f"{self.scenario}_lng"].values, desc="Working on longitudes"):
             new_longitudes.append(
                 np.round(longitude, decimals=self.decimal_places)
             )
@@ -68,36 +59,35 @@ class RoundingCoordinates:
         for coordinate_name, coordinate in zip(
                 ["lat", "lng"], [new_latitudes, new_longitudes]
         ):
-            data.insert(
-                loc=data.shape[1],
-                column=f"rounded_{scenario}_{coordinate_name}",
+            self.data.insert(
+                loc=self.data.shape[1],
+                column=f"rounded_{self.scenario}_{coordinate_name}",
                 value=pd.Series(coordinate),
                 allow_duplicates=False
             )
 
         # Remove the original latitudes and longitudes
-        data = data.drop(
-            columns=[f"{scenario}_lat", f"{scenario}_lng"]
+        self.data = self.data.drop(
+            columns=[f"{self.scenario}_lat", f"{self.scenario}_lng"]
         )
 
         rounded_points = list(
             zip(
-                data[f"rounded_{scenario}_lat"], data[f"rounded_{scenario}_lng"]
+                self.data[f"rounded_{self.scenario}_lat"], self.data[f"rounded_{self.scenario}_lng"]
             )
         )
 
         # Insert the rounded() coordinates as points
-        data.insert(
-            loc=data.shape[1],
-            column=f"rounded_{scenario}_points",
+        self.data.insert(
+            loc=self.data.shape[1],
+            column=f"rounded_{self.scenario}_points",
             value=pd.Series(rounded_points),
             allow_duplicates=False
         )
 
         # Remove the rounded latitudes and longitudes that we added
-        data = data.drop(
-            columns=[f"rounded_{scenario}_lat", f"rounded_{scenario}_lng"],
-            inplace=True
+        self.data = self.data.drop(
+            columns=[f"rounded_{self.scenario}_lat", f"rounded_{self.scenario}_lng"]
         )
 
     def make_station_ids_from_unique_coordinates(self) -> dict[float, int]:
@@ -106,7 +96,9 @@ class RoundingCoordinates:
         associates each point with a corresponding number. This effectively creates new 
         IDs for each location.
         """
-        unique_coordinates = self.data[f"rounded_{self.scenario}_points"].unique()
+        logger.info("Matching up approximate locations with generated IDs...")
+
+        unique_coordinates = self.data.loc[:, f"rounded_{self.scenario}_points"].unique()
         num_unique_points = len(unique_coordinates)
 
         # Set a seed to ensure reproducibility. 
@@ -123,24 +115,26 @@ class RoundingCoordinates:
 
         return points_and_new_ids
 
-    def add_column_of_ids(self, data: pd.DataFrame, scenario: str, points_and_ids: dict) -> None:
+    def add_column_of_ids(self, points_and_ids: dict) -> None:
         """
         Take each point, and the ID which corresponds to it (within its dictionary),
         and put those IDs in the relevant dataframe (in a manner that matches each 
         point with its ID row-wise).
 
         Args:
+            data:
+            scenario:
             points_and_ids (dict): dictionary of unique coordinates and IDs.
         """
-        station_ids = [
-            points_and_ids[point] for point in list(data.loc[:, f"rounded_{scenario}_points"]) if
+        new_station_ids = [
+            points_and_ids[point] for point in list(self.data.loc[:, f"rounded_{self.scenario}_points"]) if
             point in points_and_ids.keys()
         ]
 
-        data.insert(
-            loc=data.shape[1],
-            column=f"{scenario}_station_id",
-            value=pd.Series(station_ids),
+        self.data.insert(
+            loc=self.data.shape[1],
+            column=f"{self.scenario}_station_id",
+            value=pd.Series(new_station_ids),
             allow_duplicates=False
         )
 
@@ -191,8 +185,8 @@ class DirectIndexing:
         """
         counter = 0
         for row in tqdm(
-            iterable=range(self.data.shape[0]),
-            desc="Checking for rows that have either missing station names or station IDs"
+                iterable=range(self.data.shape[0]),
+                desc="Checking for rows that have either missing station names or station IDs"
         ):
             station_id_for_row = self.data.iloc[row, self.station_id_index]
             station_name_for_row = self.data.iloc[row, self.station_name_index]
@@ -207,12 +201,12 @@ class DirectIndexing:
         addendum = "still" if repeat else ""
         return [
             row for row in tqdm(
-                iterable=range(self.data.shape[0]), 
+                iterable=range(self.data.shape[0]),
                 desc=f"Searching for rows that {addendum} have missing station names and IDs"
             )
-            
+
             if pd.isnull(self.data.iloc[row, self.station_id_index]) and
-            pd.isnull(self.data.iloc[row, self.station_name_index])
+               pd.isnull(self.data.iloc[row, self.station_name_index])
         ]
 
     def find_rows_with_known_ids_and_names(self, save: bool = True) -> dict[str, tuple[float]]:
@@ -234,8 +228,8 @@ class DirectIndexing:
             rows_and_coordinates_with_known_ids_names = {}
 
             for row in tqdm(
-                iterable=range(self.data.shape[0]),
-                desc="Looking for any row that has either a missing station ID OR a missing station name."
+                    iterable=range(self.data.shape[0]),
+                    desc="Looking for any row that has either a missing station ID OR a missing station name."
             ):
                 latitude = self.data.iloc[row, self.latitudes_index]
                 longitude = self.data.iloc[row, self.longitudes_index]
@@ -302,7 +296,7 @@ class DirectIndexing:
             logger.info("Performing the matching operation...")
 
             for row in tqdm(
-                iterable=self.find_rows_with_missing_ids_and_names(repeat=False)
+                    iterable=self.find_rows_with_missing_ids_and_names(repeat=False)
             ):
 
                 if row in rows_with_the_issue_and_their_discovered_names_and_ids.keys():
@@ -339,42 +333,22 @@ class DirectIndexing:
         matching procedure. Then replace the missing station names and IDs in these rows of the dataframe 
         with those that were discovered.
         """
-        replaced_data_path = INDEXER_TWO/f"{self.scenario}_replaced_missing_names_and_ids.parquet"
+        replaced_data_path = INDEXER_TWO / f"{self.scenario}_replaced_missing_names_and_ids.parquet"
 
-        if Path(replaced_data_path).is_file():    
+        if Path(replaced_data_path).is_file():
             self.data = pd.read_parquet(replaced_data_path)
 
         else:
             rows_with_new_names_and_ids: dict[int, tuple[str, str]] = self.match_names_and_ids_by_station_proximity()
 
-            rows_to_replace = tqdm(
-                iterable=rows_with_new_names_and_ids.keys(),
-                desc=f"Replacing missing IDs and names in the dataset"
-            )
-
-            for row in rows_to_replace: 
-
-                new_station_id: str = rows_with_new_names_and_ids[row][0]
-                new_station_name: str = rows_with_new_names_and_ids[row][1]
-
-                # Because the row indices in the dictionary are strings, and I don't want the iloc method to complain.
-                row = int(row)  
-
-                if row <= len(self.data):  # In place as a guarantee against an out of bounds error.
-
-                    # These are of type "None", however the replace method of the dataframe class complains if I try to
-                    # replace an object of type "None". So I'll just wrap the objects in their proper types
-                    # to shut it up.
-                    empty_station_id = str(self.data.iloc[row, self.station_id_index]) 
-                    empty_station_name = str(self.data.iloc[row, self.station_name_index])
-
-                    self.data.replace(to_replace=empty_station_id, value=new_station_id)
-                    self.data.replace(to_replace=empty_station_id, value=new_station_name)
-
-                else:
-                    logger.error(
-                        f"Row #{row} is not part of the dataset. It was probably removed during an earlier process"
-                    )
+            # Write the target row indices, the new IDs, and the new names as vectors
+            target_rows_indices = [int(row) for row in rows_with_new_names_and_ids.keys()]
+            new_ids = {int(row): new_id_and_name[0] for row, new_id_and_name in rows_with_new_names_and_ids.items()}
+            new_names = {int(row): new_id_and_name[1] for row, new_id_and_name in rows_with_new_names_and_ids.items()}
+            
+            # Perform the replacement
+            self.data.iloc[target_rows_indices, self.station_id_index] = self.data.iloc[target_rows_indices, self.station_id_index].map(new_ids)
+            self.data.iloc[target_rows_indices, self.station_name_index] = self.data.iloc[target_rows_indices, self.station_name_index].map(new_names)
 
             if save:
                 self.data.to_parquet(path=replaced_data_path)
@@ -387,16 +361,16 @@ class DirectIndexing:
         """
 
         latitudes = self.data.iloc[:, self.latitudes_index]
-        longitudes = self.data.iloc[:, self.longitudes_index]    
+        longitudes = self.data.iloc[:, self.longitudes_index]
         station_ids = self.data.iloc[:, self.station_id_index]
         station_names = self.data.iloc[:, self.station_name_index]
-        
+
         geodata = {
-            station_name:[(latitude, longitude), station_id] for (latitude, longitude, station_id, station_name) \
-                in zip(latitudes, longitudes, station_ids, station_names)
+            station_name: [(latitude, longitude), station_id] for (latitude, longitude, station_id, station_name) \
+            in zip(latitudes, longitudes, station_ids, station_names)
         }
 
-        with open(INDEXER_TWO/f"{self.scenario}_geodata_indexer_two.json", mode="w") as file:
+        with open(INDEXER_TWO / f"{self.scenario}_geodata_indexer_two.json", mode="w") as file:
             json.dump(geodata, file)
 
     def full_reindexing(self, delete_leftover_rows: bool = True, save: bool = True) -> pd.DataFrame:
@@ -411,7 +385,7 @@ class DirectIndexing:
         Returns:
             pd.DataFrame: the data, but with all the station IDs re-indexed
         """
-        fully_cleaned_data_path = CLEANED_DATA/f"fully_clean_{self.scenario}s.parquet"
+        fully_cleaned_data_path = CLEANED_DATA / f"fully_cleaned_{self.scenario}s.parquet"
 
         if Path(fully_cleaned_data_path).is_file():
             logger.success("Data with completely re-indexed station IDs already exists. Fetching it...")
@@ -449,13 +423,14 @@ class DirectIndexing:
             old_and_new_ids = {old_id: index for index, old_id in enumerate(unique_old_ids)}
             self.data.iloc[:, self.station_id_index] = station_ids.map(old_and_new_ids)
 
-            self.data = self.data.drop(
-                columns=[f"{self.scenario}_lat", f"{self.scenario}_lat", f"{self.scenario}_name"]
-            )
             self.data = self.data.reset_index(drop=True)
+            self.save_geodata()
+
+            self.data = self.data.drop(
+                columns=[f"{self.scenario}_lat", f"{self.scenario}_lat", f"{self.scenario}_station_name"]
+            )
 
             if save:
-                self.save_geodata()
                 self.data.to_parquet(path=fully_cleaned_data_path)
 
         return self.data

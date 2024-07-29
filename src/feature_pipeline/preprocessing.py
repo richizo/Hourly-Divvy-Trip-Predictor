@@ -1,19 +1,16 @@
-# Utilities 
 import os
 import warnings
 from tqdm import tqdm
 from loguru import logger
 from pathlib import Path
 
-# Data Manipulation & Access
 import numpy as np
 import pandas as pd
 
-# Custom code 
 from src.setup.config import config
-from src.feature_pipeline.data_extraction import load_raw_data
-from src.feature_pipeline.station_indexing import RoundingCoordinates, DirectIndexing
-from src.feature_pipeline.feature_engineering import perform_feature_engineering
+from data_extraction import load_raw_data
+from station_indexing import RoundingCoordinates, DirectIndexing
+from feature_engineering import perform_feature_engineering
 
 from src.setup.paths import (
     CLEANED_DATA, TRAINING_DATA, TIME_SERIES_DATA, INDEXER_ONE, INDEXER_TWO, INFERENCE_DATA, make_fundamental_paths
@@ -23,7 +20,6 @@ from src.setup.paths import (
 class DataProcessor:
     def __init__(self, year: int, for_inference: bool):
         self.station_ids = None
-        self.indexer = None
         self.scenarios = ["start", "end"]
         self.start_ts_path = TIME_SERIES_DATA / "start_ts.parquet"
         self.end_ts_path = TIME_SERIES_DATA / "end_ts.parquet"
@@ -85,8 +81,8 @@ class DataProcessor:
     def make_training_data(self, geocode: bool) -> list[pd.DataFrame] | tuple[pd.DataFrame, pd.DataFrame]:
         """
         Extract raw data, clean it, transform it into time series data, and transform that in turn into
-        training data which is subsequently saved.
-
+        training data which is subsequently saved. 
+-
         Args:
             geocode (bool): whether to geocode as part of feature engineering.
             
@@ -144,7 +140,7 @@ class DataProcessor:
         if self.use_custom_station_indexing(scenarios=self.scenarios, data=self.data) \
                 and self.tie_ids_to_unique_coordinates(data=self.data):
 
-            cleaned_data_file_path = CLEANED_DATA / "cleaned_data_indexer_one.parquet"
+            cleaned_data_file_path = CLEANED_DATA / "partially_cleaned_data_indexer_one.parquet"
 
         elif self.use_custom_station_indexing(scenarios=self.scenarios, data=self.data) \
                 and not self.tie_ids_to_unique_coordinates(data=self.data):
@@ -203,7 +199,7 @@ class DataProcessor:
             if self.use_custom_station_indexing(data=self.data, scenarios=self.scenarios) and \
                     self.tie_ids_to_unique_coordinates(data=self.data):
                 features_to_drop.extend(
-                    ["start_station_id", "start_station_name", "end_station_id", "end_station_name"]
+                    ["start_station_id", "start_station_name", "end_station_name"]
                 )
 
             self.data = self.data.drop(columns=features_to_drop)
@@ -226,7 +222,7 @@ class DataProcessor:
         """
         Converts cleaned data into time series data.
 
-        In addition to the putting the arrival and departure times in hourly form, we approximate
+        src.feature_pipeline.In addition to the putting the arrival and departure times in hourly form, we approximate
         the latitudes and longitudes of each point of origin or destination (we are targeting
         no more than a 100m radius of each point, but ideally we would like to maintain a 10m
         radius), and use these to construct new station IDs.
@@ -256,13 +252,13 @@ class DataProcessor:
                 return start_ts, end_ts
 
             elif not Path(start_ts_path).exists() and Path(end_ts_path).exists():
-                logger.warning("Time series data for departures has not been made")
+                logger.warning("No time series dataset for departures has been made")
                 start_ts = _begin_transformation(missing_scenario="start")
                 end_ts = pd.read_parquet(path=end_ts_path)
                 return start_ts, end_ts
 
             elif Path(start_ts_path).exists() and not Path(end_ts_path).exists():
-                logger.warning("Time series data for arrivals has not been made")
+                logger.warning("No time series dataset for arrivals has been made")
                 start_ts = pd.read_parquet(path=start_ts_path)
                 end_ts = _begin_transformation(missing_scenario="end")
                 return start_ts, end_ts
@@ -272,11 +268,7 @@ class DataProcessor:
             dictionaries: list[dict] = []
             interim_dataframes: list[pd.DataFrame] = []
 
-            def __investigate_making_new_station_ids(
-                    cleaned_data: pd.DataFrame,
-                    decimal_places: int,
-                    start_or_end: str
-            ) -> pd.DataFrame:
+            def __investigate_making_new_station_ids(cleaned_data: pd.DataFrame, start_or_end: str) -> pd.DataFrame:
                 """
                 In an earlier version of the project, I ran into memory issues for two reasons:
                     1) I was dealing with more than a year's worth of data. 
@@ -311,7 +303,7 @@ class DataProcessor:
                     start_or_end (str): whether we are looking at arrivals or departures.
 
                 Returns:
-                    pd.DataFrame: the data after the inclusion of the possibly rounded coordinates.
+                    pd.DataFrame:
                 """
                 logger.info(f"Recording the hour during which each trip {start_or_end}s...")
                 cleaned_data.insert(
@@ -321,49 +313,54 @@ class DataProcessor:
                     allow_duplicates=False
                 )
 
-                cleaned_data = cleaned_data.drop(f"{start_or_end}ed_at", axis=1)
+                interim_data = cleaned_data.drop(f"{start_or_end}ed_at", axis=1)
                 logger.info("Determining the method of dealing with invalid station indices...")
 
-                if self.use_custom_station_indexing(scenarios=[start_or_end], data=cleaned_data) and \
-                        self.tie_ids_to_unique_coordinates(data=cleaned_data):
+                if self.use_custom_station_indexing(scenarios=[start_or_end], data=self.data) and \
+                        self.tie_ids_to_unique_coordinates(data=self.data):
 
                     logger.success("Custom station indexer required: tying new station IDs to unique coordinates")
-
-                    cleaned_data = cleaned_data.drop(columns=f"{start_or_end}_station_id", axis=1)
-                    logger.info(f"Approximating the coordinates of the location where each trip {start_or_end}s...")
-
-                    self.indexer = RoundingCoordinates(
-                        scenario=start_or_end, data=cleaned_data, decimal_places=decimal_places
-                    )
+                    
+                    # Instantiate the custom indexer, choosing a default of 5 decimal places.
+                    indexer = RoundingCoordinates(scenario=start_or_end, data=interim_data, decimal_places=5)
 
                     # Round the coordinates down to the specified dp, and add these rounded coordinates to the data 
-                    self.indexer.add_column_of_rounded_coordinates_to_dataframe(data=cleaned_data)
-
-                    interim_dataframes.append(cleaned_data)
-                    logger.info("Matching up approximate locations with generated IDs...")
+                    indexer.add_column_of_rounded_coordinates_to_dataframe()
+                    interim_dataframes.append(interim_data)
 
                     # Make a list of dictionaries of start points and IDs
-                    origins_or_destinations_and_ids = self.indexer.make_station_ids_from_unique_coordinates()
+                    origins_or_destinations_and_ids = indexer.make_station_ids_from_unique_coordinates()
                     dictionaries.append(origins_or_destinations_and_ids)
 
+                    if missing_scenario == "start" or "end":
+                        indexer.add_column_of_ids(points_and_ids=dictionaries[0])
+
+                    elif missing_scenario == "both":
+                        if start_or_end == "start":
+                            indexer.add_column_of_ids(points_and_ids=dictionaries[0])
+                        elif start_or_end == "end":
+                            indexer.add_column_of_ids(points_and_ids=dictionaries[1])
+
                     # Critical for recovering the (rounded) coordinates and their corresponding IDs later.
-                    self.indexer.save_geodata_dict(
+                    indexer.save_geodata(
                         points_and_ids=origins_or_destinations_and_ids,
                         folder=INDEXER_ONE,
                         file_name=f"rounded_{start_or_end}_points_and_new_ids"
                     )
 
                     logger.success(f"Done creating IDs for the approximate locations ({start_or_end}s of the trips)")
-                    return cleaned_data
+                    return interim_data
 
-                elif self.use_custom_station_indexing(scenarios=[start_or_end], data=cleaned_data) and \
-                        not self.tie_ids_to_unique_coordinates(data=cleaned_data):
+                elif self.use_custom_station_indexing(scenarios=[start_or_end], data=self.data) and \
+                        not self.tie_ids_to_unique_coordinates(data=self.data):
 
                     logger.success("Custom station indexer required: NOT tying new IDs to unique coordinates")
-                    self.indexer = DirectIndexing(scenario=start_or_end, data=cleaned_data)
+                    indexer = DirectIndexing(scenario=start_or_end, data=cleaned_data)
 
-                    cleaned_data = self.indexer.full_reindexing(delete_leftover_rows=True)
-                    return cleaned_data
+                    interim_data = indexer.full_reindexing(delete_leftover_rows=True)
+                    interim_dataframes.append(interim_data)
+
+                    return interim_data
 
                 else:
                     raise NotImplementedError(
@@ -371,36 +368,14 @@ class DataProcessor:
                     )
 
             def __aggregate_final_ts(
-                    interim_data: pd.DataFrame,
-                    start_or_end: str
-            ) -> pd.DataFrame | list[pd.DataFrame, pd.DataFrame]:
+                interim_data: pd.DataFrame, start_or_end: str) -> pd.DataFrame | list[pd.DataFrame, pd.DataFrame]:
 
-                if isinstance(self.indexer, RoundingCoordinates):
+                #  if self.use_custom_station_indexing(data=self.data, scenarios=[start_or_end]) and \
+                #        self.tie_ids_to_unique_coordinates(data=self.data):
 
-                    if missing_scenario == "start" or "end":
-                        self.indexer.add_column_of_ids(
-                            data=interim_data,
-                            scenario=start_or_end,
-                            points_and_ids=dictionaries[0]
-                        )
+                #    interim_data = interim_data.drop(f"rounded_{start_or_end}_points", axis=1)
 
-                    elif missing_scenario == "both":
-                        if start_or_end == "start":
-                            self.indexer.add_column_of_ids(
-                                data=interim_data,
-                                scenario=start_or_end,
-                                points_and_ids=dictionaries[0]
-                            )
-
-                        elif start_or_end == "end":
-                            self.indexer.add_column_of_ids(
-                                data=interim_data,
-                                scenario=start_or_end,
-                                points_and_ids=dictionaries[1]
-                            )
-
-                    interim_data = interim_data.drop(f"rounded_{start_or_end}_points", axis=1)
-                    logger.info(f"Aggregating the final time series data for the {start_or_end}s of trips...")
+                logger.info(f"Aggregating the final time series data for the {start_or_end}s of trips...")
 
                 agg_data = interim_data.groupby(
                     [f"{start_or_end}_hour", f"{start_or_end}_station_id"]).size().reset_index()
@@ -408,46 +383,73 @@ class DataProcessor:
                 agg_data = agg_data.rename(columns={0: "trips"})
                 return agg_data
 
-            if missing_scenario == "both":
-                for data, scenario in zip([start_df, end_df], self.scenarios):
-                    # The coordinates are in 6 dp, so no rounding is happening here.
-                    __investigate_making_new_station_ids(cleaned_data=data, start_or_end=scenario, decimal_places=6)
+            indexer_two_scenarios = self.scenarios if missing_scenario == "both" else [missing_scenario]
 
-                # Get all the coordinates that are common to both dictionaries
-                common_points = [point for point in dictionaries[0].keys() if point in dictionaries[1].keys()]
+            if self.use_custom_station_indexing(scenarios=indexer_two_scenarios, data=self.data) and \
+                    self.tie_ids_to_unique_coordinates(data=self.data):
 
-                # Ensure that these common points have the same IDs in each dictionary.
-                for point in common_points:
-                    dictionaries[0][point] = dictionaries[1][point]
+                if missing_scenario == "both":
+                    for data, scenario in zip([start_df, end_df], self.scenarios):
+                        # The coordinates are in 6 dp, so no rounding is happening here.
+                        __investigate_making_new_station_ids(cleaned_data=data, start_or_end=scenario)
 
-                start_ts = __aggregate_final_ts(
-                    interim_data=interim_dataframes[0], start_or_end="start"
-                )
+                    # Get all the coordinates that are common to both dictionaries
+                    common_points = [point for point in dictionaries[0].keys() if point in dictionaries[1].keys()]
 
-                end_ts = __aggregate_final_ts(
-                    interim_data=interim_dataframes[1], start_or_end="end"
-                )
+                    # Ensure that these common points have the same IDs in each dictionary.
+                    for point in common_points:
+                        dictionaries[0][point] = dictionaries[1][point]
 
-                if save:
-                    start_ts.to_parquet(TIME_SERIES_DATA / "start_ts.parquet")
-                    end_ts.to_parquet(TIME_SERIES_DATA / "end_ts.parquet")
+                    print(interim_dataframes[0].columns)
+                    breakpoint()
 
-                return start_ts, end_ts
+                    start_ts = __aggregate_final_ts(interim_data=interim_dataframes[0], start_or_end="start")
+                    end_ts = __aggregate_final_ts(interim_data=interim_dataframes[1], start_or_end="end")
 
-            elif missing_scenario == "start" or "end":
-                data = start_df if missing_scenario == "start" else end_df
-                data = __investigate_making_new_station_ids(
-                    cleaned_data=data,
-                    start_or_end=missing_scenario,
-                    decimal_places=5
-                )
+                    if save:
+                        start_ts.to_parquet(TIME_SERIES_DATA / "start_ts.parquet")
+                        end_ts.to_parquet(TIME_SERIES_DATA / "end_ts.parquet")
 
-                ts_data = __aggregate_final_ts(interim_data=data, start_or_end=missing_scenario)
+                    return start_ts, end_ts
 
-                if save:
-                    ts_data.to_parquet(TIME_SERIES_DATA / f"{missing_scenario}s_ts.parquet")
+                elif missing_scenario == "start" or "end":
+                    
+                    data = start_df if missing_scenario == "start" else end_df
+                    data = __investigate_making_new_station_ids(cleaned_data=data, start_or_end=missing_scenario)
+                    ts_data = __aggregate_final_ts(interim_data=data, start_or_end=missing_scenario)
 
-                return ts_data
+                    if save:
+                        ts_data.to_parquet(TIME_SERIES_DATA / f"{missing_scenario}s_ts.parquet")
+
+                    return ts_data
+
+
+            elif self.use_custom_station_indexing(scenarios=indexer_two_scenarios, data=self.data) and \
+                not self.tie_ids_to_unique_coordinates(data=self.data):
+
+                    if missing_scenario == "both":
+                        for data, scenario in zip([start_df, end_df], self.scenarios):
+                            __investigate_making_new_station_ids(cleaned_data=data, start_or_end=scenario)
+
+                        start_ts = __aggregate_final_ts(interim_data=interim_dataframes[0], start_or_end="start")
+                        end_ts = __aggregate_final_ts(interim_data=interim_dataframes[1], start_or_end="end")
+
+                        if save:
+                            start_ts.to_parquet(TIME_SERIES_DATA / "start_ts.parquet")
+                            end_ts.to_parquet(TIME_SERIES_DATA / "end_ts.parquet")
+
+                        return start_ts, end_ts
+
+                    elif missing_scenario == "start" or "end":
+
+                        data = start_df if missing_scenario == "start" else end_df
+                        data = __investigate_making_new_station_ids(cleaned_data=data, start_or_end=missing_scenario)
+                        ts_data = __aggregate_final_ts(interim_data=data, start_or_end=missing_scenario)
+
+                        if save:
+                            ts_data.to_parquet(TIME_SERIES_DATA / f"{missing_scenario}_ts.parquet")
+
+                        return ts_data
 
         return _get_ts_or_begin_transformation(start_ts_path=self.start_ts_path, end_ts_path=self.end_ts_path)
 
