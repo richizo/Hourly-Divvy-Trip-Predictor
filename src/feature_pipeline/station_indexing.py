@@ -176,8 +176,6 @@ class DirectIndexing:
         self.latitudes_index = self.data.columns.get_loc(f"{scenario}_lat")
         self.longitudes_index = self.data.columns.get_loc(f"{scenario}_lng")
 
-        self.station_ids = self.data.loc[:, f"{scenario}_station_id"]
-        self.station_names = self.data.loc[:, f"{scenario}_station_name"]
         self.station_id_index = self.data.columns.get_loc(f"{scenario}_station_id")
         self.station_name_index = self.data.columns.get_loc(f"{scenario}_station_name")
 
@@ -354,7 +352,7 @@ class DirectIndexing:
                 desc=f"Replacing missing IDs and names in the dataset"
             )
 
-            for row in rows_to_replace:
+            for row in rows_to_replace: 
 
                 new_station_id: str = rows_with_new_names_and_ids[row][0]
                 new_station_name: str = rows_with_new_names_and_ids[row][1]
@@ -387,24 +385,21 @@ class DirectIndexing:
         """
         Saves the station ID, mame, and coordinates for use in the frontend
         """
-        geodata = {}
-        for row in tqdm(iterable=range(self.data.shape[0]), desc="Working through rows to save geodata..."):
 
-            latitude = self.data.iloc[row, self.latitudes_index]
-            longitude = self.data.iloc[row, self.longitudes_index]    
-            station_id = self.data.iloc[row, self.station_id_index]
-            station_name = self.data.iloc[row, self.station_name_index]
+        latitudes = self.data.iloc[:, self.latitudes_index]
+        longitudes = self.data.iloc[:, self.longitudes_index]    
+        station_ids = self.data.iloc[:, self.station_id_index]
+        station_names = self.data.iloc[:, self.station_name_index]
         
-            geodata[station_name] = [(latitude, longitude), station_id]
+        geodata = {
+            station_name:[(latitude, longitude), station_id] for (latitude, longitude, station_id, station_name) \
+                in zip(latitudes, longitudes, station_ids, station_names)
+        }
 
         with open(INDEXER_TWO/f"{self.scenario}_geodata_indexer_two.json", mode="w") as file:
             json.dump(geodata, file)
 
-    def full_reindexing(
-        self, 
-        delete_leftover_rows: bool = True,
-        save: bool = True
-    ) -> pd.DataFrame:
+    def full_reindexing(self, delete_leftover_rows: bool = True, save: bool = True) -> pd.DataFrame:
         """
         Make a replacement for every existing ID because many of the IDs are long strings (see the preprocessing
         script for details).
@@ -448,28 +443,15 @@ class DirectIndexing:
 
                 # TO DO: COMPLETE THIS PROCEDURE
 
-            unique_old_ids = self.data[f"{self.scenario}_station_id"].unique()
-            new_ids = range(len(unique_old_ids))
+            station_ids = self.data.iloc[:, self.station_id_index]
 
-            # Assign new station IDs
-            old_ids_and_their_replacements: dict[str | int, int] = {
-                unique_old_id: new_id for unique_old_id, new_id in zip(unique_old_ids, new_ids)
-            }
-            
-            for row in tqdm(
-                iterable=range(self.data.shape[0]), 
-                desc=f"Making new station IDs for all {self.proper_name_of_scenario}s"
-                ):
+            unique_old_ids = station_ids.unique()
+            old_and_new_ids = {old_id: index for index, old_id in enumerate(unique_old_ids)}
 
-                for old_id, new_id in zip(unique_old_ids, new_ids):
-                    if old_id == self.data.iloc[row, self.station_id_index]:
-                        self.data.replace(
-                            to_replace=old_id,
-                            value=old_ids_and_their_replacements[old_id]
-                        )
+            self.data.iloc[:, self.station_id_index] = station_ids.map(old_and_new_ids)
 
-            self.save_geodata()            
             if save:
+                self.save_geodata()
                 self.data.to_parquet(path=fully_cleaned_data_path)
 
         return self.data
