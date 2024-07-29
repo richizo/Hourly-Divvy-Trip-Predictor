@@ -126,8 +126,9 @@ class DataProcessor:
         start_df_columns = ["started_at", "start_lat", "start_lng", "start_station_id"]
         end_df_columns = ["ended_at", "end_lat", "end_lng", "end_station_id"]
 
-        if self.use_custom_station_indexing(scenarios=self.scenarios, data=self.data) \
-                and not self.tie_ids_to_unique_coordinates(data=self.data):
+        if self.use_custom_station_indexing(scenarios=self.scenarios, data=self.data) and not \
+                self.tie_ids_to_unique_coordinates(data=self.data):
+
             start_df_columns.append("start_station_name")
             end_df_columns.append("end_station_name")
 
@@ -362,6 +363,7 @@ class DataProcessor:
                     self.indexer = DirectIndexing(scenario=start_or_end, data=cleaned_data)
 
                     cleaned_data = self.indexer.full_reindexing(delete_leftover_rows=True)
+                    return cleaned_data
 
                 else:
                     raise NotImplementedError(

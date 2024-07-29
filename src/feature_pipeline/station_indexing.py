@@ -447,8 +447,12 @@ class DirectIndexing:
 
             unique_old_ids = station_ids.unique()
             old_and_new_ids = {old_id: index for index, old_id in enumerate(unique_old_ids)}
-
             self.data.iloc[:, self.station_id_index] = station_ids.map(old_and_new_ids)
+
+            self.data = self.data.drop(
+                columns=[f"{self.scenario}_lat", f"{self.scenario}_lat", f"{self.scenario}_name"]
+            )
+            self.data = self.data.reset_index(drop=True)
 
             if save:
                 self.save_geodata()
