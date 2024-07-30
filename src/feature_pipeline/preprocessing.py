@@ -1,4 +1,5 @@
 import os
+import json 
 import warnings
 from tqdm import tqdm
 from loguru import logger
@@ -8,9 +9,9 @@ import numpy as np
 import pandas as pd
 
 from src.setup.config import config
-from data_extraction import load_raw_data
-from station_indexing import RoundingCoordinates, DirectIndexing
-from feature_engineering import perform_feature_engineering
+from src.feature_pipeline.data_extraction import load_raw_data
+from src.feature_pipeline.station_indexing import RoundingCoordinates, DirectIndexing
+from src.feature_pipeline.feature_engineering import perform_feature_engineering
 
 from src.setup.paths import (
     CLEANED_DATA, TRAINING_DATA, TIME_SERIES_DATA, INDEXER_ONE, INDEXER_TWO, INFERENCE_DATA, make_fundamental_paths
@@ -265,7 +266,6 @@ class DataProcessor:
 
         def _begin_transformation(missing_scenario: str | None) -> tuple[pd.DataFrame, pd.DataFrame] | pd.DataFrame:
 
-            dictionaries: list[dict] = []
             interim_dataframes: list[pd.DataFrame] = []
 
             def __investigate_making_new_station_ids(cleaned_data: pd.DataFrame, start_or_end: str) -> pd.DataFrame:
@@ -320,35 +320,11 @@ class DataProcessor:
                         self.tie_ids_to_unique_coordinates(data=self.data):
 
                     logger.success("Custom station indexer required: tying new station IDs to unique coordinates")
-                    
-                    # Instantiate the custom indexer, choosing a default of 5 decimal places.
-                    indexer = RoundingCoordinates(scenario=start_or_end, data=interim_data, decimal_places=5)
+                    indexer = RoundingCoordinates(data= cleaned_data, scenario=start_or_end, decimal_places=4) # Default of 4 dp
 
-                    # Round the coordinates down to the specified dp, and add these rounded coordinates to the data 
-                    indexer.add_column_of_rounded_coordinates_to_dataframe()
+                    interim_data = indexer.execute()
                     interim_dataframes.append(interim_data)
 
-                    # Make a list of dictionaries of start points and IDs
-                    origins_or_destinations_and_ids = indexer.make_station_ids_from_unique_coordinates()
-                    dictionaries.append(origins_or_destinations_and_ids)
-
-                    if missing_scenario == "start" or "end":
-                        indexer.add_column_of_ids(points_and_ids=dictionaries[0])
-
-                    elif missing_scenario == "both":
-                        if start_or_end == "start":
-                            indexer.add_column_of_ids(points_and_ids=dictionaries[0])
-                        elif start_or_end == "end":
-                            indexer.add_column_of_ids(points_and_ids=dictionaries[1])
-
-                    # Critical for recovering the (rounded) coordinates and their corresponding IDs later.
-                    indexer.save_geodata(
-                        points_and_ids=origins_or_destinations_and_ids,
-                        folder=INDEXER_ONE,
-                        file_name=f"rounded_{start_or_end}_points_and_new_ids"
-                    )
-
-                    logger.success(f"Done creating IDs for the approximate locations ({start_or_end}s of the trips)")
                     return interim_data
 
                 elif self.use_custom_station_indexing(scenarios=[start_or_end], data=self.data) and \
@@ -357,7 +333,7 @@ class DataProcessor:
                     logger.success("Custom station indexer required: NOT tying new IDs to unique coordinates")
                     indexer = DirectIndexing(scenario=start_or_end, data=cleaned_data)
 
-                    interim_data = indexer.full_reindexing(delete_leftover_rows=True)
+                    interim_data = indexer.execute(delete_leftover_rows=True)
                     interim_dataframes.append(interim_data)
 
                     return interim_data
@@ -389,19 +365,26 @@ class DataProcessor:
                     self.tie_ids_to_unique_coordinates(data=self.data):
 
                 if missing_scenario == "both":
+
                     for data, scenario in zip([start_df, end_df], self.scenarios):
                         # The coordinates are in 6 dp, so no rounding is happening here.
                         __investigate_making_new_station_ids(cleaned_data=data, start_or_end=scenario)
 
+                    with open(INDEXER_ONE/"rounded_start_points_and_new_ids.json", mode="r") as file:
+                        rounded_start_points_and_ids = json.load(file)
+
+                    with open(INDEXER_ONE/"rounded_end_points_and_new_ids.json", mode="r") as file:
+                        rounded_end_points_and_ids = json.load(file)
+
                     # Get all the coordinates that are common to both dictionaries
-                    common_points = [point for point in dictionaries[0].keys() if point in dictionaries[1].keys()]
+                    common_points = [
+                        point for point in rounded_start_points_and_ids.keys() if point in \
+                             rounded_end_points_and_ids.keys()
+                    ]
 
                     # Ensure that these common points have the same IDs in each dictionary.
                     for point in common_points:
-                        dictionaries[0][point] = dictionaries[1][point]
-
-                    print(interim_dataframes[0].columns)
-                    breakpoint()
+                        rounded_start_points_and_ids[point] = rounded_end_points_and_ids[point]
 
                     start_ts = __aggregate_final_ts(interim_data=interim_dataframes[0], start_or_end="start")
                     end_ts = __aggregate_final_ts(interim_data=interim_dataframes[1], start_or_end="end")
@@ -523,7 +506,6 @@ class DataProcessor:
 
             for_inference (bool): whether we are generating this data as part of the inference pipeline, 
                             or feature pipeline.
-
 
         Returns:
             pd.DataFrame: the training data

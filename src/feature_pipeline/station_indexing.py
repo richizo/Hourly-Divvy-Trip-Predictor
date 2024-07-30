@@ -8,7 +8,7 @@ from pathlib import Path, PosixPath
 import numpy as np
 import pandas as pd
 
-from src.setup.paths import INDEXER_TWO, CLEANED_DATA
+from src.setup.paths import INDEXER_ONE, INDEXER_TWO, CLEANED_DATA
 from src.feature_pipeline.feature_engineering import ReverseGeocoding
 
 
@@ -19,23 +19,21 @@ class RoundingCoordinates:
     resulting from its use can be justified.
     """
 
-    def __init__(self, scenario: str, data: pd.DataFrame, decimal_places: int | None) -> None:
+    def __init__(self, data: pd.DataFrame, scenario: str, decimal_places: int | None) -> None:
         """
         Args:
-            data (pd.DataFrame): the data being processed
-
             decimal_places (int): the number of decimal places to which we will round the coordinates. 
                                 The original coordinates are written in 6 decimal places. For each 
                                 decimal place that is lost, the accuracy of the coordinates degrades 
                                 by a factor of 10 meters
 
-            scenario (str): whether we are looking at "start" (departures) or "end" (arrival) data.
+            scenario (str): whether we are looking at departures ("start") or arrivals ("end").
         """
         self.scenario = scenario
         self.decimal_places = decimal_places
-        self.data = data.drop(f"{scenario}_station_id", axis=1)
-
-    def add_column_of_rounded_coordinates_to_dataframe(self) -> None:
+        self.data = data
+ 
+    def add_column_of_rounded_coordinates_to_dataframe(self) -> pd.DataFrame:
         """
         This function takes the latitude and longitude columns of a dataframe, rounds them down to a 
         specified number of decimal places, and makes a column which consists of points containing the 
@@ -90,6 +88,8 @@ class RoundingCoordinates:
             columns=[f"rounded_{self.scenario}_lat", f"rounded_{self.scenario}_lng"]
         )
 
+        return self.data
+
     def make_station_ids_from_unique_coordinates(self) -> dict[float, int]:
         """
         This function makes a list of random numbers for each unique point, and 
@@ -98,34 +98,39 @@ class RoundingCoordinates:
         """
         logger.info("Matching up approximate locations with generated IDs...")
 
-        unique_coordinates = self.data.loc[:, f"rounded_{self.scenario}_points"].unique()
+        unique_coordinates = self.data[f"rounded_{self.scenario}_points"].unique()
         num_unique_points = len(unique_coordinates)
 
         # Set a seed to ensure reproducibility. 
         random.seed(69)
 
         # Make a random mixture of the numbers from 0 to len(num_unique_points) 
-        station_ids = random.sample(population=range(num_unique_points), k=num_unique_points)
+        new_station_ids = random.sample(population=range(num_unique_points), k=num_unique_points)
 
         # Make a dictionary of points
         points_and_new_ids = {}
 
-        for point, value in tqdm(zip(unique_coordinates, station_ids)):
-            points_and_new_ids[point] = value
+        for point, new_station_id in tqdm(zip(unique_coordinates, new_station_ids)):
+            points_and_new_ids[point] = new_station_id
+
+        # Because tuples can't be keys of a dictionary
+        swapped_dict = {station_id: point for point, station_id in points_and_new_ids.items()}
+        with open(INDEXER_ONE / f"rounded_{self.scenario}_points_and_new_ids.json", mode="w") as file:
+            json.dump(swapped_dict, file)
 
         return points_and_new_ids
 
-    def add_column_of_ids(self, points_and_ids: dict) -> None:
+    def execute(self) -> pd.DataFrame:
         """
         Take each point, and the ID which corresponds to it (within its dictionary),
         and put those IDs in the relevant dataframe (in a manner that matches each 
         point with its ID row-wise).
-
-        Args:
-            data:
-            scenario:
-            points_and_ids (dict): dictionary of unique coordinates and IDs.
         """
+        self.data = self.data.drop(f"{self.scenario}_station_id", axis=1)
+        self.data = self.add_column_of_rounded_coordinates_to_dataframe()
+
+        points_and_ids = self.make_station_ids_from_unique_coordinates()
+
         new_station_ids = [
             points_and_ids[point] for point in list(self.data.loc[:, f"rounded_{self.scenario}_points"]) if
             point in points_and_ids.keys()
@@ -138,26 +143,7 @@ class RoundingCoordinates:
             allow_duplicates=False
         )
 
-    @staticmethod
-    def save_geodata(points_and_ids: dict, folder: PosixPath, file_name: str):
-        """
-        Save the geographical data which consists of the station IDs and their corresponding
-        coordinates as a geojson file. It was necessary to swap the keys and values (the coordinates
-        and IDs respectively) because json.dump() does not allow tuples to be keys.
-
-        Args:
-            points_and_ids (dict): the dictionary of coordinates and their (new) IDs.
-
-            folder (PosixPath): the directory where the file is to be saved
-
-            file_name (str): the name of the .pkl file
-        """
-        swapped_dict = {
-            station_id: point for point, station_id in points_and_ids.items()
-        }
-
-        with open(f"{folder}/{file_name}.geojson", mode="w") as file:
-            json.dump(swapped_dict, file)
+        return self.data
 
 
 class DirectIndexing:
@@ -206,7 +192,7 @@ class DirectIndexing:
             )
 
             if pd.isnull(self.data.iloc[row, self.station_id_index]) and
-               pd.isnull(self.data.iloc[row, self.station_name_index])
+                pd.isnull(self.data.iloc[row, self.station_name_index])
         ]
 
     def find_rows_with_known_ids_and_names(self, save: bool = True) -> dict[str, tuple[float]]:
@@ -373,7 +359,7 @@ class DirectIndexing:
         with open(INDEXER_TWO / f"{self.scenario}_geodata_indexer_two.json", mode="w") as file:
             json.dump(geodata, file)
 
-    def full_reindexing(self, delete_leftover_rows: bool = True, save: bool = True) -> pd.DataFrame:
+    def execute(self, delete_leftover_rows: bool = True, save: bool = True) -> pd.DataFrame:
         """
         Make a replacement for every existing ID because many of the IDs are long strings (see the preprocessing
         script for details).
