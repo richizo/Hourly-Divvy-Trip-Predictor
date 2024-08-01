@@ -109,13 +109,12 @@ class InferenceModule:
         Returns:
             pd.DataFrame: the dataframe consisting of the features
         """
-        processor = DataProcessor(year=config.year, bypass=True)
+        processor = DataProcessor(year=config.year, for_inference=True)
 
         # Perform transformation of the time series data with feature engineering
         return processor.transform_ts_into_training_data(
             ts_data=ts_data,
             geocode=geocode,
-            for_inference=True, 
             scenario=self.scenario, 
             input_seq_len=config.n_features,
             step_size=24
@@ -144,13 +143,17 @@ class InferenceModule:
         to_hour = pd.to_datetime(to_hour, utc=True)
 
         predictions_feature_view: FeatureView = self.feature_store_api.get_or_create_feature_view(
-            name=f"{model_name}_predictions_from_feature_store",
+            name=f"{self.scenario}_{model_name}_predictions_from_feature_store",
             version=1,
             feature_group=self.feature_group
         )
 
-        logger.info(f'Fetching predictions for "{self.scenario}_hours" between {from_hour} and {to_hour}')
+        logger.info(f'Fetching predictions for between {from_hour} and {to_hour}')
         predictions_df = predictions_feature_view.get_batch_data(start_time=from_hour, end_time=to_hour)
+
+        print(predictions_df.columns)
+        breakpoint()
+
         predictions_df[f"{self.scenario}_hour"] = pd.to_datetime(predictions_df[f"{self.scenario}_hour"], utc=True)
 
         return predictions_df.sort_values(
@@ -172,6 +175,6 @@ class InferenceModule:
         prediction_per_station = pd.DataFrame()
 
         prediction_per_station[f"{self.scenario}_station_id"] = features[f"{self.scenario}_station_id"].values
+        prediction_per_station[f"{self.scenario}_hour"] = pd.to_datetime(datetime.utcnow()).floor("H")
         prediction_per_station[f"predicted_{self.scenario}s"] = predictions.round(decimals=0)
-
         return prediction_per_station

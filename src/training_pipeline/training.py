@@ -1,20 +1,16 @@
 import pickle
-import pandas as pd
-
-from loguru import logger
-# Standard utilities
 from pathlib import Path
 from argparse import ArgumentParser
 
-# Experiment tracking
+import pandas as pd
+from loguru import logger
+
 from comet_ml import Experiment
 
-# Models
 from xgboost import XGBRegressor
 from sklearn.metrics import mean_absolute_error
 from sklearn.pipeline import Pipeline, make_pipeline
 
-# Custom code
 from src.setup.config import config
 from src.setup.paths import TRAINING_DATA, LOCAL_SAVE_DIR, make_fundamental_paths
 from src.feature_pipeline.preprocessing import DataProcessor
@@ -186,7 +182,6 @@ class Trainer:
                 )
 
                 api = ModelRegistry(
-                    model=model,
                     model_name=model_name,
                     scenario=self.scenario,
                     tuned_or_not=self.tuned_or_not

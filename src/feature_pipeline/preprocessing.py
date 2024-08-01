@@ -22,13 +22,13 @@ class DataProcessor:
     def __init__(self, year: int, for_inference: bool):
         self.station_ids = None
         self.scenarios = ["start", "end"]
+        self.for_inference = for_inference
         self.start_ts_path = TIME_SERIES_DATA / "start_ts.parquet"
         self.end_ts_path = TIME_SERIES_DATA / "end_ts.parquet"
 
         self.data = pd.concat(list(load_raw_data(year=year))) if not for_inference else None
 
-    @staticmethod
-    def use_custom_station_indexing(scenarios: list[str], data: pd.DataFrame) -> bool:
+    def use_custom_station_indexing(self, scenarios: list[str], data: pd.DataFrame) -> bool:
         """
         Certain characteristics of the data will lead to the selection of one of two custom methods of indexing 
         the station IDs. This is necessary because there are several station IDs such as "KA1504000135" (dubbed 
@@ -45,23 +45,23 @@ class DataProcessor:
         Returns:
             bool: whether a custom indexing method will be used. 
         """
-        results = []
+        if not self.for_inference:
+            results = []
 
-        for scenario in scenarios:
+            for scenario in scenarios:
 
-            long_id_counter = 0
-            for station_id in data.loc[:, f"{scenario}_station_id"]:
-                if len(str(station_id)) > 7 and not pd.isnull(station_id):
-                    long_id_counter += 1
+                long_id_counter = 0
+                for station_id in data.loc[:, f"{scenario}_station_id"]:
+                    if len(str(station_id)) > 7 and not pd.isnull(station_id):
+                        long_id_counter += 1
 
-            num_missing_indices = data[f"{scenario}_station_id"].isna().sum()
-            result = True if (num_missing_indices + long_id_counter) / data.shape[0] >= 0.5 else False
-            results.append(result)
+                num_missing_indices = data[f"{scenario}_station_id"].isna().sum()
+                result = True if (num_missing_indices + long_id_counter) / data.shape[0] >= 0.5 else False
+                results.append(result)
 
-        return True if False not in results else False
+            return True if False not in results else False
 
-    @staticmethod
-    def tie_ids_to_unique_coordinates(data: pd.DataFrame) -> bool:
+    def tie_ids_to_unique_coordinates(self, data: pd.DataFrame) -> bool:
         """
         With a large enough dataset (subjectively determined to be those that has more than 10M rows), the author has 
         finds it necessary to round the coordinates of each station to make the preprocessing operations that follow 
@@ -77,7 +77,8 @@ class DataProcessor:
         Returns:
             bool: whether the dataset is deemed to be large enough to trigger the 
         """
-        return True if len(data) > 10_000_000 else False
+        if not self.for_inference:
+            return True if len(data) > 10_000_000 else False
 
     def make_training_data(self, geocode: bool) -> list[pd.DataFrame] | tuple[pd.DataFrame, pd.DataFrame]:
         """
@@ -99,7 +100,6 @@ class DataProcessor:
 
             training_data = self.transform_ts_into_training_data(
                 ts_data=ts_data_per_scenario[scenario],
-                for_inference=False,
                 geocode=geocode,
                 scenario=scenario,
                 input_seq_len=config.n_features,
@@ -146,6 +146,10 @@ class DataProcessor:
         elif self.use_custom_station_indexing(scenarios=self.scenarios, data=self.data) \
                 and not self.tie_ids_to_unique_coordinates(data=self.data):
 
+            cleaned_data_file_path = CLEANED_DATA / "partially_cleaned_data_indexer_two.parquet"
+
+        # Will think of a more elegant solution in due course. This only serves my current interests.
+        elif self.for_inference:
             cleaned_data_file_path = CLEANED_DATA / "partially_cleaned_data_indexer_two.parquet"
 
         else:
@@ -485,7 +489,6 @@ class DataProcessor:
             geocode: bool,
             scenario: str,
             step_size: int,
-            for_inference: bool,
             input_seq_len: int,
             ts_data: pd.DataFrame
     ) -> pd.DataFrame:
@@ -510,7 +513,7 @@ class DataProcessor:
         Returns:
             pd.DataFrame: the training data
         """
-        if for_inference:
+        if self.for_inference:
             ts_data = ts_data.drop("timestamp", axis=1)
 
         # Ensure first that these are the columns of the chosen data set (and they are listed in this order)
@@ -533,8 +536,8 @@ class DataProcessor:
                 ts_data=ts_data_per_station, input_seq_len=input_seq_len, step_size=step_size
             )
 
-            num_indices = len(indices)
             # Create a multidimensional array for the features, and a column vector for the target
+            num_indices = len(indices)
             x = np.ndarray(shape=(num_indices, input_seq_len), dtype=np.float32)
             y = np.ndarray(shape=num_indices, dtype=np.float32)
 
@@ -575,15 +578,11 @@ class DataProcessor:
         features = features.reset_index(drop=True)
         targets = targets.reset_index(drop=True)
         engineered_features = perform_feature_engineering(features=features, scenario=scenario, geocode=geocode)
-
-        if not for_inference:
-            data_to_save = pd.concat([engineered_features, targets["trips_next_hour"]], axis=1)
-        else:
-            data_to_save = engineered_features
+    
+        data_to_save = pd.concat([engineered_features, targets["trips_next_hour"]], axis=1)
 
         logger.success("Saving the data so we (hopefully) won't have to do that again...")
-
-        final_data_path = INFERENCE_DATA if for_inference else TRAINING_DATA
+        final_data_path = INFERENCE_DATA if self.for_inference else TRAINING_DATA
         data_to_save.to_parquet(path=final_data_path / f"{scenario}s.parquet")
         return data_to_save
 

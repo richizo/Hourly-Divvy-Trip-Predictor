@@ -273,11 +273,9 @@ class DirectIndexing:
             for row in tqdm(rows_with_no_issue_and_their_original_coordinates.keys()):
                 original_coordinate = rows_with_no_issue_and_their_original_coordinates[row]
 
-                rounded_candidate_latitude = np.round(original_coordinate[0], decimals=4)
-                rounded_candidate_longitude = np.round(original_coordinate[1], decimals=4)
-
-                rows_with_no_issue_and_their_rounded_coordinates[row] = (
-                    rounded_candidate_latitude, rounded_candidate_longitude)
+                rounded_latitude = np.round(original_coordinate[0], decimals=4)
+                rounded_longitude = np.round(original_coordinate[1], decimals=4)
+                rows_with_no_issue_and_their_rounded_coordinates[row] = (rounded_latitude, rounded_longitude)
 
             logger.info("Performing the matching operation...")
 

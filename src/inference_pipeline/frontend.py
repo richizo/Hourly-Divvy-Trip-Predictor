@@ -9,21 +9,23 @@ from datetime import datetime, timedelta, UTC
 from streamlit_option_menu import option_menu
 
 from src.plot import plot_one_sample
-from src.setup.paths import GEOGRAPHICAL_DATA, INFERENCE_DATA
+from src.setup.config import config 
+from src.feature_pipeline.preprocessing import DataProcessor
 from src.feature_pipeline.feature_engineering import ReverseGeocoding
 from src.inference_pipeline.inference import InferenceModule
 from src.inference_pipeline.model_registry_api import ModelRegistry
+from src.setup.paths import GEOGRAPHICAL_DATA, INFERENCE_DATA, INDEXER_ONE, INDEXER_TWO
 
 
 class Page:
     def __init__(self):
         self.n_steps = None
         self.progress_bar = None
-        self.this_hour = pd.to_datetime(datetime.now(UTC)).floor("H")
+        self.current_hour = pd.to_datetime(datetime.now(UTC)).floor("H")
         self.displayed_scenario_names = {"start": "Departures", "end": "Arrivals"}
             
         st.title("Divvy Trip Activity Predictor")
-        st.header(f"{self.this_hour} UTC")
+        st.header(f"{self.current_hour} UTC")
 
     @staticmethod
     def make_main_menu():
@@ -57,11 +59,12 @@ class Page:
             return features 
 
     @st.cache_data
-    def get_hourly_predictions(self,
+    def get_hourly_predictions(
+        _self,
         scenario: str, 
         model_name: str, 
-        from_hour: datetime = self.this_hour-timedelta(hours=1),
-        to_hour: datetime = self.this_hour
+        from_hour: datetime,
+        to_hour: datetime 
     ) -> pd.DataFrame:
         """
         Initialise an inference object, and load a dataframe of predictions from a dedicated feature group
@@ -81,29 +84,39 @@ class Page:
         Returns:
             pd.DataFrame: dataframe containing hourly predicted arrivals or departures.
         """
-        inference = InferenceModule(scenario=scenario)
 
-        predictions_df: pd.DataFrame = inference.load_predictions_from_store(
+        inferrer = InferenceModule(scenario=scenario)
+
+        predictions_df: pd.DataFrame = inferrer.load_predictions_from_store(
             model_name=model_name,
             from_hour=from_hour, 
             to_hour=to_hour
         )
 
-        for time in [from_hour, to_hour]:
-            prediction_to_use = predictions_df[predictions_df[f"{scenario}_hour"] == time]
+        print(predictions_df[f"{scenario}_hour"])
+        breakpoint()
 
-            if time == self.this_hour and prediction_to_use.empty: 
-                st.subheader("⚠️ Predictions for the current hour are unavailable. Checking for those from an hour ago.")
-                continue
-            elif time == self.this_hour-timedelta(hours=1) and prediction_to_use.empty:
-                raise Exception("Cannot get predictions for either hour. The feature pipeline may not be working")
 
-            return prediction_to_use
+        next_hour_ready = False if predictions_df[predictions_df[f"{scenario}_hour"] == to_hour].empty else True
+        previous_hour_ready = False if predictions_df[predictions_df[f"{scenario}_hour"] == from_hour].empty else True
+
+        if next_hour_ready: 
+            predictions_to_use = predictions_df[predictions_df[f"{scenario}_hour"] == to_hour]
+
+        elif previous_hour_ready:
+            st.subheader("⚠️ Predictions for the current hour are unavailable. Using those from an hour ago.")
+            predictions_to_use = predictions_df[predictions_df[f"{scenario}_hour"] == from_hour]
+
+        else:
+            raise Exception(
+                "Cannot get predictions for either hour. The feature pipeline may not be working"
+            )
+
+        return predictions_to_use
 
     @staticmethod
-    def prepare_geodata(scenario: str) -> pd.DataFrame:
+    def load_geodata(scenario: str, indexer: str = "two") -> pd.DataFrame | gpd.GeoDataFrame:
         """
-
 
         Args:
             scenario (str): _description_
@@ -111,55 +124,45 @@ class Page:
         Returns:
             pd.DataFrame: 
         """
-        with open(GEOGRAPHICAL_DATA / f"rounded_{scenario}_points_and_new_ids.geojson") as file:
-            points_and_ids = json.load(file)
 
-        loaded_geodata = pd.DataFrame(
-            {
-                f"{scenario}_station_id": points_and_ids.keys(), 
-                "coordinates": points_and_ids.values()
-            }
-        )
+        if indexer == "one":
 
-        reverse_geocoding = ReverseGeocoding(scenario=scenario, geo_data=loaded_geodata)
-        station_names_and_locations = reverse_geocoding.reverse_geocode()
+            with open(GEOGRAPHICAL_DATA / f"rounded_{scenario}_points_and_new_ids.geojson") as file:
+                points_and_ids = json.load(file)
 
-        updated_geodata = reverse_geocoding.put_station_names_in_geodata(
-            station_names_and_coordinates=station_names_and_locations
-        )
-
-        return updated_geodata
-
-
-
-                        
-    def update_page_after_fetching_geodata_and_predictions(self, scenario: str, model_name: str):
-        """
-
-        Args:
-            scenario (str): 
-            model_name (str): _description_
-
-        Raises:
-            Exception: _description_
-        """
-        with st.spinner(text="Getting the coordinates of each station ID..."):
-            geo_df = self.load_geodata(scenario=scenario)
-            st.sidebar.write("✅ Station IDs & Coordinates Obtained...")
-
-        with st.spinner(text="Fetching model predictions from the feature store..."):
-            predictions_df: pd.DataFrame = self.load_predictions(
-                scenario=scenario,
-                model_name=model_name,
-                from_hour=self.this_hour - timedelta(hours=1),
-                to_hour=self.this_hour
+            loaded_geodata = pd.DataFrame(
+                {
+                    f"{scenario}_station_id": points_and_ids.keys(), 
+                    "coordinates": points_and_ids.values()
+                }
             )
 
-            if not predictions_df.empty:
-                st.sidebar.write("✅ Dataframe containing the model's predictions received...")
+            reverse_geocoding = ReverseGeocoding(scenario=scenario, geo_data=loaded_geodata)
+            station_names_and_locations = reverse_geocoding.reverse_geocode()
 
-                # self is not hashable by the cacher. Made the prediction loader static and moved this line here.
-                self.progress_bar.progress(2 / self.n_steps)
+            updated_geodata = reverse_geocoding.put_station_names_in_geodata(
+                station_names_and_coordinates=station_names_and_locations
+            )
+
+            return updated_geodata
+        
+        elif indexer == "two":
+            with open(INDEXER_TWO/f"{scenario}_geodata_indexer_two.json") as file:
+                geodata_dict = json.load(file)
+
+            coordinates = [value[0] for value in geodata_dict.values()]
+            station_ids = [value[1] for value in geodata_dict.values()]
+
+            geodata = gpd.GeoDataFrame(
+                {
+                    f"{scenario}_station_names": geodata_dict.keys(),
+                    f"{scenario}_station_ids": station_ids,
+                    "coordinates": coordinates
+                }
+            )
+
+            return geodata
+    
             
     @staticmethod
     def color_scaling_map_locations(
@@ -307,14 +310,29 @@ class Page:
                 placeholder="Please select one of the two options."
             )
 
-            with st.spinner(text="Fetching model predictions from the store..."):
-                for scenario in self.displayed_scenario_names.keys():
-                    if scenarios_and_choices[scenario] in user_scenario_choice:
-                        self.update_page_after_fetching_geodata_and_predictions(
+            print(user_scenario_choice)
+            breakpoint()
+
+            for scenario in self.displayed_scenario_names.keys():
+                if self.displayed_scenario_names[scenario] in user_scenario_choice:
+
+                    with st.spinner(text="Getting the coordinates of each station..."):
+                        geo_df = self.load_geodata(scenario=scenario)
+                        st.sidebar.write("✅ Station IDs & Coordinates Obtained...")
+
+                    with st.spinner(text="Fetching model predictions from the feature store..."):
+                        predictions_df: pd.DataFrame = self.get_hourly_predictions(
                             scenario=scenario,
-                            model_name=model_name
+                            model_name=model_name,
+                            from_hour=self.current_hour - timedelta(hours=1),
+                            to_hour=self.current_hour
                         )
 
+                        if not predictions_df.empty:
+                            st.sidebar.write("✅ Dataframe containing the model's predictions received...")
+
+                            # self is not hashable by the cacher. Made the prediction loader static and moved    line here.
+                            self.progress_bar.progress(2 / self.n_steps)
 
 if __name__ == "__main__":
     page = Page()

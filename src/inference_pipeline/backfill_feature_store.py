@@ -50,7 +50,7 @@ class BackFiller:
             ts_data = pd.read_parquet(ts_data_path)
             logger.success("Retrieved the time series data")
         else:
-            processor = DataProcessor(year=config.year)
+            processor = DataProcessor(year=config.year, for_inference=True)
             logger.warning(f"There is no saved time series data for the {self.scenario}s of trips -> Building it...")
 
             ts_data = processor.make_time_series()[0] if self.scenario.lower() == "start" else \
@@ -94,15 +94,23 @@ class BackFiller:
         registry = ModelRegistry(scenario=self.scenario, model_name=model_name, tuned_or_not=tuned_or_not)
         model = registry.download_latest_model(status="production", unzip=True)
 
-        local_feature_path = INFERENCE_DATA/f"{self.scenario}s.parquet"
+        local_features_path = INFERENCE_DATA/f"{self.scenario}s.parquet"
 
-        if Path(local_feature_path).is_file():
-            engineered_features = pd.read_parquet(local_feature_path)
+        if Path(local_features_path).is_file():
+            engineered_features = pd.read_parquet(local_features_path)
         else:
             engineered_features = inferrer.fetch_time_series_and_make_features(
                 target_date=datetime.now(),
                 geocode=False
             )
+
+            #engineered_features.drop("trips_next_hour", axis=1)
+        try:
+            engineered_features = engineered_features.drop("trips_next_hour", axis=1)
+            logger.success("Removed target column")
+
+        except:
+            logger.error("No target column")
 
         predictions = inferrer.get_model_predictions(model=model, features=engineered_features)
 
