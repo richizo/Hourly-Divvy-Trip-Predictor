@@ -39,7 +39,8 @@ class FeatureStoreAPI:
             self,
             name: str,
             version: int,
-            description: str
+            description: str,
+            for_predictions: str
     ) -> FeatureGroup:
         """
         Create or connect to a feature group with the specified name, and 
@@ -53,7 +54,7 @@ class FeatureStoreAPI:
             name=name,
             version=version,
             description=description,
-            event_time=self.event_time,
+            event_time=f"{self.scenario}_hour" if for_predictions else self.event_time,
             primary_key=self.primary_key
         )
         return feature_group

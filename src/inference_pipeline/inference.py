@@ -34,7 +34,7 @@ class InferenceModule:
         self.scenario = scenario
         self.n_features = config.n_features
 
-        self.feature_store_api = FeatureStoreAPI(
+        self.api = FeatureStoreAPI(
             scenario=self.scenario,
             event_time="timestamp",
             api_key=config.hopsworks_api_key,
@@ -45,14 +45,15 @@ class InferenceModule:
         self.feature_group_metadata = FeatureGroupConfig(
             name=f"{scenario}_feature_group",
             version=config.feature_group_version,
-            primary_key=self.feature_store_api.primary_key,
-            event_time=self.feature_store_api.event_time
+            primary_key=self.api.primary_key,
+            event_time=self.api.event_time
         )
 
-        self.feature_group: FeatureGroup = self.feature_store_api.get_or_create_feature_group(
+        self.feature_group: FeatureGroup = self.api.get_or_create_feature_group(
             description=f"Hourly time series data showing when trips {self.scenario}s",
             version=self.feature_group_metadata.version,
-            name=self.feature_group_metadata.name
+            name=self.feature_group_metadata.name,
+            for_predictions=False
         )
 
     def fetch_time_series_and_make_features(self, target_date: datetime, geocode: bool) -> pd.DataFrame:
@@ -73,7 +74,7 @@ class InferenceModule:
         Returns:
             pd.DataFrame:
         """ 
-        feature_view: FeatureView = self.feature_store_api.get_or_create_feature_view(
+        feature_view: FeatureView = self.api.get_or_create_feature_view(
             name=f"{self.scenario}_feature_view",
             feature_group=self.feature_group,
             version=1
@@ -96,6 +97,18 @@ class InferenceModule:
         return features.sort_values(
             by=[f"{self.scenario}_station_id"]
         )
+
+    def fetch_predictions_group(self, model_name: str) -> FeatureGroup:
+
+        tuned_or_not = "tuned" if self.scenario == "start" else "untuned"
+
+        return self.api.get_or_create_feature_group(
+            description=f"predictions on {self.scenario} data using the {tuned_or_not} {model_name}",
+            name=f"{model_name}_{self.scenario}_predictions_feature_group",
+            for_predictions=True,
+            version=6
+        )
+    
 
     def make_features(self, station_ids: list[int], ts_data: pd.DataFrame, geocode: bool) -> pd.DataFrame:
         """
@@ -142,16 +155,23 @@ class InferenceModule:
         from_hour = pd.to_datetime(from_hour, utc=True)
         to_hour = pd.to_datetime(to_hour, utc=True)
 
-        predictions_feature_view: FeatureView = self.feature_store_api.get_or_create_feature_view(
-            name=f"{self.scenario}_{model_name}_predictions_from_feature_store",
-            version=1,
-            feature_group=self.feature_group
+        predictions_group = self.fetch_predictions_group(model_name=model_name)
+
+        predictions_feature_view: FeatureView = self.api.get_or_create_feature_view(
+            name=f"{model_name}_{self.scenario}_predictions",
+            feature_group=predictions_group,
+            version=1
         )
 
         logger.info(f'Fetching predictions for between {from_hour} and {to_hour}')
-        predictions_df = predictions_feature_view.get_batch_data(start_time=from_hour, end_time=to_hour)
+        predictions_df = predictions_feature_view.get_batch_data(
+            start_time=from_hour - timedelta(days=1), 
+            end_time=to_hour + timedelta(days=1)
+        )
 
-        print(predictions_df.columns)
+        print(
+           f" There are {len(predictions_df[f"{self.scenario}_station_id"])} station ids from the feature view"
+        )
         breakpoint()
 
         predictions_df[f"{self.scenario}_hour"] = pd.to_datetime(predictions_df[f"{self.scenario}_hour"], utc=True)

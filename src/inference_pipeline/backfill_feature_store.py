@@ -104,7 +104,6 @@ class BackFiller:
                 geocode=False
             )
 
-            #engineered_features.drop("trips_next_hour", axis=1)
         try:
             engineered_features = engineered_features.drop("trips_next_hour", axis=1)
             logger.success("Removed target column")
@@ -112,17 +111,18 @@ class BackFiller:
         except:
             logger.error("No target column")
 
-        predictions = inferrer.get_model_predictions(model=model, features=engineered_features)
-
+        predictions_df: pd.DataFrame = inferrer.get_model_predictions(model=model, features=engineered_features)
+        
         predictions_feature_group: FeatureGroup = self.api.get_or_create_feature_group(
             description=f"predictions on {self.scenario} data using the {tuned_or_not} {model_name}",
             name=f"{model_name}_{self.scenario}_predictions_feature_group",
-            version=1
+            for_predictions=True,
+            version=6
         )
 
         # Push predictions to the feature group
         predictions_feature_group.insert(
-            predictions,
+            predictions_df,
             write_options={"wait_for_job": True}
         )
 
@@ -136,7 +136,6 @@ if __name__ == "__main__":
     
     for scenario in args.scenarios:
         filler = BackFiller(scenario=scenario)
-        logger.info(f"Working on the {scenario}s of trips...")
 
         if args.target.lower() == "features":
             filler.backfill_features()
