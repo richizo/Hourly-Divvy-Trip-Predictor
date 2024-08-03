@@ -107,21 +107,20 @@ class BackFiller:
 
         local_features_path = INFERENCE_DATA/f"{self.scenario}s.parquet"
 
-        if use_local_file:
-            if Path(local_features_path).is_file():
-                engineered_features = pd.read_parquet(local_features_path)
-
-                try:
-                    engineered_features = engineered_features.drop("trips_next_hour", axis=1)
-                    logger.success("Dropped target column")
-                except Exception as error:
-                    logger.error(error)
+        if Path(local_features_path).is_file():
+            engineered_features = pd.read_parquet(local_features_path)
 
         else:
             engineered_features = inferrer.fetch_time_series_and_make_features(
                 target_date=datetime.now(),
                 geocode=False
             )
+
+        try:
+            engineered_features = engineered_features.drop("trips_next_hour", axis=1)
+            logger.success("Dropped target column")
+        except Exception as error:
+            logger.error(error)
         
         predictions_df: pd.DataFrame = inferrer.get_model_predictions(model=model, features=engineered_features)
         
