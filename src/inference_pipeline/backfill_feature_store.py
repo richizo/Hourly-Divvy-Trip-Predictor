@@ -82,7 +82,7 @@ class BackFiller:
             write_options={"wait_for_job": True}
         )
 
-    def backfill_predictions(self, target_date: datetime, use_local_file: bool, model_name: str = "lightgbm") -> None:
+    def backfill_predictions(self, target_date: datetime, model_name: str = "lightgbm") -> None:
         """
         Fetch the registered version of the named model, and download it. Then load a batch of features
         from the relevant feature group(whether for arrival or departure data), and make predictions on those 
@@ -105,22 +105,16 @@ class BackFiller:
         registry = ModelRegistry(scenario=self.scenario, model_name=model_name, tuned_or_not=tuned_or_not)
         model = registry.download_latest_model(status="production", unzip=True)
 
-        local_features_path = INFERENCE_DATA/f"{self.scenario}s.parquet"
+        engineered_features = inferrer.fetch_time_series_and_make_features(
+            target_date=datetime.now(),
+            geocode=False
+        )
 
-        if Path(local_features_path).is_file():
-            engineered_features = pd.read_parquet(local_features_path)
-
-        else:
-            engineered_features = inferrer.fetch_time_series_and_make_features(
-                target_date=datetime.now(),
-                geocode=False
-            )
-
-        try:
-            engineered_features = engineered_features.drop("trips_next_hour", axis=1)
-            logger.success("Dropped target column")
-        except Exception as error:
-            logger.error(error)
+        #try:
+        #    engineered_features = engineered_features.drop("trips_next_hour", axis=1)
+        #    logger.success("Dropped target column")
+        #except Exception as error:
+        #    logger.error(error)
         
         predictions_df: pd.DataFrame = inferrer.get_model_predictions(model=model, features=engineered_features)
         
@@ -152,7 +146,7 @@ if __name__ == "__main__":
         if args.target.lower() == "features":
             filler.backfill_features(use_local_file=args.use_local_file)
         elif args.target.lower() == "predictions":
-            filler.backfill_predictions(target_date=datetime.now(), use_local_file=args.use_local_file)
+            filler.backfill_predictions(target_date=datetime.now())
         else:
             raise Exception('The only acceptable backfilling targets are "features" and "predictions"')
     

@@ -65,12 +65,9 @@ backfill-features-from-local:
 backfill-features-from-remote:
 	poetry run python src/inference_pipeline/backfill_feature_store.py --scenarios start end --target features 
 
-backfill-predictions-from-local:
-	poetry run python src/inference_pipeline/backfill_feature_store.py  --use-local-file --scenarios start end --target predictions
-	
-backfill-predictions-from-remote:
+backfill-predictions:
 	poetry run python src/inference_pipeline/backfill_feature_store.py --scenarios start end --target predictions	
-
+	
 
 # Frontend
 frontend:
