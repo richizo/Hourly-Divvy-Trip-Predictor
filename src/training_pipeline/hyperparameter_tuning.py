@@ -1,28 +1,35 @@
-import optuna
+# Data Manipulation and Access
 import numpy as np
 import pandas as pd
 
+# Logging
 from loguru import logger
+
+# Experiment Tracking
 from comet_ml import Experiment
+
+# Hyperparameter Tuning
+import optuna
 from optuna.samplers import TPESampler
 
+# Metrics & Sklearn Pipelines
 from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.pipeline import make_pipeline
 
+# Models
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 from sklearn.linear_model import Lasso
-
 from src.training_pipeline.models import BaseModel
 
 
-def sampled_hyperparameters(
+def sample_hyperparameters(
         model_fn: BaseModel | Lasso | LGBMRegressor | XGBRegressor,
         trial: optuna.trial.Trial
 ) -> dict[str, str | int | float]:
     """
-      Return the range of values of each hyperparameter under consideration.
+      Define a range of values of the hyperparameters which we will be looking to optimise. 
 
       Returns:
           dict: the range of hyperparameter values to be considered
@@ -67,17 +74,19 @@ def optimise_hyperparameters(
         y: pd.Series
 ) -> dict:
     """
+    Take a sample of values for each hyperparameter, and define an objective function whcih is to be 
+    optimised in an attempt to approximate the minimal MAE (within the set of hyperparameters sampled).
 
-  Args:
-    model_fn: the model architecture to be used
-    hyperparameter_trials: the number of optuna trials that will be run per mode scenario
-    experiment: the CometML experiment object
-    x: the dataframe of features
-    y: the pandas series which contains the target variable
+    Args:
+        model_fn: the model architecture to be used
+        hyperparameter_trials: the number of optuna trials that will be run per mode scenario
+        experiment: the CometML experiment object
+        x: the dataframe of features
+        y: the pandas series which contains the target variable
 
-  Returns:
-    dict: the optimal hyperparameters
-  """
+    Returns:
+        dict: the optimal hyperparameters
+    """
     models_and_tags: dict[callable, str] = {
         Lasso: "lasso",
         LGBMRegressor: "lightgbm",
@@ -89,17 +98,17 @@ def optimise_hyperparameters(
 
     def objective(trial: optuna.trial.Trial) -> float:
         """
-    Perform Time series cross validation, fit a pipeline to it (equipped with the)
-    selected model, and return the average error across all cross validation splits.
+        Perform Time series cross validation, fit a pipeline to it (equipped with the)
+        selected model, and return the average error across all cross validation splits.
 
-    Args:
-        trial: The optuna trial that's being optimised.
+        Args:
+            trial: The optuna trial that's being optimised.
 
-    Returns:
-        float: Average error per split.
-    """
+        Returns:
+            float: Average error per split.
+        """
         error_scores = []
-        hyperparameters = sampled_hyperparameters(model_fn=model_fn, trial=trial)
+        hyperparameters = sample_hyperparameters(model_fn=model_fn, trial=trial)
         tss = TimeSeriesSplit(n_splits=5)
         pipeline = make_pipeline(model_fn(**hyperparameters))
 

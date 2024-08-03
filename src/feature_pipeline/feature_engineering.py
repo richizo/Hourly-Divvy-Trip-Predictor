@@ -7,7 +7,7 @@ from geopy.geocoders import Nominatim, Photon
 from src.setup.config import config
 
 
-class GeoData:
+class GeoCoding:
     """
     The code that makes up what is now this class was created in order to geocode an older version
     of this dataset which did not contain the coordinates of each station. In 2024's data, coordinates are
@@ -49,7 +49,7 @@ class GeoData:
                 place_names: the names of the places that are to be geocoded.
 
             Returns:
-
+                dict: 
             """
             places_and_points = {}
             for place in place_names:
@@ -73,6 +73,65 @@ class GeoData:
             place_names=[key for key, value in nominatim_results if value == (0, 0)]
         )
         return final_places_and_points
+
+
+class ReverseGeocoding:
+    def __init__(self, scenario: str, geodata: pd.DataFrame, simple: bool = True) -> None:
+        self.geodata = geodata
+        self.simple = simple
+        self.scenario = scenario
+        self.coordinates = geodata["coordinates"].values
+        self.station_ids = geodata[f"{scenario}_station_id"].unique()
+
+    def find_points_simply(self) -> dict[int, list[float]]:
+
+        
+        simple_match = {}
+        number_of_rows = self.geodata.shape[0]
+
+        for row in tqdm(range(number_of_rows)):
+            for station_id in self.station_ids:
+                if station_id not in simple_match.keys() and station_id == self.geodata.iloc[row, 0]:
+                    simple_match[station_id] = self.geodata.iloc[row, 1]
+
+        return simple_match
+
+    def reverse_geocode(self, save: bool = True) -> dict[str, list[float]]:
+        """
+        Perform reverse geocoding of each coordinate in the dataframe (avoiding duplicates), and make 
+        a dictionary of coordinates and their station addresses. That dictionary can then be saved, and 
+        is returned.
+
+        Returns:
+            dict[str, list[float]]: the station IDs obtained from reverse geocoding, and the original
+                                    coordinates.
+        """
+        addresses_and_points = {}
+        geocoder = Photon(user_agent=config.email)
+        
+        coordinate_source = self.find_points_simply().values() if self.simple else self.coordinates
+        coordinates = tqdm(iterable=coordinate_source, desc="Reverse geocoding the coordinates")
+
+        for coordinate in coordinates:
+            if coordinate in addresses_and_points.values():
+                addresses_and_points[str(geocoder.reverse(query=coordinate, timeout=120))] = coordinate
+        if save:    
+            with open(GEOGRAPHICAL_DATA/f"{self.scenario}_station_names_and_coordinates.json", mode="w") as file:
+                json.dump(addresses_and_points, file)
+
+        return addresses_and_points
+
+    def put_station_names_in_geodata(self, station_names_and_coordinates: dict) -> pd.DataFrame:
+        
+        station_names_to_add = []
+
+        for coordinate in self.coordinates:  
+            if coordinate in station_names_and_coordinates.values():
+                station_names_to_add.append(station_names_and_coordinates[coordinate])
+
+        return pd.concat(
+                [self.geodata, pd.Series(data=station_names_to_add)]
+            )
 
 
 def add_avg_trips_last_4_weeks(features: pd.DataFrame) -> pd.DataFrame:
@@ -108,9 +167,14 @@ def add_hours_and_days(features: pd.DataFrame, scenario: str) -> pd.DataFrame:
     Returns:
         pd.DataFrame: the data frame with these features included
     """
+
+    # The values in this column change types when uploading to Hopsworks, so this avoids an attribute 
+    # errors during feature engineering.
+    features[f"{scenario}_hour"] = pd.to_datetime(features[f"{scenario}_hour"], errors="coerce")
+
     times_and_entries = {
-        "hour": features[f"{scenario}_hour"].dt.hour,
-        "day_of_the_week": features[f"{scenario}_hour"].dt.dayofweek
+        "hour": features[f"{scenario}_hour"].apply(lambda x: x.hour),
+        "day_of_the_week": features[f"{scenario}_hour"].apply(lambda x: x.dayofweek)
     }
 
     for time in times_and_entries.keys():
@@ -129,7 +193,7 @@ def add_coordinates_to_dataframe(features: pd.DataFrame, scenario: str) -> pd.Da
     the latitudes, and longitudes and places them in appropriately named columns of
     a target dataframe.
     """
-    geodata = GeoData(data=features, scenario=scenario)
+    geodata = GeoCoding(data=features, scenario=scenario)
     places_and_points = geodata.geocode()
 
     for place in geodata.place_names:

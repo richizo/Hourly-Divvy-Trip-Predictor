@@ -31,8 +31,8 @@ class FeatureGroupConfig(BaseSettings):
     name: str
     version: int
     primary_key: list[str]
-    event_time: str
     online_enabled: bool | None = False  # because this is a batch ML system. 
+    event_time: str
 
 
 class FeatureViewConfig(BaseSettings):
