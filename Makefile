@@ -59,15 +59,19 @@ train-all: train-start-untuned train-end-untuned train-start-tuned train-end-tun
 
 
 # Backfilling the Feature Store
-backfill-features:
+backfill-features-from-local:
+	poetry run python src/inference_pipeline/backfill_feature_store.py --use-local-file --scenarios start end --target features 
+
+backfill-features-from-remote:
 	poetry run python src/inference_pipeline/backfill_feature_store.py --scenarios start end --target features 
+
+backfill-predictions-from-local:
+	poetry run python src/inference_pipeline/backfill_feature_store.py  --use-local-file --scenarios start end --target predictions
 	
-backfill-predictions:
-	poetry run python src/inference_pipeline/backfill_feature_store.py --scenarios start end --target predictions
-	
-backfill-all: backfill-features backfill-predictions
+backfill-predictions-from-remote:
+	poetry run python src/inference_pipeline/backfill_feature_store.py --scenarios start end --target predictions	
 
 
 # Frontend
-run-frontend:
+frontend:
 	poetry run streamlit run src/inference_pipeline/frontend.py

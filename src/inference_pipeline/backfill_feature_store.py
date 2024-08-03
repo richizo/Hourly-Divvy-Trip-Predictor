@@ -35,26 +35,37 @@ class BackFiller:
             primary_key=None
         )
 
-    def backfill_features(self) -> None:
+    def backfill_features(self, use_local_file: bool) -> None:
         """
         Upload the time series data to the feature store.
 
         Returns:
             None
         """
-        self.api.event_time = "timestamp"
-        self.api.primary_key = ["timestamp", f"{self.scenario}_station_id"]
-        ts_data_path = TIME_SERIES_DATA/f"{self.scenario}s_ts.parquet"
-
-        if Path(ts_data_path).is_file():
-            ts_data = pd.read_parquet(ts_data_path)
-            logger.success("Retrieved the time series data")
-        else:
-            processor = DataProcessor(year=config.year, for_inference=True)
+        def download_data_and_make_time_series():
+            processor = DataProcessor(year=config.year, for_inference=False)
             logger.warning(f"There is no saved time series data for the {self.scenario}s of trips -> Building it...")
 
             ts_data = processor.make_time_series()[0] if self.scenario.lower() == "start" else \
                 processor.make_time_series()[1]
+
+            return ts_data
+
+        self.api.event_time = "timestamp"
+        self.api.primary_key = ["timestamp", f"{self.scenario}_station_id"]
+        ts_data_path = TIME_SERIES_DATA/f"{self.scenario}s_ts.parquet"
+
+        if use_local_file:
+
+            if Path(ts_data_path).is_file():
+                ts_data = pd.read_parquet(ts_data_path)
+                logger.success("Retrieved the time series data")
+            else:
+                logger.warning("There is no local time series data")
+                ts_data = download_data_and_make_time_series()
+
+        else:
+            ts_data = download_data_and_make_time_series()
 
         ts_data["timestamp"] = ts_data[f"{scenario}_hour"].astype(int) // 10 ** 6  # Express in milliseconds
 
@@ -71,7 +82,7 @@ class BackFiller:
             write_options={"wait_for_job": True}
         )
 
-    def backfill_predictions(self, target_date: datetime, model_name: str = "lightgbm") -> None:
+    def backfill_predictions(self, target_date: datetime, use_local_file: bool, model_name: str = "lightgbm") -> None:
         """
         Fetch the registered version of the named model, and download it. Then load a batch of features
         from the relevant feature group(whether for arrival or departure data), and make predictions on those 
@@ -96,8 +107,14 @@ class BackFiller:
 
         local_features_path = INFERENCE_DATA/f"{self.scenario}s.parquet"
 
-        if Path(local_features_path).is_file():
-            engineered_features = pd.read_parquet(local_features_path)
+        if use_local_file:
+            if Path(local_features_path).is_file():
+                engineered_features = pd.read_parquet(local_features_path)
+            else:
+                engineered_features = inferrer.fetch_time_series_and_make_features(
+                    target_date=datetime.now(),
+                    geocode=False
+                )
         else:
             engineered_features = inferrer.fetch_time_series_and_make_features(
                 target_date=datetime.now(),
@@ -106,10 +123,8 @@ class BackFiller:
 
         try:
             engineered_features = engineered_features.drop("trips_next_hour", axis=1)
-            logger.success("Removed target column")
-
-        except:
-            logger.error("No target column")
+        except Exception as error:
+            logger.error(error)
 
         predictions_df: pd.DataFrame = inferrer.get_model_predictions(model=model, features=engineered_features)
         
@@ -132,15 +147,16 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--scenarios", type=str, nargs="+")
     parser.add_argument("--target", type=str)
+    parser.add_argument("-o", "--use-local-file", default=False, action="store_true")
     args = parser.parse_args()    
     
     for scenario in args.scenarios:
         filler = BackFiller(scenario=scenario)
 
         if args.target.lower() == "features":
-            filler.backfill_features()
+            filler.backfill_features(use_local_file=args.use_local_file)
         elif args.target.lower() == "predictions":
-            filler.backfill_predictions(target_date=datetime.now())
+            filler.backfill_predictions(target_date=datetime.now(), use_local_file=args.use_local_file)
         else:
             raise Exception('The only acceptable backfilling targets are "features" and "predictions"')
     

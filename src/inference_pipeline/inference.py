@@ -108,7 +108,6 @@ class InferenceModule:
             for_predictions=True,
             version=6
         )
-    
 
     def make_features(self, station_ids: list[int], ts_data: pd.DataFrame, geocode: bool) -> pd.DataFrame:
         """
