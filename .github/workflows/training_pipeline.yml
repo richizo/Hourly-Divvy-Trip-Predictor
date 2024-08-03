@@ -2,7 +2,7 @@ name: training-pipeline
 
 on:
     schedule:
-    - cron: '@monthly'
+    - cron: '30 6 8 * *'
   
     workflow_dispatch:
 

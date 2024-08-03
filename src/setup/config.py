@@ -4,7 +4,7 @@ from src.setup.paths import PARENT_DIR
 from dotenv import load_dotenv
 
 
-load_dotenv(f".env")
+load_dotenv(PARENT_DIR / ".env")
 
 
 class GeneralConfig(BaseSettings):

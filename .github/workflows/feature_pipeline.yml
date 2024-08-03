@@ -2,7 +2,7 @@ name: feature-pipeline
 
 on:
   schedule:
-  - cron: '@hourly'
+  - cron: '30 4 8 * *'
 
   workflow_dispatch:
 

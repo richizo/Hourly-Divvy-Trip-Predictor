@@ -2,7 +2,7 @@ name: inference-pipeline
 
 on:
   schedule:
-  - cron: '@hourly'
+  - cron: '*/60 * * * *'
 
   workflow_dispatch:
 
@@ -57,7 +57,7 @@ jobs:
         FEATURE_VIEW_VERSION: ${{ secrets.FEATURE_VIEW_VERSION }}
 
 
-        COMET_PROJECT_NAME: ${{ secrets.COMET_PROJECT_NAME }}
+        COMET_PROJECT_NAME: ${{secrets.COMET_PROJECT_NAME }}
         COMET_API_KEY: ${{ secrets.COMET_API_KEY }}
 
         HOPSWORKS_PROJECT_NAME: ${{ secrets.HOPSWORKS_PROJECT_NAME }}
