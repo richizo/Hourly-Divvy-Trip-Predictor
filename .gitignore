@@ -9,4 +9,5 @@ keyfile
 /.idea
 /data
 /models
+/.cometml-runs
 **/__pycache__

@@ -1,3 +1,4 @@
+import json 
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
@@ -110,15 +111,11 @@ class BackFiller:
             geocode=False
         )
 
-        print(engineered_features.shape)
-        breakpoint()
-
         try:
-            engineered_features = engineered_features.drop("trips_next_hour", axis=1)
-            logger.success("Dropped target column")
+            engineered_features = engineered_features.drop(["trips_next_hour", f"{scenario}_hour"], axis=1)
         except Exception as error:
-            logger.error(error)
-        
+            logger.error(error)    
+
         predictions_df: pd.DataFrame = inferrer.get_model_predictions(model=model, features=engineered_features)
         
         predictions_feature_group: FeatureGroup = self.api.get_or_create_feature_group(

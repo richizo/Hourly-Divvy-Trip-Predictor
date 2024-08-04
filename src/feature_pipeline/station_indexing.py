@@ -215,7 +215,7 @@ class DirectIndexing:
 
             for row in tqdm(
                     iterable=range(self.data.shape[0]),
-                    desc="Looking for any row that has either a missing station ID OR a missing station name."
+                    desc="Looking for rows that have either a missing station ID OR a missing station name."
             ):
                 latitude = self.data.iloc[row, self.latitudes_index]
                 longitude = self.data.iloc[row, self.longitudes_index]

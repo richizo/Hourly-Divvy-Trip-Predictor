@@ -176,11 +176,6 @@ class InferenceModule:
             end_time=to_hour + timedelta(days=1)
         )
 
-        print(
-           f" There are {len(predictions_df[f"{self.scenario}_station_id"])} station ids from the feature view"
-        )
-        breakpoint()
-
         predictions_df[f"{self.scenario}_hour"] = pd.to_datetime(predictions_df[f"{self.scenario}_hour"], utc=True)
 
         return predictions_df.sort_values(
