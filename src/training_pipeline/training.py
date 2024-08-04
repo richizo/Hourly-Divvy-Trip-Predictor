@@ -39,7 +39,7 @@ class Trainer:
         self.tune_hyperparameters = tune_hyperparameters
         self.hyperparameter_trials = hyperparameter_trials
         self.tuned_or_not = "Tuned" if self.tune_hyperparameters else "Untuned"
-        make_fundamental_paths()  # Ensure that all the relevant directories exist.
+        make_fundamental_paths()  # Ensure that all the necessary directories exist.
 
     def get_or_make_training_data(self) -> tuple[pd.DataFrame, pd.Series]:
         """
@@ -48,7 +48,7 @@ class Trainer:
         Returns:
             pd.DataFrame: a tuple containing the training data's features and targets
         """
-        assert self.scenario.lower() == "start" or self.scenario.lower() == "end"
+        assert self.scenario.lower() in ["start", "end"]
         data_path = TRAINING_DATA / f"{self.scenario}s.parquet"
         
         if Path(data_path).is_file():
@@ -56,11 +56,9 @@ class Trainer:
             logger.success("The training data has already been created and saved. Fetched it...")
         else:
             logger.warning("No training data is stored. Creating the dataset will take a long time...")
-            
-            training_sets = DataProcessor(year=config.year).make_training_data(
-                provide_ts_only_for_inference=False,
-                geocode=False
-            )
+
+            processor = DataProcessor(year=config.year, for_inference=False)
+            training_sets = processor.make_training_data(geocode=False)
 
             training_data = training_sets[0] if self.scenario.lower() == "start" else training_sets[1]
             logger.success("Training data produced successfully")
@@ -93,6 +91,7 @@ class Trainer:
             workspace=config.comet_workspace,
             project_name=config.comet_project_name
         )
+        
         experiment.add_tags(tags=[model_name, self.scenario])
 
         if not self.tune_hyperparameters:
@@ -124,8 +123,7 @@ class Trainer:
             )
 
         logger.info("Fitting model...")
-        # The setup base model requires that we specify these parameters, whereas with one of the other models,
-        # specifying the arguments causes an error.
+
         pipeline.fit(X=x_train, y=y_train)
         y_pred = pipeline.predict(x_test)
         test_error = mean_absolute_error(y_true=y_test, y_pred=y_pred)
@@ -173,7 +171,7 @@ class Trainer:
         for model_name in model_names:
             if models_and_errors[model_name] == min(test_errors):
                 logger.info(f"The best performing model is {model_name} -> Pushing it to the CometML model registry")
-                
+        
                 model = load_local_model(
                     directory=LOCAL_SAVE_DIR,
                     model_name=model_name,
@@ -181,18 +179,14 @@ class Trainer:
                     tuned_or_not=self.tuned_or_not
                 )
 
-                api = ModelRegistry(
-                    model_name=model_name,
-                    scenario=self.scenario,
-                    tuned_or_not=self.tuned_or_not
-                )
-                api.push_model_to_registry(status=status.title(), version=version)
+                registry = ModelRegistry(model_name=model_name, scenario=self.scenario, tuned_or_not=self.tuned_or_not)
+                registry.push_model_to_registry(status=status.title(), version=version)
 
 
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--scenario", type=str)
-    parser.add_argument("--models", type=str, nargs="+", required=True, default="lasso")
+    parser.add_argument("--models", type=str, nargs="+", required=True)
     parser.add_argument("--tune_hyperparameters", action="store_true")
     parser.add_argument("--hyperparameter_trials", type=int, default=15)
     args = parser.parse_args()

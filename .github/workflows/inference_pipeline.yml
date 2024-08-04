@@ -78,5 +78,5 @@ jobs:
         HOPSWORKS_PROJECT_NAME: ${{ secrets.HOPSWORKS_PROJECT_NAME }}
         HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
 
-      run: make backfill-predictions-from-remote
+      run: make backfill-predictions
   

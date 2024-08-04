@@ -99,6 +99,14 @@ class InferenceModule:
         )
 
     def fetch_predictions_group(self, model_name: str) -> FeatureGroup:
+        """
+
+        Args:
+            model_name (str): the name of the model
+
+        Returns:
+            FeatureGroup: the feature group for the given model's predictions.
+        """
 
         tuned_or_not = "tuned" if self.scenario == "start" else "untuned"
 
@@ -134,9 +142,9 @@ class InferenceModule:
 
     def load_predictions_from_store(
             self,
-            model_name: str,
             from_hour: datetime,
-            to_hour: datetime
+            to_hour: datetime,
+            model_name: str = "lightgbm"
     ) -> pd.DataFrame:
         """
         Load a dataframe containing predictions from their dedicated feature group on the offline feature store.

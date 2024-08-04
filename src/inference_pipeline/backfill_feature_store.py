@@ -110,11 +110,14 @@ class BackFiller:
             geocode=False
         )
 
-        #try:
-        #    engineered_features = engineered_features.drop("trips_next_hour", axis=1)
-        #    logger.success("Dropped target column")
-        #except Exception as error:
-        #    logger.error(error)
+        print(engineered_features.shape)
+        breakpoint()
+
+        try:
+            engineered_features = engineered_features.drop("trips_next_hour", axis=1)
+            logger.success("Dropped target column")
+        except Exception as error:
+            logger.error(error)
         
         predictions_df: pd.DataFrame = inferrer.get_model_predictions(model=model, features=engineered_features)
         
