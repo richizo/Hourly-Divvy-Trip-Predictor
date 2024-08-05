@@ -254,7 +254,7 @@ class DirectIndexing:
             dict[int, tuple[str|int, str]]: key, value pairs of row indices and their newly discovered station IDs
                                             and names
         """
-        matched_coordinates_path = INDEXER_TWO / f"matched_{self.scenario}_coordinates_with_new_ids_and_names.json"
+        matched_coordinates_path = INDEXER_TWO / f"{self.scenario}_coordinates_with_new_ids_and_names.json"
 
         if Path(matched_coordinates_path).exists():
             logger.success("The matching operation has already been done. Fetching local file...")
@@ -339,22 +339,22 @@ class DirectIndexing:
 
         return self.data
 
-    def save_geodata(self) -> None:
+    def save_geodata(
+        self, 
+        station_names: pd.Series,
+        station_ids: pd.Series,
+        latitudes: pd.Series, 
+        longitudes: pd.Series
+        ) -> None:
         """
         Saves the station ID, mame, and coordinates for use in the frontend
         """
-
-        latitudes = self.data.iloc[:, self.latitudes_index]
-        longitudes = self.data.iloc[:, self.longitudes_index]
-        station_ids = self.data.iloc[:, self.station_id_index]
-        station_names = self.data.iloc[:, self.station_name_index]
-
         geodata = {
-            station_name: [(latitude, longitude), station_id] for (latitude, longitude, station_id, station_name) \
+            str(station_name): [(latitude, longitude), station_id] for (latitude, longitude, station_id, station_name) \
             in zip(latitudes, longitudes, station_ids, station_names)
         }
 
-        with open(INDEXER_TWO / f"{self.scenario}_geodata_indexer_two.json", mode="w") as file:
+        with open(INDEXER_TWO / f"{self.scenario}_geodata.json", mode="w") as file:
             json.dump(geodata, file)
 
     def execute(self, delete_leftover_rows: bool = True, save: bool = True) -> pd.DataFrame:
@@ -408,7 +408,13 @@ class DirectIndexing:
             self.data.iloc[:, self.station_id_index] = station_ids.map(old_and_new_ids)
 
             self.data = self.data.reset_index(drop=True)
-            self.save_geodata()
+
+            self.save_geodata(
+                latitudes=self.data.iloc[:, self.latitudes_index],
+                longitudes=self.data.iloc[:, self.longitudes_index],
+                station_ids=self.data.iloc[:, self.station_id_index],
+                station_names=self.data.iloc[:, self.station_name_index],
+            )
 
             self.data = self.data.drop(
                 columns=[f"{self.scenario}_lat", f"{self.scenario}_lat", f"{self.scenario}_station_name"]

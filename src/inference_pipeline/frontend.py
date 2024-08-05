@@ -76,13 +76,13 @@ def load_geodata(scenario: str, indexer: str = "two") -> pd.DataFrame | gpd.GeoD
             return updated_geodata
         
         elif indexer == "two":
-            with open(INDEXER_TWO/f"{scenario}_geodata_indexer_two.json") as file:
+            with open(INDEXER_TWO/f"{scenario}_geodata.json") as file:
                 geodata_dict = json.load(file)
 
             coordinates = [value[0] for value in geodata_dict.values()]
             station_ids = [value[1] for value in geodata_dict.values()]
 
-            geodata = gpd.GeoDataFrame(
+            geodata_df = gpd.GeoDataFrame(
                 {
                     f"{scenario}_station_names": geodata_dict.keys(),
                     f"{scenario}_station_ids": station_ids,
@@ -90,8 +90,8 @@ def load_geodata(scenario: str, indexer: str = "two") -> pd.DataFrame | gpd.GeoD
                 }
             )
 
-        st.sidebar.write("✅ Station IDs & Coordinates Obtained...")
-        return geodata
+        st.sidebar.write("✅ Retrieved Station Names, IDs & Coordinates")
+        return geodata_df
 
 
 def get_hourly_predictions(
@@ -127,9 +127,6 @@ def get_hourly_predictions(
             from_hour=from_hour, 
             to_hour=to_hour
         )
-
-        print(predictions_df.head())
-        breakpoint()
 
         next_hour_ready = False if predictions_df[predictions_df[f"{scenario}_hour"] == to_hour].empty else True
         previous_hour_ready = False if predictions_df[predictions_df[f"{scenario}_hour"] == to_hour].empty else True
@@ -249,7 +246,7 @@ def prep_data_for_plotting(scenario: str, predictions: pd.DataFrame, geodata: pd
     Returns:
         None.
     """
-    with st.spinner(text="Preparing data..."):
+    with st.spinner(text="Preparing data for plotting..."):
         data = pd.merge(
             left=geodata,
             right=predictions,
@@ -280,6 +277,8 @@ def plot_time_series(scenario: str, features: pd.DataFrame, predictions: pd.Data
 
         for row in row_indices[:n_to_plot]:
             station_id = predictions[f"{scenario}_station_id"].iloc[row]
+            
+
             prediction = predictions[f"predicted_{scenario}s"].iloc[row]
 
             st.metric(
@@ -320,9 +319,8 @@ def construct_page(model_name: str):
 
                 features = provide_features(scenario=scenario, target_date=current_hour)
                 geo_df = load_geodata(scenario=scenario)
-
                 predictions_df: pd.DataFrame = get_hourly_predictions(scenario=scenario, model_name=model_name)
-                
+                station_map = make_map(geodata=geo_df)                
 
 
 if __name__ == "__main__":
