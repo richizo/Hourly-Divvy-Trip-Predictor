@@ -32,7 +32,7 @@ from src.inference_pipeline.model_registry_api import ModelRegistry
 class InferenceModule:
     def __init__(self, scenario: str) -> None:
         self.scenario = scenario
-        self.n_features = config.n_features
+        self.n_features = config.n_features          
 
         self.api = FeatureStoreAPI(
             scenario=self.scenario,
@@ -77,19 +77,25 @@ class InferenceModule:
         feature_view: FeatureView = self.api.get_or_create_feature_view(
             name=f"{self.scenario}_feature_view",
             feature_group=self.feature_group,
-            version=1
+            version=1   
         )
 
         logger.info("Fetching time series data from the offline feature store...")
-        fetch_from = target_date - timedelta(days=168)
+        fetch_from = target_date - timedelta(days=90)
         ts_data: pd.DataFrame = feature_view.get_batch_data(start_time=fetch_from, end_time=target_date)
 
         ts_data = ts_data.sort_values(
             by=[f"{self.scenario}_station_id", f"{self.scenario}_hour"]
         )
 
+        print(f"The fetched time series has: {len(ts_data)} rows")
+        breakpoint()
+
         station_ids = ts_data[f"{self.scenario}_station_id"].unique()
         features = self.make_features(station_ids=station_ids, ts_data=ts_data, geocode=False)
+
+        print("Length of features right after original fetching", len(features))
+        breakpoint()
 
         # Include the {self.scenario}_hour column and the IDs
         features[f"{self.scenario}_hour"] = target_date
@@ -98,24 +104,6 @@ class InferenceModule:
             by=[f"{self.scenario}_station_id"]
         )
 
-    def fetch_predictions_group(self, model_name: str) -> FeatureGroup:
-        """
-
-        Args:
-            model_name (str): the name of the model
-
-        Returns:
-            FeatureGroup: the feature group for the given model's predictions.
-        """
-
-        tuned_or_not = "tuned" if self.scenario == "start" else "untuned"
-
-        return self.api.get_or_create_feature_group(
-            description=f"predictions on {self.scenario} data using the {tuned_or_not} {model_name}",
-            name=f"{model_name}_{self.scenario}_predictions_feature_group",
-            for_predictions=True,
-            version=6
-        )
 
     def make_features(self, station_ids: list[int], ts_data: pd.DataFrame, geocode: bool) -> pd.DataFrame:
         """
@@ -139,6 +127,28 @@ class InferenceModule:
             input_seq_len=config.n_features,
             step_size=24
         )
+
+
+    def fetch_predictions_group(self, model_name: str) -> FeatureGroup:
+        """
+
+        Args:
+            model_name (str): the name of the model
+
+        Returns:
+            FeatureGroup: the feature group for the given model's predictions.
+        """
+
+        tuned_or_not = "tuned" if self.scenario == "start" else "untuned"
+
+        return self.api.get_or_create_feature_group(
+            description=f"predictions on {self.scenario} data using the {tuned_or_not} {model_name}",
+            name=f"{model_name}_{self.scenario}_predictions_feature_group",
+            version=config.feature_group_version,
+            for_predictions=True
+            
+        )
+
 
     def load_predictions_from_store(
             self,
@@ -170,7 +180,7 @@ class InferenceModule:
             version=1
         )
 
-        logger.info(f'Fetching predictions for between {from_hour} and {to_hour}')
+        logger.info(f'Fetching predictions between {from_hour} and {to_hour}')
         predictions_df = predictions_feature_view.get_batch_data(
             start_time=from_hour - timedelta(days=1), 
             end_time=to_hour + timedelta(days=1)

@@ -473,7 +473,7 @@ class DataProcessor:
 
         indices = []
 
-        while subsequence_last_index <= stop_position:
+        while subsequence_last_index <= stop_position: 
             indices.append(
                 (subsequence_first_index, subsequence_mid_index, subsequence_last_index)
             )
@@ -518,6 +518,7 @@ class DataProcessor:
 
         # Ensure first that these are the columns of the chosen data set (and they are listed in this order)
         assert set(ts_data.columns) == {f"{scenario}_hour", f"{scenario}_station_id", "trips"}
+
         station_ids = ts_data[f"{scenario}_station_id"].unique()
 
         # Prepare the dataframe which will contain the features and targets
@@ -577,6 +578,7 @@ class DataProcessor:
 
         features = features.reset_index(drop=True)
         targets = targets.reset_index(drop=True)
+
         engineered_features = perform_feature_engineering(features=features, scenario=scenario, geocode=geocode)
     
         data_to_save = pd.concat([engineered_features, targets["trips_next_hour"]], axis=1)

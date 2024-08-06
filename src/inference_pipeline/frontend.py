@@ -9,6 +9,7 @@ import geopandas as gpd
 
 from datetime import datetime, timedelta, UTC
 from streamlit_option_menu import option_menu
+from shapely.geometry import Point 
 
 from src.plot import plot_one_sample
 from src.setup.config import config 
@@ -25,8 +26,8 @@ st.title("Hourly Trip Predictor for Chicago's Divvy Bikes System")
 current_hour = pd.to_datetime(datetime.now(UTC)).floor("H")
 st.header(f"{current_hour} UTC")
 
-pred_progress_bar = st.sidebar.header("⚙️ Working Progress")
-pred_progress_bar = st.sidebar.progress(value=0)
+progress_bar = st.sidebar.header("⚙️ Working Progress")
+progress_bar = st.sidebar.progress(value=0)
 
 n_steps = 7
 
@@ -42,7 +43,7 @@ def make_main_menu() -> str:
         )
 
 
-def load_geodata(scenario: str, indexer: str = "two") -> pd.DataFrame | gpd.GeoDataFrame:
+def load_geodata_json(scenario: str, indexer: str = "two") -> dict:
     """
 
     Args:
@@ -79,19 +80,30 @@ def load_geodata(scenario: str, indexer: str = "two") -> pd.DataFrame | gpd.GeoD
             with open(INDEXER_TWO/f"{scenario}_geodata.json") as file:
                 geodata_dict = json.load(file)
 
-            coordinates = [value[0] for value in geodata_dict.values()]
-            station_ids = [value[1] for value in geodata_dict.values()]
-
-            geodata_df = gpd.GeoDataFrame(
-                {
-                    f"{scenario}_station_names": geodata_dict.keys(),
-                    f"{scenario}_station_ids": station_ids,
-                    "coordinates": coordinates
-                }
-            )
-
         st.sidebar.write("✅ Retrieved Station Names, IDs & Coordinates")
-        return geodata_df
+        return geodata_dict
+
+
+@st.cache_data
+def provide_features(scenario: str, target_date: datetime) -> pd.DataFrame:
+    """
+    Initiate an inference object and use it to get features until the target date.
+    features that we will use to fuel the model and produce predictions.
+
+    Args:
+        scenario (str): _description_
+        target_date (datetime): _description_
+
+    Returns:
+        pd.DataFrame: the created (or fetched) features
+    """
+    with st.spinner(text="Getting a batch of features from the store..."):
+        inferrer = InferenceModule(scenario=scenario)
+        features = inferrer.fetch_time_series_and_make_features(target_date=target_date, geocode=False)
+
+        st.sidebar.write("✅ Fetched features for inference")
+        progress_bar.progress(1 / n_steps)
+        return features 
 
 
 def get_hourly_predictions(
@@ -129,7 +141,7 @@ def get_hourly_predictions(
         )
 
         next_hour_ready = False if predictions_df[predictions_df[f"{scenario}_hour"] == to_hour].empty else True
-        previous_hour_ready = False if predictions_df[predictions_df[f"{scenario}_hour"] == to_hour].empty else True
+        previous_hour_ready = False if predictions_df[predictions_df[f"{scenario}_hour"] == from_hour].empty else True
 
         if next_hour_ready: 
             predictions_to_use = predictions_df[predictions_df[f"{scenario}_hour"] == to_hour]
@@ -144,43 +156,39 @@ def get_hourly_predictions(
 
         if not predictions_to_use.empty:
             st.sidebar.write("✅ Dataframe containing the model's predictions received...")
-            pred_progress_bar.progress(2 / n_steps)
+            progress_bar.progress(2 / n_steps)
     
     return predictions_to_use
 
 
-@st.cache_data
-def provide_features(scenario: str, target_date: datetime) -> pd.DataFrame:
-    """
-    Initiate an inference object and use it to get features until the target date.
-    features that we will use to fuel the model and produce predictions.
+def prepare_geodata(geodata_dict: dict, scenario: str) -> gpd.GeoDataFrame:
 
-    Args:
-        scenario (str): _description_
-        target_date (datetime): _description_
+    coordinates = [tuple(value[0]) for value in geodata_dict.values()]
+    station_ids = [value[1] for value in geodata_dict.values()]
 
-    Returns:
-        pd.DataFrame: the created (or fetched) features
-    """
-    with st.spinner(text="Getting a batch of features from the store..."):
-        inferrer = InferenceModule(scenario=scenario)
-        features = inferrer.fetch_time_series_and_make_features(target_date=target_date, geocode=False)
+    data = pd.DataFrame(
+        data={
+            f"{scenario}_station_name": geodata_dict.keys(),
+            f"{scenario}_station_id": station_ids,
+            "coordinates": coordinates
+        }
+    )
 
-        st.sidebar.write("✅ Fetched features for inference")
-        pred_progress_bar.progress(1 / n_steps)
-        return features 
+    data["coordinates"] = data["coordinates"].apply(lambda x: Point(x[1], x[0]))
+    geodata = gpd.GeoDataFrame(data, geometry="coordinates")
+    return geodata.set_crs(epsg=4326, inplace=True)
 
 
 def color_scaling_map_locations(
     value: int, 
     min_value: int,
     max_value: int, 
-    start_colour: tuple, 
-    stop_colour: tuple
+    start_color: tuple, 
+    stop_color: tuple
     ) -> tuple[float | Any]:
     """
-    Use linear interpolation to perform colour scaling on the predicted values. This provides us
-    with a spectrum of colours for the prediction values.
+    Use linear interpolation to perform color scaling on the predicted values. This provides us
+    with a spectrum of colors for the prediction values.
 
     Credit to Pau Labarta Bajo and https://stackoverflow.com/a/10907855
 
@@ -188,52 +196,20 @@ def color_scaling_map_locations(
         value (int): _description_
         min_value (int): _description_
         max_value (int): _description_
-        start_colour (tuple): _description_
-        stop_colour (tuple): _description_
+        start_color (tuple): _description_
+        stop_color (tuple): _description_
 
     Returns:
-        tuple[float]: _description_
+        tuple[float]: results of the interpolation
     """
-    
     f = float(
         (value - min_value) / (max_value - min_value)
     )
 
     return tuple(
-        f * (b - a) + a for (a, b) in zip(start_colour, stop_colour)
+        f * (b - a) + a for (a, b) in zip(start_color, stop_color)
     )
 
-
-def make_map(geodata: pd.DataFrame) -> None:
-    """
-
-    Args:
-        geodata:
-
-    Returns:
-        None
-    """
-    # Selected a random coordinate to use as a start position
-    start_position = pydeck.ViewState(
-        latitude=41.872866,
-        longitude=-87.63363,
-        zoom=10,
-        max_zoom=20,
-        pitch=45,
-        bearing=0
-    )
-
-    geojson = pydeck.Layer(type="GeoJsonLayer", data=geodata)
-    tooltip = {"html": "<b>Zone:</b> [{StationID}]{zone} <br /> <b>Predicted rides:</b> {predicted_trips}"}
-
-    deck = pydeck.Deck(
-        layers=[geojson],
-        initial_view_state=start_position,
-        tooltip=tooltip
-    )
-
-    st.pydeck_chart(pydeck_obj=deck)
-    pred_progress_bar.progress(3 / n_steps)
 
 def prep_data_for_plotting(scenario: str, predictions: pd.DataFrame, geodata: pd.DataFrame) -> None:
     """
@@ -247,7 +223,7 @@ def prep_data_for_plotting(scenario: str, predictions: pd.DataFrame, geodata: pd
         None.
     """
     with st.spinner(text="Preparing data for plotting..."):
-        data = pd.merge(
+        all_data = pd.merge(
             left=geodata,
             right=predictions,
             right_on=f"{scenario}_station_id",
@@ -255,19 +231,58 @@ def prep_data_for_plotting(scenario: str, predictions: pd.DataFrame, geodata: pd
             how="inner"
         )
 
-    # Establish the max and min values as well as the start and stop colours for the colour scaling.
-    black, green = (0, 0, 0), (0, 255, 0)
-    data["colour_scaling"] = data[f"predicted_{scenario}s"]
-    max_prediction, min_prediction = data["colour_scaling"].max(), data["colour_scaling"].min()
+        # Establish the max and min values as well as the start and stop colors for the color scaling.
+        black, green = (0, 0, 0), (0, 255, 0)
+        all_data["color_scaling"] = all_data[f"predicted_{scenario}s"]
+        max_prediction, min_prediction = all_data["color_scaling"].max(), all_data["color_scaling"].min()
 
-    #  Perform color scaling
-    data["fill_colour"] = data["colour_scaling"].apply(
-        func=lambda x: color_scaling(
-            value=x, min_value=min_prediction, max_value=max_prediction,start_colour=black, stop_colour=green
+        # Perform color scaling
+        all_data["fill_color"] = all_data["color_scaling"].apply(
+            func=lambda x: color_scaling_map_locations(
+                value=x, 
+                min_value=min_prediction, 
+                max_value=max_prediction, 
+                start_color=black, 
+                stop_color=green
+            )
         )
-    )
 
-    pred_progress_bar.progress(4 / n_steps)
+        progress_bar.progress(3 / n_steps)
+
+    
+def make_map(geodata: dict) -> None:
+    """
+
+    Args:
+        geodata:
+
+    Returns:
+        None
+    """
+    with st.spinner(text="Generating Map of Chicago"):
+
+        # Selected a random coordinate to use as a start position
+        start_position = pydeck.ViewState(latitude=41.872866, longitude=-87.63363, zoom=10, max_zoom=20, pitch=45, bearing=0)
+
+        geojson = pydeck.Layer(
+            type="GeoJsonLayer", 
+            data=geodata,
+            opacity=0.25,
+            stroked=False,
+            filled=True,
+            extruded=False,
+            get_elevation=10,
+            get_fill_color="fill_color",
+            get_line_color=[255, 255, 255],
+            pickable=True   
+        )
+
+        tooltip = {"html": "<b>Station:</b> [{station_ID}]{station_name} <br /> <b>Predicted trips:</b> {predicted_trips}"}
+        deck = pydeck.Deck(layers=[geojson], initial_view_state=start_position, tooltip=tooltip)
+
+        st.pydeck_chart(pydeck_obj=deck)
+        progress_bar.progress(4 / n_steps)
+
 
 def plot_time_series(scenario: str, features: pd.DataFrame, predictions: pd.DataFrame):
 
@@ -275,11 +290,9 @@ def plot_time_series(scenario: str, features: pd.DataFrame, predictions: pd.Data
         row_indices = np.argsort(predictions[f"predicted_{scenario}s"].values)[::-1]
         n_to_plot = 10
 
-        for row in row_indices[:n_to_plot]:
-            station_id = predictions[f"{scenario}_station_id"].iloc[row]
-            
-
-            prediction = predictions[f"predicted_{scenario}s"].iloc[row]
+        for row_index in row_indices[:n_to_plot]:
+            station_id = predictions[f"{scenario}_station_id"].iloc[row_index]
+            prediction = predictions[f"predicted_{scenario}s"].iloc[row_index]
 
             st.metric(
                 label=f"Predicted {displayed_scenario_names[scenario]}", 
@@ -287,13 +300,15 @@ def plot_time_series(scenario: str, features: pd.DataFrame, predictions: pd.Data
             )
 
             fig = plot_one_sample(
-                example_station=row,
+                scenario=scenario,
+                row_index=row_index,
                 features=features,
                 targets=predictions[f"predicted_{scenario}s"],
                 display_title=False
             )
 
             st.plotly_chart(figure_or_data=fig, theme="streamlit", use_container_width=True, width=1000)
+            progress_bar.progress(6 / n_steps)
  
 
 def construct_page(model_name: str):
@@ -305,9 +320,7 @@ def construct_page(model_name: str):
     """
     menu_options = make_main_menu()
 
-    if menu_options == "Plots":
-        pass  # Plotting logic will be provided at a later time
-    elif menu_options == "Predictions":
+    if menu_options == "Predictions":
         user_scenario_choice: list[str] = st.sidebar.multiselect(
             label="Do you want predictions for the number of arrivals at or the departures from each station?",
             options=["Arrivals", "Departures"],
@@ -317,11 +330,20 @@ def construct_page(model_name: str):
         for scenario in displayed_scenario_names.keys():
             if displayed_scenario_names[scenario] in user_scenario_choice:
 
-                features = provide_features(scenario=scenario, target_date=current_hour)
-                geo_df = load_geodata(scenario=scenario)
-                predictions_df: pd.DataFrame = get_hourly_predictions(scenario=scenario, model_name=model_name)
-                station_map = make_map(geodata=geo_df)                
+                # Prepare geodata
+                geodata_json = load_geodata_json(scenario=scenario)
 
+                predictions_df: pd.DataFrame = get_hourly_predictions(scenario=scenario, model_name=model_name)
+                geodata = prepare_geodata(geodata_dict=geodata_json, scenario=scenario)
+                
+                # Fetch features
+                features = provide_features(scenario=scenario, target_date=current_hour)
+                
+                prep_data_for_plotting(scenario=scenario, predictions=predictions_df, geodata=geodata)
+                
+                make_map(geodata=geodata_json)
+                plot_time_series(scenario=scenario, features=features, predictions=predictions_df)
+        
 
 if __name__ == "__main__":
     construct_page(model_name="lightgbm")

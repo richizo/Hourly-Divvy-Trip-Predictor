@@ -5,7 +5,7 @@ import plotly.express as plot
 
 
 def plot_one_sample(
-    example_station: int, 
+    row_index: int, 
     features: pd.DataFrame,
     scenario: str,
     targets: pd.Series = None, 
@@ -18,12 +18,11 @@ def plot_one_sample(
     Credit to Pau Labarta Bajo
     """
     if targets is not None:
-        target_ = targets.iloc[example_station]
+        target_ = targets.iloc[row_index]
     else:
         target_ = None
 
-
-    features_ = features.iloc[example_station]
+    features_ = features.iloc[row_index]
     columns = [column for column in features.columns if column.startswith("trips_previous_")]
     values = [features[column] for column in columns] + [target_]
 
@@ -33,17 +32,16 @@ def plot_one_sample(
         freq="h"
     )
 
-    if display_title:
+    title = f'{scenario}_hour = {features_[{scenario}]}_hour, \
+        station_id = {features_[f"{scenario}_station_id"]}' if display_title else None
 
-        #  title = f'{scenario}_hour = {features_[{scenario}]}_hour, station_id = {features_[f"{scenario}_station_id"]}'
+    fig = plot.line(
+        x=dates, 
+        y=values, 
+        template="plotly_dark",
+        markers=True
+    )
 
-        fig = plot.line(
-            x=dates, 
-            y=values, 
-            template="plotly_dark",
-            markers=True
-        )
-    
     # Plot actual values if available
     if targets is not None:
 
@@ -58,7 +56,7 @@ def plot_one_sample(
 
     # Plot predicted values if available
     if predictions is not None:
-        predictions_ = predictions.iloc[example_station]
+        predictions_ = predictions.iloc[row_index]
         
         fig.add_scatter(
             x=dates[-1:], y=[predictions_],
