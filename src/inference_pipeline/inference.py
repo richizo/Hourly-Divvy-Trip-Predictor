@@ -88,14 +88,8 @@ class InferenceModule:
             by=[f"{self.scenario}_station_id", f"{self.scenario}_hour"]
         )
 
-        print(f"The fetched time series has: {len(ts_data)} rows")
-        breakpoint()
-
         station_ids = ts_data[f"{self.scenario}_station_id"].unique()
         features = self.make_features(station_ids=station_ids, ts_data=ts_data, geocode=False)
-
-        print("Length of features right after original fetching", len(features))
-        breakpoint()
 
         # Include the {self.scenario}_hour column and the IDs
         features[f"{self.scenario}_hour"] = target_date
