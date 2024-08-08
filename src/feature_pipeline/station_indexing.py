@@ -29,9 +29,9 @@ class RoundingCoordinates:
 
             scenario (str): whether we are looking at departures ("start") or arrivals ("end").
         """
+        self.data = data
         self.scenario = scenario
         self.decimal_places = decimal_places
-        self.data = data
  
     def add_column_of_rounded_coordinates_to_dataframe(self) -> pd.DataFrame:
         """
@@ -151,15 +151,15 @@ class DirectIndexing:
         self.data = data
         self.scenario = scenario
 
-        self.latitudes = self.data.loc[:, f"{scenario}_lat"]
-        self.longitudes = self.data.loc[:, f"{scenario}_lng"]
-        self.latitudes_index = self.data.columns.get_loc(f"{scenario}_lat")
-        self.longitudes_index = self.data.columns.get_loc(f"{scenario}_lng")
+        self.latitudes = data.loc[:, f"{scenario}_lat"]
+        self.longitudes = data.loc[:, f"{scenario}_lng"]
+        self.latitudes_index = data.columns.get_loc(f"{scenario}_lat")
+        self.longitudes_index = data.columns.get_loc(f"{scenario}_lng")
 
-        self.station_id_index = self.data.columns.get_loc(f"{scenario}_station_id")
-        self.station_name_index = self.data.columns.get_loc(f"{scenario}_station_name")
+        self.station_id_index = data.columns.get_loc(f"{scenario}_station_id")
+        self.station_name_index = data.columns.get_loc(f"{scenario}_station_name")
 
-        self.proper_name_of_scenario = "departure" if self.scenario == "start" else "arrival"
+        self.proper_name_of_scenario = "departure" if scenario == "start" else "arrival"
 
     def found_rows_with_either_missing_ids_or_names(self) -> bool:
         """
@@ -340,22 +340,39 @@ class DirectIndexing:
         return self.data
 
     def save_geodata(
-        self, 
-        station_names: pd.Series,
-        station_ids: pd.Series,
-        latitudes: pd.Series, 
-        longitudes: pd.Series
-        ) -> None:
+        self, station_names: pd.Series, station_ids: pd.Series, latitudes: pd.Series, longitudes: pd.Series
+    ) -> None:
         """
         Saves the station ID, mame, and coordinates for use in the frontend
         """
-        geodata = {
-            str(station_name): [(latitude, longitude), station_id] for (latitude, longitude, station_id, station_name) \
-            in zip(latitudes, longitudes, station_ids, station_names)
+        geodata_to_iterate = tqdm(
+            iterable=zip(latitudes, longitudes, station_ids, station_names),
+            desc="Saving the geodata of each row"
+        )
+
+        geojson = {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+
+                    "geometry": {
+                        "type": "Point",
+                        "coordinate": [longitude, latitude]
+                    },
+
+                    "properties": {
+                        "station_id": station_id,
+                        "station_name": station_name
+                    }
+                } 
+                for (latitude, longitude, station_id, station_name) in geodata_to_iterate      
+            ] 
         }
 
-        with open(INDEXER_TWO / f"{self.scenario}_geodata.json", mode="w") as file:
-            json.dump(geodata, file)
+        with open(INDEXER_TWO / f"{self.scenario}_geodata.geojson", mode="w") as file:
+            json.dump(geojson, file)
+                
 
     def execute(self, delete_leftover_rows: bool = True, save: bool = True) -> pd.DataFrame:
         """
@@ -372,7 +389,7 @@ class DirectIndexing:
         fully_cleaned_data_path = CLEANED_DATA / f"fully_cleaned_{self.scenario}s.parquet"
 
         if Path(fully_cleaned_data_path).is_file():
-            logger.success("Data with completely re-indexed station IDs already exists. Fetching it...")
+            logger.success("Data with re-indexed station IDs had previously been saved. Fetching it...")
             self.data = pd.read_parquet(path=fully_cleaned_data_path)
 
         else:
@@ -381,11 +398,11 @@ class DirectIndexing:
             leftover_rows = self.find_rows_with_missing_ids_and_names(repeat=True)
 
             if delete_leftover_rows:
-                logger.info("Deleting the leftover rows...")
+                logger.warning("Deleting the leftover rows...")
                 self.data = self.data.drop(self.data.index[leftover_rows], axis=0)
 
             else:
-                logger.info("Initiating the reverse geocoding procedure for the leftover rows")
+                logger.info("Initiating reverse geocoding procedure for the leftover rows")
                 coordinate_maker = RoundingCoordinates(decimal_places=6, scenario=self.scenario, data=self.data)
                 coordinate_maker.add_column_of_rounded_coordinates_to_dataframe(scenario=self.scenario, data=self.data)
 
@@ -408,6 +425,9 @@ class DirectIndexing:
             self.data.iloc[:, self.station_id_index] = station_ids.map(old_and_new_ids)
 
             self.data = self.data.reset_index(drop=True)
+
+            for column in self.data.select_dtypes(include=["datetime64[ns]"]):
+                self.data[column] = self.data[column].astype(str)
 
             self.save_geodata(
                 latitudes=self.data.iloc[:, self.latitudes_index],

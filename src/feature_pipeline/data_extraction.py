@@ -102,7 +102,7 @@ def check_for_file_and_download(year: int, file_name: str, month: int = None):
             except Exception as error:
                 logger.error(error)
         else:
-            logger.success(f"The file {file_name}.zip is already in local storage")
+            logger.success(f"The file {file_name}.zip is already saved")
 
 
 def get_dataframe_from_folder(file_name: str) -> pd.DataFrame:

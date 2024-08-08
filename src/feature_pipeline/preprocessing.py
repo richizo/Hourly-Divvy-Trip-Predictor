@@ -117,7 +117,7 @@ class DataProcessor:
         Returns:
             tuple[pd.DataFrame, pd.DataFrame]: the time series datasets for departures and arrivals respectively.
         """
-        logger.info("Cleaning dataframe")
+        logger.info("Cleaning downloaded data...")
         self.data = self.clean()
 
         start_df_columns = ["started_at", "start_lat", "start_lng", "start_station_id"]
@@ -132,7 +132,7 @@ class DataProcessor:
         start_df = self.data[start_df_columns]
         end_df = self.data[end_df_columns]
 
-        logger.info("Transforming the data into a time series...")
+        logger.info("Transforming data into a time series...")
         start_ts, end_ts = self.transform_cleaned_data_into_ts_data(start_df=start_df, end_df=end_df)
         return start_ts, end_ts
 
@@ -335,8 +335,8 @@ class DataProcessor:
                         not self.tie_ids_to_unique_coordinates(data=self.data):
 
                     logger.success("Custom station indexer required: NOT tying new IDs to unique coordinates")
+        
                     indexer = DirectIndexing(scenario=start_or_end, data=cleaned_data)
-
                     interim_data = indexer.execute(delete_leftover_rows=True)
                     interim_dataframes.append(interim_data)
 
@@ -513,7 +513,7 @@ class DataProcessor:
         Returns:
             pd.DataFrame: the training data
         """
-        if self.for_inference:
+        if self.for_inference and "timestamp" in ts_data.columns:
             ts_data = ts_data.drop("timestamp", axis=1)
 
         # Ensure first that these are the columns of the chosen data set (and they are listed in this order)

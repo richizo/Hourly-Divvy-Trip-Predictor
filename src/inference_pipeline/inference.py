@@ -56,7 +56,7 @@ class InferenceModule:
             for_predictions=False
         )
 
-    def fetch_time_series_and_make_features(self, target_date: datetime, geocode: bool) -> pd.DataFrame:
+    def fetch_time_series_and_make_features(self, target_date: datetime, geocode: bool, local: bool) -> pd.DataFrame:
         """
         Queries the offline feature store for time series data within a certain timeframe, and creates features
         features from that data. We then apply feature engineering so that the data aligns with the features from
@@ -74,15 +74,30 @@ class InferenceModule:
         Returns:
             pd.DataFrame:
         """ 
-        feature_view: FeatureView = self.api.get_or_create_feature_view(
-            name=f"{self.scenario}_feature_view",
-            feature_group=self.feature_group,
-            version=1   
-        )
-
-        logger.info("Fetching time series data from the offline feature store...")
         fetch_from = target_date - timedelta(days=90)
-        ts_data: pd.DataFrame = feature_view.get_batch_data(start_time=fetch_from, end_time=target_date)
+
+        if local:
+            from src.setup.paths import TIME_SERIES_DATA
+            file_path = TIME_SERIES_DATA/f"{self.scenario}_ts.parquet"
+            if Path(file_path).is_file():
+                ts_data = pd.read_parquet(file_path)
+
+            try:
+                ts_data = ts_data[ts_data[f"{self.scenario}_hour"].between(left=fetch_from, right=target_date)]
+            except Exception as error:
+                logger.error(error)
+                
+            logger.success("Fetched time series locally")
+
+        else:
+            feature_view: FeatureView = self.api.get_or_create_feature_view(
+                name=f"{self.scenario}_feature_view",
+                feature_group=self.feature_group,
+                version=1   
+            )
+
+            logger.info("Fetching time series data from the offline feature store...")
+            ts_data: pd.DataFrame = feature_view.get_batch_data(start_time=fetch_from, end_time=target_date)
 
         ts_data = ts_data.sort_values(
             by=[f"{self.scenario}_station_id", f"{self.scenario}_hour"]
