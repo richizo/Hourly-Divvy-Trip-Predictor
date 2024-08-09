@@ -93,15 +93,13 @@ def get_features(scenario: str, target_date: datetime, local: bool = True) -> pd
         inferrer = InferenceModule(scenario=scenario)
         features = inferrer.fetch_time_series_and_make_features(target_date=target_date, geocode=False, local=local)
         
-        st.sidebar.write("✅ Fetched features for inference")
-        progress_bar.progress(2/n_steps)
-        return features 
+    return features 
 
-
+@st.cache_data
 def get_hourly_predictions(
     scenario: str,
     model_name: str, 
-    from_hour: datetime = current_hour - timedelta(days=1),
+    from_hour: datetime = current_hour - timedelta(hours=1),
     to_hour: datetime = current_hour
 ) -> pd.DataFrame:
     """
@@ -146,10 +144,6 @@ def get_hourly_predictions(
         else:
             raise Exception("Cannot get predictions for either hour. The feature pipeline may not be working")
 
-    if not predictions_to_use.empty:
-        st.sidebar.write("✅ Model's predictions received")
-        progress_bar.progress(3 / n_steps)
-    
     return predictions_to_use
 
 
@@ -193,31 +187,51 @@ def make_geodataframe(geojson: dict, scenario: str) -> GeoDataFrame:
 
 
 def make_map(scenario: str, geojson: dict, geodata: GeoDataFrame, predictions: pd.DataFrame):
+    """
+
+    Args:
+        scenario (str): _description_
+        geojson (dict): _description_
+        geodata (GeoDataFrame): _description_
+        predictions (pd.DataFrame): _description_
+    """
 
     with st.spinner("Building map..."):
-        centre = [41.872866, -87.63363]
-        folium_map = Map(location=centre, zoom_start=15)  
+        centre = [41.872866, -87.63363]  # A random coordinate in Chicago
+        folium_map = Map(location=centre, zoom_start=15)  # A base map
+
+        station_ids = geodata.iloc[:, 1].values
+        coordinates = geodata.iloc[:, 2].values
+        station_names = geodata.iloc[:, 0].values
 
         rows_to_iterate = tqdm(iterable=range(geodata.shape[0]), desc="Gathering elements to display")
+        predictions_lookup: dict = predictions.set_index(f"{scenario}_station_id")[f"predicted_{scenario}s"].to_dict()
 
+        markers = []
         for row_index in rows_to_iterate:
-            station_name = geodata.iloc[row_index, 0]
-            station_id = geodata.iloc[row_index, 1]
-            longitude, latitude = geodata.iloc[row_index, 2]
-            prediction = predictions[predictions[f"{scenario}_station_id"] == station_id][f"predicted_{scenario}s"]
+            station_id = station_ids[row_index]
+            station_name = station_names[row_index]
+            longitude, latitude = coordinates[row_index]
 
-            circle_marker = CircleMarker(
-                radius=3,
-                location=geodata.iloc[row_index, 2],
-                popup=f"{station_name}: Predicted {displayed_scenario_names[scenario].lower()}s"
-            )
+            if station_id in predictions_lookup.keys():
+                prediction = int(predictions_lookup[station_id])
+            
+                circle_marker = CircleMarker(
+                    radius=5,
+                    location=[latitude, longitude],
+                    popup=f"{station_name}: {prediction} Predicted {displayed_scenario_names[scenario].lower()}"
+                )
 
-            circle_marker.add_to(folium_map)
+                markers.append(circle_marker)
+
+        for marker in markers:
+            marker.add_to(folium_map)
 
         st_map = st_folium(fig=folium_map, width=700, height=450)
-        st.sidebar.write("✅ Map Drawn")
-        progress_bar.progress(4/n_steps)
-    
+
+    st.sidebar.write("✅ Map Drawn")
+    progress_bar.progress(4/n_steps)
+
 
 def construct_page(model_name: str):
     """
@@ -241,8 +255,15 @@ def construct_page(model_name: str):
             
             # Fetch features and predictions<
             features = get_features(scenario=scenario, target_date=current_hour)
+            st.sidebar.write("✅ Fetched features for inference")
+            progress_bar.progress(2/n_steps)
+
             predictions = get_hourly_predictions(scenario=scenario, model_name=model_name)
 
+            if not predictions.empty:
+                st.sidebar.write("✅ Model's predictions received")
+                progress_bar.progress(3 / n_steps)
+    
             make_map(scenario=scenario, geojson=geojson, geodata=geodata, predictions=predictions)
         
 
