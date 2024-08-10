@@ -11,3 +11,6 @@ keyfile
 /models
 /.cometml-runs
 **/__pycache__
+
+/Mapping attempts
+kepler_map.html

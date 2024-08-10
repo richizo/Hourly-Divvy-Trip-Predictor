@@ -1,20 +1,20 @@
 import json
 from typing import Any
 
-import folium
-import pydeck
+import time 
 import numpy as np
 import pandas as pd
 import streamlit as st
 
 from tqdm import tqdm
-from geopandas import GeoDataFrame
-from streamlit_folium import st_folium
-from streamlit_option_menu import option_menu
-from datetime import datetime, timedelta, UTC
-from shapely.geometry import Point 
+from loguru import logger
 
-from folium import Map, Choropleth, Marker, CircleMarker
+from geopandas import GeoDataFrame
+from datetime import datetime, timedelta, UTC
+
+from shapely.geometry import Point 
+from folium import Map, CircleMarker
+from streamlit_folium import st_folium
 
 from src.setup.config import config 
 from src.feature_pipeline.preprocessing import DataProcessor
@@ -34,7 +34,7 @@ progress_bar = st.sidebar.header("⚙️ Working Progress")
 progress_bar = st.sidebar.progress(value=0)
 n_steps = 4
 
-
+@st.cache_data
 def load_geojson(scenario: str, indexer: str = "two") -> dict:
     """
 
@@ -77,7 +77,7 @@ def load_geojson(scenario: str, indexer: str = "two") -> dict:
 
 
 @st.cache_data
-def get_features(scenario: str, target_date: datetime, local: bool = True) -> pd.DataFrame:
+def get_features(scenario: str, target_date: datetime, local: bool = False) -> pd.DataFrame:
     """
     Initiate an inference object and use it to get features until the target date.
     features that we will use to fuel the model and produce predictions.
@@ -94,6 +94,7 @@ def get_features(scenario: str, target_date: datetime, local: bool = True) -> pd
         features = inferrer.fetch_time_series_and_make_features(target_date=target_date, geocode=False, local=local)
         
     return features 
+
 
 @st.cache_data
 def get_hourly_predictions(
@@ -147,6 +148,7 @@ def get_hourly_predictions(
     return predictions_to_use
 
 
+#@st.cache_data
 def make_geodataframe(geojson: dict, scenario: str) -> GeoDataFrame:
     
     coordinates = []
@@ -156,7 +158,7 @@ def make_geodataframe(geojson: dict, scenario: str) -> GeoDataFrame:
     for detail_index in range(len(geojson["features"])):
             
         detail: dict = geojson["features"][detail_index]
-        
+
         coordinates.append(
             detail["geometry"]["coordinate"]
         )
@@ -185,8 +187,8 @@ def make_geodataframe(geojson: dict, scenario: str) -> GeoDataFrame:
     progress_bar.progress(1 / n_steps)
     return data
 
-
-def make_map(scenario: str, geojson: dict, geodata: GeoDataFrame, predictions: pd.DataFrame):
+@st.cache_resource    
+def make_map(scenario: str, geodata: GeoDataFrame, predictions: pd.DataFrame):
     """
 
     Args:
@@ -195,40 +197,37 @@ def make_map(scenario: str, geojson: dict, geodata: GeoDataFrame, predictions: p
         geodata (GeoDataFrame): _description_
         predictions (pd.DataFrame): _description_
     """
+    centre = [41.872866, -87.63363]
+    station_names = geodata.iloc[:, 0].values
+    station_ids = geodata.iloc[:, 1].values
+    coordinates = geodata.iloc[:, 2].values
+
+    folium_map = Map(location=centre, zoom_start=15)
+    
+    rows_to_iterate = tqdm(iterable=range(geodata.shape[0]), desc="Gathering elements to display")
+    predictions_per_id = predictions.set_index(f"{scenario}_station_id")[f"predicted_{scenario}s"]
+
+    markers = []
+    for row_index in rows_to_iterate:
+        station_name = station_names[row_index]
+        station_id = station_ids[row_index]
+        longitude, latitude = coordinates[row_index]  # The order was reversed
+        prediction = predictions_per_id.get(station_id, "None")
+
+        circle_marker = CircleMarker(
+            location=[latitude, longitude],
+            popup=f"{station_name}: {prediction} predicted {displayed_scenario_names[scenario].lower()}"
+        )
+
+        markers.append(circle_marker)
+
+    for marker in markers:
+        marker.add_to(parent=folium_map)
 
     with st.spinner("Building map..."):
-        centre = [41.872866, -87.63363]  # A random coordinate in Chicago
-        folium_map = Map(location=centre, zoom_start=15)  # A base map
-
-        station_ids = geodata.iloc[:, 1].values
-        coordinates = geodata.iloc[:, 2].values
-        station_names = geodata.iloc[:, 0].values
-
-        rows_to_iterate = tqdm(iterable=range(geodata.shape[0]), desc="Gathering elements to display")
-        predictions_lookup: dict = predictions.set_index(f"{scenario}_station_id")[f"predicted_{scenario}s"].to_dict()
-
-        markers = []
-        for row_index in rows_to_iterate:
-            station_id = station_ids[row_index]
-            station_name = station_names[row_index]
-            longitude, latitude = coordinates[row_index]
-
-            if station_id in predictions_lookup.keys():
-                prediction = int(predictions_lookup[station_id])
-            
-                circle_marker = CircleMarker(
-                    radius=5,
-                    location=[latitude, longitude],
-                    popup=f"{station_name}: {prediction} Predicted {displayed_scenario_names[scenario].lower()}"
-                )
-
-                markers.append(circle_marker)
-
-        for marker in markers:
-            marker.add_to(folium_map)
-
         st_map = st_folium(fig=folium_map, width=700, height=450)
 
+    logger.success("Displayed map")
     st.sidebar.write("✅ Map Drawn")
     progress_bar.progress(4/n_steps)
 
@@ -263,8 +262,8 @@ def construct_page(model_name: str):
             if not predictions.empty:
                 st.sidebar.write("✅ Model's predictions received")
                 progress_bar.progress(3 / n_steps)
-    
-            make_map(scenario=scenario, geojson=geojson, geodata=geodata, predictions=predictions)
+
+            make_map(scenario=scenario, geodata=geodata, predictions=predictions)
         
 
 if __name__ == "__main__":
