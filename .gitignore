@@ -12,5 +12,7 @@ keyfile
 /.cometml-runs
 **/__pycache__
 
+iterative.jl
+
 /Mapping attempts
 kepler_map.html

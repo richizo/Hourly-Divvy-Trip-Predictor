@@ -79,15 +79,15 @@ class InferenceModule:
         if local:
             from src.setup.paths import TIME_SERIES_DATA
             file_path = TIME_SERIES_DATA/f"{self.scenario}_ts.parquet"
+            
             if Path(file_path).is_file():
+                logger.success("Fetching time series data from local filesystem")
                 ts_data = pd.read_parquet(file_path)
 
             try:
                 ts_data = ts_data[ts_data[f"{self.scenario}_hour"].between(left=fetch_from, right=target_date)]
             except Exception as error:
                 logger.error(error)
-                
-            logger.success("Fetched time series locally")
 
         else:
             feature_view: FeatureView = self.api.get_or_create_feature_view(
@@ -96,7 +96,7 @@ class InferenceModule:
                 version=1   
             )
 
-            logger.info("Fetching time series data from the offline feature store...")
+            logger.warning("Fetching time series data from the offline feature store...")
             ts_data: pd.DataFrame = feature_view.get_batch_data(start_time=fetch_from, end_time=target_date)
 
         ts_data = ts_data.sort_values(

@@ -3,17 +3,19 @@ from typing import Any
 
 import time 
 import numpy as np
-import pandas as pd
+
 import streamlit as st
 
 from tqdm import tqdm
 from loguru import logger
 
+import pandas as pd
 from geopandas import GeoDataFrame
 from datetime import datetime, timedelta, UTC
 
 from shapely.geometry import Point 
 from folium import Map, CircleMarker
+from folium.plugins import FastMarkerCluster
 from streamlit_folium import st_folium
 
 from src.setup.config import config 
@@ -170,12 +172,16 @@ def make_geodataframe(geojson: dict, scenario: str) -> GeoDataFrame:
         station_names.append(
             detail["properties"]["station_name"]
         )
+    
+    latitudes = [point[1] for point in coordinates]
+    longitudes = [point[0] for point in coordinates]
 
     data = pd.DataFrame(
         data={
             f"{scenario}_station_name": station_names,
             f"{scenario}_station_id": station_ids,
-            "coordinates": coordinates
+            "latitudes": latitudes,
+            "longitudes": longitudes
         }
     )
 
@@ -187,7 +193,7 @@ def make_geodataframe(geojson: dict, scenario: str) -> GeoDataFrame:
     progress_bar.progress(1 / n_steps)
     return data
 
-@st.cache_resource    
+
 def make_map(scenario: str, geodata: GeoDataFrame, predictions: pd.DataFrame):
     """
 
@@ -197,35 +203,22 @@ def make_map(scenario: str, geodata: GeoDataFrame, predictions: pd.DataFrame):
         geodata (GeoDataFrame): _description_
         predictions (pd.DataFrame): _description_
     """
-    centre = [41.872866, -87.63363]
-    station_names = geodata.iloc[:, 0].values
-    station_ids = geodata.iloc[:, 1].values
-    coordinates = geodata.iloc[:, 2].values
-
-    folium_map = Map(location=centre, zoom_start=15)
-    
-    rows_to_iterate = tqdm(iterable=range(geodata.shape[0]), desc="Gathering elements to display")
-    predictions_per_id = predictions.set_index(f"{scenario}_station_id")[f"predicted_{scenario}s"]
-
-    markers = []
-    for row_index in rows_to_iterate:
-        station_name = station_names[row_index]
-        station_id = station_ids[row_index]
-        longitude, latitude = coordinates[row_index]  # The order was reversed
-        prediction = predictions_per_id.get(station_id, "None")
-
-        circle_marker = CircleMarker(
-            location=[latitude, longitude],
-            popup=f"{station_name}: {prediction} predicted {displayed_scenario_names[scenario].lower()}"
-        )
-
-        markers.append(circle_marker)
-
-    for marker in markers:
-        marker.add_to(parent=folium_map)
-
     with st.spinner("Building map..."):
-        st_map = st_folium(fig=folium_map, width=700, height=450)
+        centre = [41.872866, -87.63363]
+        station_names = geodata.iloc[:, 0].values
+        station_ids = geodata.iloc[:, 1].values
+
+        latitudes = geodata["latitudes"].values
+        longitudes = geodata["longitudes"].values
+
+        #rows_to_iterate = tqdm(iterable=range(geodata.shape[0]), desc="Gathering elements to display")
+        #predictions_per_id = predictions.set_index(f"{scenario}_station_id")[f"predicted_{scenario}s"]
+
+        marker_cluster = FastMarkerCluster(data=zip(latitudes, longitudes), popups=f"{predictions_per_id.values}")
+        folium_map = Map(location=centre)
+        marker_cluster.add_to(parent=folium_map)
+
+        displayed_map = st_folium(fig=folium_map, width=900, height=650)
 
     logger.success("Displayed map")
     st.sidebar.write("✅ Map Drawn")
@@ -253,7 +246,7 @@ def construct_page(model_name: str):
             geodata = make_geodataframe(geojson=geojson, scenario=scenario)
             
             # Fetch features and predictions<
-            features = get_features(scenario=scenario, target_date=current_hour)
+            features = get_features(scenario=scenario, target_date=current_hour, local=True)
             st.sidebar.write("✅ Fetched features for inference")
             progress_bar.progress(2/n_steps)
 
