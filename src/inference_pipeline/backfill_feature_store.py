@@ -106,17 +106,14 @@ class BackFiller:
         registry = ModelRegistry(scenario=self.scenario, model_name=model_name, tuned_or_not=tuned_or_not)
         model = registry.download_latest_model(status="production", unzip=True)
 
-        engineered_features = inferrer.fetch_time_series_and_make_features(
-            target_date=datetime.now(),
-            geocode=False
-        )
+        features = inferrer.fetch_time_series_and_make_features(target_date=datetime.now(), geocode=False)
 
         try:
-            engineered_features = engineered_features.drop(["trips_next_hour", f"{scenario}_hour"], axis=1)
+            features = features.drop(["trips_next_hour", f"{scenario}_hour"], axis=1)
         except Exception as error:
             logger.error(error)    
 
-        predictions_df: pd.DataFrame = inferrer.get_model_predictions(model=model, features=engineered_features)
+        predictions_df: pd.DataFrame = inferrer.get_model_predictions(model=model, features=features)
         
         predictions_feature_group: FeatureGroup = self.api.get_or_create_feature_group(
             description=f"predictions on {self.scenario} data using the {tuned_or_not} {model_name}",

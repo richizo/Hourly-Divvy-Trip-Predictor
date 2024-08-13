@@ -56,7 +56,7 @@ class InferenceModule:
             for_predictions=False
         )
 
-    def fetch_time_series_and_make_features(self, target_date: datetime, geocode: bool, local: bool) -> pd.DataFrame:
+    def fetch_time_series_and_make_features(self, target_date: datetime, geocode: bool) -> pd.DataFrame:
         """
         Queries the offline feature store for time series data within a certain timeframe, and creates features
         features from that data. We then apply feature engineering so that the data aligns with the features from
@@ -76,28 +76,14 @@ class InferenceModule:
         """ 
         fetch_from = target_date - timedelta(days=90)
 
-        if local:
-            from src.setup.paths import TIME_SERIES_DATA
-            file_path = TIME_SERIES_DATA/f"{self.scenario}_ts.parquet"
-            
-            if Path(file_path).is_file():
-                logger.success("Fetching time series data from local filesystem")
-                ts_data = pd.read_parquet(file_path)
+        feature_view: FeatureView = self.api.get_or_create_feature_view(
+            name=f"{self.scenario}_feature_view",
+            feature_group=self.feature_group,
+            version=1   
+        )
 
-            try:
-                ts_data = ts_data[ts_data[f"{self.scenario}_hour"].between(left=fetch_from, right=target_date)]
-            except Exception as error:
-                logger.error(error)
-
-        else:
-            feature_view: FeatureView = self.api.get_or_create_feature_view(
-                name=f"{self.scenario}_feature_view",
-                feature_group=self.feature_group,
-                version=1   
-            )
-
-            logger.warning("Fetching time series data from the offline feature store...")
-            ts_data: pd.DataFrame = feature_view.get_batch_data(start_time=fetch_from, end_time=target_date)
+        logger.warning("Fetching time series data from the offline feature store...")
+        ts_data: pd.DataFrame = feature_view.get_batch_data(start_time=fetch_from, end_time=target_date)
 
         ts_data = ts_data.sort_values(
             by=[f"{self.scenario}_station_id", f"{self.scenario}_hour"]
@@ -159,12 +145,7 @@ class InferenceModule:
         )
 
 
-    def load_predictions_from_store(
-            self,
-            from_hour: datetime,
-            to_hour: datetime,
-            model_name: str = "lightgbm"
-    ) -> pd.DataFrame:
+    def load_predictions_from_store(self, from_hour: datetime, to_hour: datetime, model_name: str) -> pd.DataFrame:
         """
         Load a dataframe containing predictions from their dedicated feature group on the offline feature store.
         This dataframe will contain predicted values between the specified hours. 
@@ -218,4 +199,5 @@ class InferenceModule:
         prediction_per_station[f"{self.scenario}_station_id"] = features[f"{self.scenario}_station_id"].values
         prediction_per_station[f"{self.scenario}_hour"] = pd.to_datetime(datetime.utcnow()).floor("H")
         prediction_per_station[f"predicted_{self.scenario}s"] = predictions.round(decimals=0)
+        
         return prediction_per_station

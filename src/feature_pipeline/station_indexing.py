@@ -163,7 +163,7 @@ class DirectIndexing:
 
     def found_rows_with_either_missing_ids_or_names(self) -> bool:
         """
-        Search the rows of the dataset to find rows for where we have either a missing station name or a missing 
+        Search the dataset for rows which have either a missing station name or a missing 
         station ID. In the version of the data that we are currently using, there no such rows.
 
         Returns:
@@ -172,27 +172,36 @@ class DirectIndexing:
         counter = 0
         for row in tqdm(
                 iterable=range(self.data.shape[0]),
-                desc="Checking for rows that have either missing station names or station IDs"
+                desc="Checking for rows that either have missing station names or missing station IDs"
         ):
-            station_id_for_row = self.data.iloc[row, self.station_id_index]
-            station_name_for_row = self.data.iloc[row, self.station_name_index]
+            row_station_id = self.data.iloc[row, self.station_id_index]
+            row_station_name = self.data.iloc[row, self.station_name_index]
 
-            if pd.isnull(station_name_for_row) and not pd.isnull(station_id_for_row) \
-                    or not pd.isnull(station_name_for_row) and pd.isnull(station_id_for_row):
+            only_missing_id = not pd.isnull(row_station_name) and pd.isnull(row_station_id)
+            only_missing_name = pd.isnull(row_station_name) and not pd.isnull(row_station_id)
+
+            if only_missing_id or only_missing_name:
                 counter += 1
 
         return True if counter > 0 else False
 
-    def find_rows_with_missing_ids_and_names(self, repeat: bool) -> list[int]:
-        addendum = "still" if repeat else ""
+    def find_rows_with_missing_ids_and_names(self, first_time: bool) -> list[int]:
+        """
+        Search for rows with both IDs and names missing.
+
+        Args:
+            first_time (bool): whether this function is being run for the first time
+
+        Returns:
+            list[int]: the indices of the rows we found.
+        """
         return [
             row for row in tqdm(
                 iterable=range(self.data.shape[0]),
-                desc=f"Searching for rows that {addendum} have missing station names and IDs"
+                desc=f"Searching for rows that{"" if first_time else " still"} have missing station names and IDs"
             )
 
-            if pd.isnull(self.data.iloc[row, self.station_id_index]) and
-                pd.isnull(self.data.iloc[row, self.station_name_index])
+            if pd.isnull(self.data.iloc[row, self.station_id_index]) and pd.isnull(self.data.iloc[row, self.station_name_index])
         ]
 
     def find_rows_with_known_ids_and_names(self, save: bool = True) -> dict[str, tuple[float]]:
@@ -213,21 +222,20 @@ class DirectIndexing:
         else:
             rows_and_coordinates_with_known_ids_names = {}
 
-            for row in tqdm(
-                    iterable=range(self.data.shape[0]),
-                    desc="Looking for rows that have either a missing station ID OR a missing station name."
+            for row_index in tqdm(
+                    iterable=range(self.data.shape[0]), desc="Looking for rows that have both station names and IDs."
             ):
-                latitude = self.data.iloc[row, self.latitudes_index]
-                longitude = self.data.iloc[row, self.longitudes_index]
+                latitude = self.data.iloc[row_index, self.latitudes_index]
+                longitude = self.data.iloc[row_index, self.longitudes_index]
 
-                station_id_for_the_row = self.data.iloc[row, self.station_id_index]
-                station_name_for_the_row = self.data.iloc[row, self.station_name_index]
+                station_id_for_the_row = self.data.iloc[row_index, self.station_id_index]
+                station_name_for_the_row = self.data.iloc[row_index, self.station_name_index]
 
                 station_id_is_not_missing = not pd.isnull(station_id_for_the_row)
                 station_name_is_not_missing = not pd.isnull(station_name_for_the_row)
 
                 if station_id_is_not_missing and station_name_is_not_missing:
-                    rows_and_coordinates_with_known_ids_names[row] = (latitude, longitude)
+                    rows_and_coordinates_with_known_ids_names[row_index] = (latitude, longitude)
 
             if save:
                 with open(file_path, mode="w") as file:
@@ -237,8 +245,8 @@ class DirectIndexing:
 
     def match_names_and_ids_by_station_proximity(self, save: bool = True) -> dict[int, tuple[str, str]]:
         """
-        Based on common sense, and a perfunctory look at https://account.divvybikes.com/map, it looks like there are 
-        (fingers crossed) no two stations that are within 10m of each other. On those grounds, we can say with some 
+        Based on common sense, and a perfunctory look at https://account.divvybikes.com/map, it looks like there 
+        are (knock on wood) no two stations that are within 10m of each other. On those grounds, we can say with some 
         confidence that any two station coordinates which are within 10m of each other must belong to the same station.
 
         Suppose we have a given coordinate (which we'll call the target coordinate), and we round it down from 6 to
@@ -254,68 +262,83 @@ class DirectIndexing:
             dict[int, tuple[str|int, str]]: key, value pairs of row indices and their newly discovered station IDs
                                             and names
         """
-        matched_coordinates_path = INDEXER_TWO / f"{self.scenario}_coordinates_with_new_ids_and_names.json"
-
+        matched_coordinates_path = INDEXER_TWO / f"{self.scenario}_coordinates_with_new_ids_and_names.parquet"
         if Path(matched_coordinates_path).exists():
             logger.success("The matching operation has already been done. Fetching local file...")
             with open(matched_coordinates_path, mode="r") as file:
-                rows_with_the_issue_and_their_discovered_names_and_ids = json.load(file)
+                problem_rows_and_their_discovered_names_and_ids = json.load(file)
 
         else:
             assert not self.found_rows_with_either_missing_ids_or_names(), 'There is now a row which contains a \
                 missing station ID or a station name (not both). This will have occurred due to a change in the data'
 
-            rows_with_the_issue_and_their_discovered_names_and_ids = {}
-            rows_with_no_issue_and_their_original_coordinates = self.find_rows_with_known_ids_and_names()
-            logger.info("Rounding the coordinates in rows with both IDs and names")
+            complete_rows_and_their_rounded_coordinates = {}
+            problem_rows_and_their_discovered_names_and_ids = {}
+            complete_rows_and_their_original_coordinates = self.find_rows_with_known_ids_and_names()
 
-            rows_with_no_issue_and_their_rounded_coordinates = {}
-            for row in tqdm(rows_with_no_issue_and_their_original_coordinates.keys()):
-                original_coordinate = rows_with_no_issue_and_their_original_coordinates[row]
+            problem_rows = self.find_rows_with_missing_ids_and_names(first_time=True)
+            
+            rows_without_issue = [
+                int(row_index) for row_index in complete_rows_and_their_original_coordinates.keys()
+            ]
 
-                rounded_latitude = np.round(original_coordinate[0], decimals=4)
-                rounded_longitude = np.round(original_coordinate[1], decimals=4)
-                rows_with_no_issue_and_their_rounded_coordinates[row] = (rounded_latitude, rounded_longitude)
+            rounded_lats = self.data.iloc[:, self.latitudes_index].apply(lambda x: np.round(x, decimals=4))
+            rounded_lngs = self.data.iloc[:, self.longitudes_index].apply(lambda x: np.round(x, decimals=4))
 
-            logger.info("Performing the matching operation...")
+            self.data.insert(
+                loc=self.data.shape[1],
+                column="rounded_lat",
+                value=rounded_lats,
+                allow_duplicates=False
 
-            for row in tqdm(
-                    iterable=self.find_rows_with_missing_ids_and_names(repeat=False)
-            ):
+            )
 
-                if row in rows_with_the_issue_and_their_discovered_names_and_ids.keys():
-                    continue
+            self.data.insert(
+                loc=self.data.shape[1],
+                column="rounded_lng",
+                value=rounded_lngs,
+                allow_duplicates=False
+            )
 
-                rounded_target_latitude = np.round(self.data.iloc[row, self.latitudes_index], decimals=4)
-                rounded_target_longitude = np.round(self.data.iloc[row, self.longitudes_index], decimals=4)
+            rounded_lats_index = self.data.columns.get_loc("rounded_lat")
+            rounded_lngs_index = self.data.columns.get_loc("rounded_lng")
 
-                if (rounded_target_latitude, rounded_target_longitude) in \
-                        rows_with_no_issue_and_their_rounded_coordinates.values():
-                    row_of_interest = next(
-                        (
-                            int(row) for row, coordinate in rows_with_no_issue_and_their_rounded_coordinates.items() if
-                            coordinate == (rounded_target_latitude, rounded_target_longitude)
-                        )
-                    )
+            problem_data = self.data.iloc[
+                problem_rows, [rounded_lats_index, rounded_lngs_index]
+            ]
 
-                    found_station_id = self.data.iloc[row_of_interest, self.station_id_index]
-                    found_station_name = self.data.iloc[row_of_interest, self.station_name_index]
+            data_without_issue = self.data.iloc[
+                rows_without_issue, [rounded_lats_index, rounded_lngs_index, self.station_id_index, self.station_name_index]
+            ]
 
-                    rows_with_the_issue_and_their_discovered_names_and_ids[row] = (found_station_id, found_station_name)
+            merged_data = pd.merge(
+                left=problem_data,
+                right=data_without_issue,
+                on=["rounded_lat", "rounded_lng"],
+                how="left"  # To keep all the rows in the problematic data for which the match was unsuccesful
+            )
 
             if save:
-                with open(matched_coordinates_path, mode="w") as file:
-                    json.dump(rows_with_the_issue_and_their_discovered_names_and_ids, file)
+                merged_data.to_parquet(path=matched_coordinates_path)
 
-            logger.success(f"Found {len(rows_with_the_issue_and_their_discovered_names_and_ids)} station names and IDs")
+            return merged_data
 
-        return rows_with_the_issue_and_their_discovered_names_and_ids
+            logger.success(f"Found {len(problem_rows_and_their_discovered_names_and_ids)} station names and IDs")
+
+        return problem_rows_and_their_discovered_names_and_ids
+
 
     def replace_missing_station_names_and_ids(self, save: bool = True) -> pd.DataFrame:
         """
-        Take the row indices, as well as the associated IDs and names that were discovered using the
-        matching procedure. Then replace the missing station names and IDs in these rows of the dataframe 
-        with those that were discovered.
+        Take the row indices, as well as the associated IDs and names that were discovered using the matching 
+        procedure. Then replace the missing station names and IDs in these rows of the dataframe with those 
+        that were discovered.
+
+        Args:
+            save (bool, optional): _description_. Defaults to True.
+
+        Returns:
+            pd.DataFrame: _description_
         """
         replaced_data_path = INDEXER_TWO / f"{self.scenario}_replaced_missing_names_and_ids.parquet"
 
@@ -327,12 +350,21 @@ class DirectIndexing:
 
             # Write the target row indices, the new IDs, and the new names as vectors
             target_rows_indices = [int(row) for row in rows_with_new_names_and_ids.keys()]
-            new_ids = {int(row): new_id_and_name[0] for row, new_id_and_name in rows_with_new_names_and_ids.items()}
-            new_names = {int(row): new_id_and_name[1] for row, new_id_and_name in rows_with_new_names_and_ids.items()}
+
+            new_ids = {
+                int(row): new_id for row, (new_id, new_name) in rows_with_new_names_and_ids.items()
+            }
+
+            new_names = {
+                int(row): new_name for row, (new_id, new_name) in rows_with_new_names_and_ids.items()
+            }
             
             # Perform the replacement
-            self.data.iloc[target_rows_indices, self.station_id_index] = self.data.iloc[target_rows_indices, self.station_id_index].map(new_ids)
-            self.data.iloc[target_rows_indices, self.station_name_index] = self.data.iloc[target_rows_indices, self.station_name_index].map(new_names)
+            self.data.iloc[target_rows_indices, self.station_id_index] = \
+                self.data.iloc[target_rows_indices, self.station_id_index].map(new_ids)
+            
+            self.data.iloc[target_rows_indices, self.station_name_index] = \
+                self.data.iloc[target_rows_indices, self.station_name_index].map(new_names)
 
             if save:
                 self.data.to_parquet(path=replaced_data_path)
@@ -395,7 +427,7 @@ class DirectIndexing:
         else:
             logger.info("Initiating reindexing procedure...")
             self.data = self.replace_missing_station_names_and_ids()
-            leftover_rows = self.find_rows_with_missing_ids_and_names(repeat=True)
+            leftover_rows = self.find_rows_with_missing_ids_and_names(first_time=False)
 
             if delete_leftover_rows:
                 logger.warning("Deleting the leftover rows...")
