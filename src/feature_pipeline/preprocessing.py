@@ -26,7 +26,8 @@ class DataProcessor:
         self.start_ts_path = TIME_SERIES_DATA / "start_ts.parquet"
         self.end_ts_path = TIME_SERIES_DATA / "end_ts.parquet"
 
-        self.data = pd.concat(list(load_raw_data(year=year))) if not for_inference else None
+        loaded_raw_data = list(load_raw_data(year=year))
+        self.data = pd.concat(loaded_raw_data) if not for_inference else None
 
     def use_custom_station_indexing(self, scenarios: list[str], data: pd.DataFrame) -> bool:
         """
@@ -139,18 +140,18 @@ class DataProcessor:
     def clean(self, save: bool = True) -> pd.DataFrame:
 
         if self.use_custom_station_indexing(scenarios=self.scenarios, data=self.data) \
-                and self.tie_ids_to_unique_coordinates(data=self.data):
+            and self.tie_ids_to_unique_coordinates(data=self.data):
 
-            cleaned_data_file_path = CLEANED_DATA / "partially_cleaned_data_indexer_one.parquet"
+            cleaned_data_file_path = CLEANED_DATA / "data_with_reindexed_stations (indexer_one).parquet"
 
         elif self.use_custom_station_indexing(scenarios=self.scenarios, data=self.data) \
-                and not self.tie_ids_to_unique_coordinates(data=self.data):
+            and not self.tie_ids_to_unique_coordinates(data=self.data):
 
-            cleaned_data_file_path = CLEANED_DATA / "partially_cleaned_data_indexer_two.parquet"
+            cleaned_data_file_path = CLEANED_DATA/"data_with_reindexed_stations (indexer_two).parquet"
 
         # Will think of a more elegant solution in due course. This only serves my current interests.
         elif self.for_inference:
-            cleaned_data_file_path = CLEANED_DATA / "partially_cleaned_data_indexer_two.parquet"
+            cleaned_data_file_path = CLEANED_DATA / "partially_cleaned_data_for_inference.parquet"
 
         else:
             raise NotImplementedError(
@@ -180,21 +181,16 @@ class DataProcessor:
                     longs = self.data.columns.get_loc(f"{scenario}_lng")
                     station_names_col = self.data.columns.get_loc(f"{scenario}_station_name")
 
-                    all_rows = tqdm(
-                        iterable=range(self.data.shape[0]),
-                        desc=f"Targeting rows with missing station names and coordinates for deletion ({scenario}s)"
-                    )
+                    logger.info(f"Deleting rows with missing station names and coordinates ({scenario}s)...")
 
-                    rows_to_delete = []
-                    for row in all_rows:
-                        station_name = self.data.iloc[row, station_names_col]
-                        row_latitude = self.data.iloc[row, lats]
-                        row_longitude = self.data.iloc[row, longs]
+                    where_missing_latitudes = self.data.iloc[:, lats].isnull()
+                    where_missing_longitudes = self.data.iloc[:, longs].isnull()
+                    where_missing_station_names = self.data.iloc[:, station_names_col].isnull()
 
-                        if pd.isnull(station_name) and pd.isnull(row_latitude) and pd.isnull(row_longitude):
-                            rows_to_delete.append(row)
+                    all_missing_mask = where_missing_station_names & where_missing_latitudes & where_missing_longitudes
+                    data_to_delete = self.data.loc[all_missing_mask, :]
 
-                    self.data = self.data.drop(self.data.index[rows_to_delete], axis=0)
+                    self.data = self.data.drop(data_to_delete.index, axis=0)
 
                 return self.data
 

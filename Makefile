@@ -1,7 +1,8 @@
-# Version Control
 push:
 	git push github && git push gitlab
 
+process:
+	poetry run python src/feature_pipeline/preprocessing.py 
 
 # Model Training
 train-start-untuned:

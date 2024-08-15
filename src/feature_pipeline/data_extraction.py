@@ -84,7 +84,7 @@ def download_one_file_of_raw_data(year: int, month: int = None) -> None:
         __download_and_extract_zipfile(first_zipfile_name=f"{year}{month:02d}-divvy-tripdata.zip", url_1=url)
 
 
-def check_for_file_and_download(year: int, file_name: str, month: int = None):
+def check_for_file_or_download(year: int, file_name: str, month: int = None):
     """
     Checks for the presence of a file, and downloads it if necessary.
 
@@ -102,7 +102,7 @@ def check_for_file_and_download(year: int, file_name: str, month: int = None):
             except Exception as error:
                 logger.error(error)
         else:
-            logger.success(f"The file {file_name}.zip is already saved")
+            logger.success(f"{file_name}.zip is already saved")
 
 
 def get_dataframe_from_folder(file_name: str) -> pd.DataFrame:
@@ -141,7 +141,7 @@ def load_raw_data(year: int, months: list[int] = None) -> pd.DataFrame:
     for month in months_to_download:
         file_name = f"{year}{month:02d}-divvy-tripdata"
         try:
-            check_for_file_and_download(year=year, month=month, file_name=file_name)
+            check_for_file_or_download(year=year, month=month, file_name=file_name)
             yield get_dataframe_from_folder(file_name=file_name)
         except Exception as error:
             logger.error(error)
