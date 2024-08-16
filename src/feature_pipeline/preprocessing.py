@@ -319,7 +319,7 @@ class DataProcessor:
                 if self.use_custom_station_indexing(scenarios=[start_or_end], data=self.data) and \
                         self.tie_ids_to_unique_coordinates(data=self.data):
 
-                    logger.success("Custom station indexer required: tying new station IDs to unique coordinates")
+                    logger.warning("Custom station indexer required: tying new station IDs to unique coordinates")
                     indexer = RoundingCoordinates(data= cleaned_data, scenario=start_or_end, decimal_places=4) # Default of 4 dp
 
                     interim_data = indexer.execute()
@@ -330,7 +330,7 @@ class DataProcessor:
                 elif self.use_custom_station_indexing(scenarios=[start_or_end], data=self.data) and \
                         not self.tie_ids_to_unique_coordinates(data=self.data):
 
-                    logger.success("Custom station indexer required: NOT tying new IDs to unique coordinates")
+                    logger.warning("Custom station indexer required: NOT tying new IDs to unique coordinates")
         
                     indexer = DirectIndexing(scenario=start_or_end, data=cleaned_data)
                     interim_data = indexer.execute(delete_leftover_rows=True)

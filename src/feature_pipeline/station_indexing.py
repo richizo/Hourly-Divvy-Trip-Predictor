@@ -153,13 +153,11 @@ class DirectIndexing:
 
         self.latitudes_index = data.columns.get_loc(f"{scenario}_lat")
         self.longitudes_index = data.columns.get_loc(f"{scenario}_lng")
-
         self.station_id_index = data.columns.get_loc(f"{scenario}_station_id")
         self.station_name_index = data.columns.get_loc(f"{scenario}_station_name")
 
         self.station_ids = data.iloc[:, self.station_id_index]
         self.station_names = data.iloc[:, self.station_name_index]
-
         self.proper_name_of_scenario = "departure" if scenario == "start" else "arrival"
 
     def found_rows_with_either_missing_ids_or_names(self) -> bool:
@@ -179,7 +177,8 @@ class DirectIndexing:
         target_condition = only_missing_id | only_missing_names
         return True if target_condition.sum() > 0 else False
 
-    def find_rows_with_missing_ids_and_names(self, first_time: bool) -> list[int]:
+    @staticmethod
+    def find_rows_with_missing_ids_and_names(scenario: str, data: pd.DataFrame, first_time: bool) -> list[int]:
         """
         Search for rows with both IDs and names missing.
 
@@ -189,16 +188,16 @@ class DirectIndexing:
         Returns:
             list[int]: the indices of the rows we found.
         """
-        logger.info(f"Searching for rows that{"" if first_time else " still"} have missing station names and IDs")
+        logger.info(f"Searching for rows that{"" if first_time else " still"} have missing station names and IDs...")
 
-        missing_station_ids = self.station_ids.isnull()
-        missing_station_names = self.station_names.isnull()
+        missing_station_ids = data[f"{scenario}_station_id"].isnull()
+        missing_station_names = data[f"{scenario}_station_name"].isnull()
 
-        problem_rows_mask = missing_station_ids & missing_station_names
-        problem_rows = self.data.loc[problem_rows_mask, :]
+        mask_of_problem_rows = missing_station_ids & missing_station_names
+        problem_rows = data.loc[mask_of_problem_rows, :]
         return problem_rows.index
 
-    def find_rows_with_known_ids_and_names(self, save: bool = True) -> dict[str, tuple[float]]:
+    def find_rows_with_known_ids_and_names(self) -> dict[str, tuple[float]]:
         """
         Find all the coordinates which have a known ID and known station name, and provide a dictionary 
         of the respective rows and their associated coordinates.
@@ -206,36 +205,25 @@ class DirectIndexing:
         Returns:
             dict[str, tuple[float]]: pairs consisting of row numbers and their respective coordinates.
         """
-        file_path = INDEXER_TWO / f"{self.scenario}_rows_and_coordinates_with_known_ids_names.json"
+        logger.info("Looking for rows that have both station names and IDs...")
 
-        if Path(file_path, mode="r").exists():
-            logger.success("Fetching the rows with known station names and IDs (and their coordinates)")
-            with open(file_path, mode="r") as file:
-                rows_and_coordinates_with_known_ids_names = json.load(file)
-        else:
-            logger.info("Looking for rows that have both station names and IDs...")
+        present_station_ids = self.station_ids.notnull()
+        present_station_names = self.station_names.notnull()
+        complete_rows_mask = present_station_ids & present_station_names
+        complete_rows = self.data.loc[complete_rows_mask, :]
+        
+        latitudes_of_complete_rows = self.data.loc[complete_rows_mask, f"{self.scenario}_lat"]
+        longitudes_of_complete_rows = self.data.loc[complete_rows_mask,  f"{self.scenario}_lng"]
 
-            present_station_ids = self.station_ids.notnull()
-            present_station_names = self.station_names.notnull()
-            complete_rows_mask = present_station_ids & present_station_names
-
-            complete_rows = self.data.loc[complete_rows_mask, :]
-            latitudes_of_complete_rows = self.data.loc[complete_rows_mask, f"{self.scenario}_lat"]
-            longitudes_of_complete_rows = self.data.loc[complete_rows_mask,  f"{self.scenario}_lng"]
-
-            rows_and_coordinates_with_known_ids_names = dict(
-                zip(
-                    complete_rows.index, zip(latitudes_of_complete_rows, longitudes_of_complete_rows)
-                )
+        rows_and_coordinates_with_known_ids_names = dict(
+            zip(
+                complete_rows.index, zip(latitudes_of_complete_rows, longitudes_of_complete_rows)
             )
-
-            if save:
-                with open(file_path, mode="w") as file:
-                    json.dump(rows_and_coordinates_with_known_ids_names, file)
+        )
 
         return rows_and_coordinates_with_known_ids_names
 
-    def match_names_and_ids_by_station_proximity(self, save: bool = True) -> dict[int, tuple[str, str]]:
+    def match_names_and_ids_by_station_proximity(self) -> dict[int, tuple[str, str]]:
         """
         Based on common sense, and a perfunctory look at https://account.divvybikes.com/map, it looks like there 
         are (knock on wood) no two stations that are within 10m of each other. On those grounds, we can say with some 
@@ -247,60 +235,54 @@ class DirectIndexing:
         it can't be one or the other), then the row of the target coordinate will be associated with the ID and station
         name of the coordinate we found.
 
-        Args:
-            save (bool, optional): whether to save the final output. Defaults to True.
-
         Returns:
             dict[int, tuple[str|int, str]]: key, value pairs of row indices and their newly discovered station IDs
                                             and names
         """
-        matched_coordinates_path = INDEXER_TWO / f"{self.scenario}_coordinates_with_new_ids_and_names.json"
+        assert not self.found_rows_with_either_missing_ids_or_names(), 'There is now a row which contains a \
+            missing station ID or a station name (not both). This will have occurred due to a change in the data'
 
-        if Path(matched_coordinates_path).exists():
-            logger.success("The matching operation has already been done. Fetching local file...")
-            with open(matched_coordinates_path, mode="r") as file:
-                problem_rows_and_their_discovered_names_and_ids = json.load(file)
+        logger.info("Starting the matching process...")
 
-        else:
-            assert not self.found_rows_with_either_missing_ids_or_names(), 'There is now a row which contains a \
-                missing station ID or a station name (not both). This will have occurred due to a change in the data'
+        complete_rows_and_their_original_coordinates = self.find_rows_with_known_ids_and_names()
+        coordinates_of_complete_rows = np.array(list(complete_rows_and_their_original_coordinates.values()))
+        rounded_coordinates_of_complete_rows = np.round(coordinates_of_complete_rows, decimals=4)
 
-            logger.info("Starting the matching process...")
-            
-            complete_rows_and_their_original_coordinates = self.find_rows_with_known_ids_and_names()
-            coordinates_of_complete_rows = np.array(list(complete_rows_and_their_original_coordinates.values()))
-            rounded_coordinates_of_complete_rows = np.round(coordinates_of_complete_rows, decimals=4)
-            complete_row_indices = [int(index) for index in complete_rows_and_their_original_coordinates.keys()]
+        problem_rows_indices = self.find_rows_with_missing_ids_and_names(
+            data=self.data,
+            scenario=self.scenario, 
+            first_time=True
+        )
 
-            complete_rows_and_their_rounded_coordinates = {
-                row_index: tuple(rounded_coordinates_of_complete_rows[i]) for i, row_index in enumerate(complete_row_indices)
-            }
+        complete_row_indices = np.array([int(index) for index in complete_rows_and_their_original_coordinates.keys()])
 
-            problem_rows_indices = self.find_rows_with_missing_ids_and_names(first_time=True)
-            rounded_target_lats = np.round(self.data.iloc[problem_rows_indices, self.latitudes_index].values, decimals=4)
-            rounded_target_lngs = np.round(self.data.iloc[problem_rows_indices, self.longitudes_index].values, decimals=4)
+        complete_rows_and_their_rounded_coordinates = {
+            row_index: tuple(rounded_coordinates_of_complete_rows[i]) for i, row_index in enumerate(complete_row_indices)
+        }
 
-            rounded_target_coordinates = list(zip(rounded_target_lats, rounded_target_lngs))
-            matches = np.isin(element=rounded_target_coordinates, test_elements=coordinates_of_complete_rows).all(axis=1)
+        rounded_problem_lats = np.round(self.data.iloc[problem_rows_indices, self.latitudes_index].values, decimals=4)
+        rounded_problem_lngs = np.round(self.data.iloc[problem_rows_indices, self.longitudes_index].values, decimals=4)
+        rounded_problem_coordinates = list(zip(rounded_problem_lats, rounded_problem_lngs))
 
-            complete_rows_with_matches = complete_row_indices[np.where(matches)]
-            missing_mask = np.isin(np.arange(len(self.data)), problem_rows) 
+        # Get a boolean array of the indices of rounded coordin
+        rounded_coordinates_match = np.isin(rounded_problem_coordinates, rounded_coordinates_of_complete_rows).all(axis=1)
 
-            rows_to_be_targeted = np.where(missing_mask & matches)
+        complete_rows_with_matches = complete_row_indices[np.where(rounded_coordinates_match)[0]]  
+                    
+        is_problem_row = np.isin(element=problem_rows_indices, test_elements=np.arange(len(self.data)))      
+        rows_to_be_targeted = np.where(is_problem_row & rounded_coordinates_match)[0]
 
-            print(rows_to_be_targeted)
-            breakpoint()
+        found_ids  = self.data.iloc[rows_to_be_targeted, self.station_id_index]
+        found_names  = self.data.iloc[rows_to_be_targeted, self.station_name_index]
 
+        problem_rows_and_their_discovered_names_and_ids = {
+            int(index): (code, name) for index, code, name in zip(rows_to_be_targeted, found_ids, found_names)
+        }
 
-            if save:
-                merged_data.to_parquet(INDEXER_TWO/"ADF.parquet")
-
-            logger.success(f"Found {len(problem_rows_and_their_discovered_names_and_ids)} station names and IDs")
-
+        logger.success(f"Found {len(problem_rows_and_their_discovered_names_and_ids)} station names and IDs")
         return problem_rows_and_their_discovered_names_and_ids
 
-
-    def replace_missing_station_names_and_ids(self, save: bool = True) -> pd.DataFrame:
+    def replace_missing_station_names_and_ids(self) -> pd.DataFrame:
         """
         Take the row indices, as well as the associated IDs and names that were discovered using the matching 
         procedure. Then replace the missing station names and IDs in these rows of the dataframe with those 
@@ -312,75 +294,79 @@ class DirectIndexing:
         Returns:
             pd.DataFrame: _description_
         """
-        replaced_data_path = INDEXER_TWO / f"{self.scenario}_replaced_missing_names_and_ids.parquet"
+        rows_with_new_names_and_ids: dict[int, tuple[str, str]] = self.match_names_and_ids_by_station_proximity()
 
-        if Path(replaced_data_path).is_file():
-            self.data = pd.read_parquet(replaced_data_path)
+        # Write the target row indices, the new IDs, and the new names as vectors
+        target_rows_indices = [int(row) for row in rows_with_new_names_and_ids.keys()]
 
-        else:
-            rows_with_new_names_and_ids: dict[int, tuple[str, str]] = self.match_names_and_ids_by_station_proximity()
+        new_ids = {
+            int(row): new_id for row, (new_id, new_name) in rows_with_new_names_and_ids.items()
+        }
 
-            # Write the target row indices, the new IDs, and the new names as vectors
-            target_rows_indices = [int(row) for row in rows_with_new_names_and_ids.keys()]
-
-            new_ids = {
-                int(row): new_id for row, (new_id, new_name) in rows_with_new_names_and_ids.items()
-            }
-
-            new_names = {
-                int(row): new_name for row, (new_id, new_name) in rows_with_new_names_and_ids.items()
-            }
-            
-            # Perform the replacement
-            self.data.iloc[target_rows_indices, self.station_id_index] = \
-                self.data.iloc[target_rows_indices, self.station_id_index].map(new_ids)
-            
-            self.data.iloc[target_rows_indices, self.station_name_index] = \
-                self.data.iloc[target_rows_indices, self.station_name_index].map(new_names)
-
-            if save:
-                self.data.to_parquet(path=replaced_data_path)
+        new_names = {
+            int(row): new_name for row, (new_id, new_name) in rows_with_new_names_and_ids.items()
+        }
+        
+        # Perform the replacement
+        self.data.iloc[target_rows_indices, self.station_id_index] = \
+            self.data.iloc[target_rows_indices, self.station_id_index].map(new_ids)
+        
+        self.data.iloc[target_rows_indices, self.station_name_index] = \
+            self.data.iloc[target_rows_indices, self.station_name_index].map(new_names)
 
         return self.data
 
-    def save_geodata(
-        self, 
-        station_names: pd.Series, 
-        station_ids: pd.Series, 
-        latitudes: pd.Series, 
-        longitudes: pd.Series
-    ) -> None:
+    @staticmethod
+    def save_geodata(data: pd.DataFrame, scenario: str, for_plotting: bool) -> None:
         """
         Saves the station ID, mame, and coordinates for use in the frontend
         """
+        station_names = data[f"{scenario}_station_name"].values
+        station_ids = data[f"{scenario}_station_id"].values
+        longitudes = data[f"{scenario}_lng"].values
+        latitudes = data[f"{scenario}_lat"].values
+
         geodata_to_iterate = tqdm(
             iterable=zip(latitudes, longitudes, station_ids, station_names),
-            desc="Saving the geodata of each row"
+            desc="Saving the geodata in each row"
         )
 
-        geojson = {
-            "type": "FeatureCollection",
-            "features": [
-                {
-                    "type": "Feature",
+        if for_plotting:
+            file_path = INDEXER_TWO / f"{scenario}_geojson.geojson"
 
-                    "geometry": {
-                        "type": "Point",
-                        "coordinate": [longitude, latitude]
-                    },
+            geodata = {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
 
-                    "properties": {
-                        "station_id": station_id,
-                        "station_name": station_name
-                    }
-                } 
-                for (latitude, longitude, station_id, station_name) in geodata_to_iterate      
-            ] 
-        }
+                        "geometry": {
+                            "type": "Point",
+                            "coordinate": [longitude, latitude]  # Apparently, this reversal is standard for geojson
+                        },
 
-        with open(INDEXER_TWO / f"{self.scenario}_geodata.geojson", mode="w") as file:
-            json.dump(geojson, file)
-                
+                        "properties": {
+                            "station_id": station_id,
+                            "station_name": station_name
+                        }
+                    } 
+                    for (latitude, longitude, station_id, station_name) in geodata_to_iterate      
+                ] 
+            }
+
+        else:
+            file_path = INDEXER_TWO / f"{scenario}_geodata.json"
+            geodata = [
+                {   
+                    "coordinates": [latitude, longitude],
+                    "station_id": station_id,
+                    "station_name": station_name    
+                } for latitude, longitude, station_id, station_name in 
+                    zip(latitudes, longitudes, station_ids, station_names)
+            ]
+
+        with open(file_path, mode="w") as file:
+            json.dump(geodata, file)
 
     def execute(self, delete_leftover_rows: bool = True, save: bool = True) -> pd.DataFrame:
         """
@@ -394,61 +380,54 @@ class DirectIndexing:
         Returns:
             pd.DataFrame: the data, but with all the station IDs re-indexed
         """
-        fully_cleaned_data_path = CLEANED_DATA / f"fully_cleaned_{self.scenario}s.parquet"
+        logger.info("Initiating reindexing procedure for the station IDs...")
 
-        if Path(fully_cleaned_data_path).is_file():
-            logger.success("Data with re-indexed station IDs had previously been saved. Fetching it...")
-            self.data = pd.read_parquet(path=fully_cleaned_data_path)
+        leftover_rows = self.find_rows_with_missing_ids_and_names(
+            scenario=self.scenario,
+            data=self.data,
+            first_time=False
+        )
+
+        if delete_leftover_rows:
+            logger.warning(f"Deleting the {len(leftover_rows)} rows that still have no station IDs and names.")
+            self.data = self.data.drop(self.data.index[leftover_rows], axis=0)
 
         else:
-            logger.info("Initiating reindexing procedure...")
-            self.data = self.replace_missing_station_names_and_ids()
-            leftover_rows = self.find_rows_with_missing_ids_and_names(first_time=False)
+            logger.info("Initiating reverse geocoding procedure for the leftover rows")
+            coordinate_maker = RoundingCoordinates(decimal_places=6, scenario=self.scenario, data=self.data)
+            coordinate_maker.add_column_of_rounded_coordinates_to_dataframe(scenario=self.scenario, data=self.data)
 
-            if delete_leftover_rows:
-                logger.warning("Deleting the leftover rows...")
-                self.data = self.data.drop(self.data.index[leftover_rows], axis=0)
+            for column in self.data.columns:
+                if column not in [f"{self.scenario}_station_id", f"rounded_{self.scenario}_points"]:
+                    self.data = self.data.drop(column, axis=1)
 
-            else:
-                logger.info("Initiating reverse geocoding procedure for the leftover rows")
-                coordinate_maker = RoundingCoordinates(decimal_places=6, scenario=self.scenario, data=self.data)
-                coordinate_maker.add_column_of_rounded_coordinates_to_dataframe(scenario=self.scenario, data=self.data)
-
-                for column in self.data.columns:
-                    if column not in [f"{self.scenario}_station_id", f"rounded_{self.scenario}_points"]:
-                        self.data = self.data.drop(column, axis=1)
-
-                self.data.rename(
-                    columns={f"rounded_{self.scenario}_points": "coordinates"}
-                )
-
-                reverse_geocoder = ReverseGeocoding(scenario=self.scenario, geodata=self.data)
-
-                # TO DO: COMPLETE THIS PROCEDURE
-
-            station_ids = self.data.iloc[:, self.station_id_index]
-
-            unique_old_ids = station_ids.unique()
-            old_and_new_ids = {old_id: index for index, old_id in enumerate(unique_old_ids)}
-            self.data.iloc[:, self.station_id_index] = station_ids.map(old_and_new_ids)
-
-            self.data = self.data.reset_index(drop=True)
-
-            for column in self.data.select_dtypes(include=["datetime64[ns]"]):
-                self.data[column] = self.data[column].astype(str)
-
-            self.save_geodata(
-                latitudes=self.data.iloc[:, self.latitudes_index],
-                longitudes=self.data.iloc[:, self.longitudes_index],
-                station_ids=self.data.iloc[:, self.station_id_index],
-                station_names=self.data.iloc[:, self.station_name_index],
+            self.data.rename(
+                columns={f"rounded_{self.scenario}_points": "coordinates"}
             )
 
-            self.data = self.data.drop(
-                columns=[f"{self.scenario}_lat", f"{self.scenario}_lat", f"{self.scenario}_station_name"]
-            )
+            reverse_geocoder = ReverseGeocoding(scenario=self.scenario, geodata=self.data)
 
-            if save:
-                self.data.to_parquet(path=fully_cleaned_data_path)
+            # TO DO: COMPLETE THIS PROCEDURE
+
+        station_ids = self.data.iloc[:, self.station_id_index]
+        unique_old_ids = station_ids.unique()
+        
+        # Use the indices of this enumerate as the new station IDs
+        old_and_new_ids = {old_id: index for index, old_id in enumerate(unique_old_ids)}
+        self.data.iloc[:, self.station_id_index] = station_ids.map(old_and_new_ids)
+        self.data = self.data.reset_index(drop=True)
+
+        for column in self.data.select_dtypes(include=["datetime64[ns]"]):
+            self.data[column] = self.data[column].astype(str)
+
+        self.save_geodata(data=self.data, scenario=self.scenario, for_plotting=False)
+        self.save_geodata(data=self.data, scenario=self.scenario, for_plotting=True)
+
+        self.data = self.data.drop(
+            columns=[f"{self.scenario}_lat", f"{self.scenario}_lat", f"{self.scenario}_station_name"]
+        )
+
+        if save:
+            self.data.to_parquet(path=CLEANED_DATA / f"fully_cleaned_and_reindexed_{self.scenario}_data.parquet")
 
         return self.data
