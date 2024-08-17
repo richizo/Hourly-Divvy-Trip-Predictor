@@ -35,6 +35,7 @@ class Trainer:
 
             hyperparameter_trials (int | None): the number of times that we will try to optimize the hyperparameters
         """
+    if not Path(MODELS_DIR).exists():
         self.scenario = scenario
         self.tune_hyperparameters = tune_hyperparameters
         self.hyperparameter_trials = hyperparameter_trials
@@ -53,14 +54,14 @@ class Trainer:
         
         if Path(data_path).is_file():
             training_data = pd.read_parquet(path=data_path)
-            logger.success("The training data has already been created and saved. Fetched it...")
+            logger.success("Fetched the training data that has already been created.")
         else:
             logger.warning("No training data is stored. Creating the dataset will take a long time...")
 
             processor = DataProcessor(year=config.year, for_inference=False)
             training_sets = processor.make_training_data(geocode=False)
-
             training_data = training_sets[0] if self.scenario.lower() == "start" else training_sets[1]
+            
             logger.success("Training data produced successfully")
 
         target = training_data["trips_next_hour"]
@@ -130,17 +131,18 @@ class Trainer:
         self.save_model_locally(model_fn=pipeline, model_name=model_name)
         experiment.log_metric(name="Test M.A.E", value=test_error)
         experiment.end()
+        
         return test_error
 
     def save_model_locally(self, model_fn: Pipeline, model_name: str):
         """
+        Save the trained model locally as a .pkl file
 
         Args:
             model_fn (Pipeline): the model object to be stored
             model_name (str): the name of the model to be saved
         """
         model_file_name = f"{model_name.title()} ({self.tuned_or_not} for {self.scenario}s).pkl"
-
         with open(LOCAL_SAVE_DIR/model_file_name, mode="wb") as file:
             pickle.dump(obj=model_fn, file=file)
 

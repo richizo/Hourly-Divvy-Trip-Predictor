@@ -4,21 +4,17 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, UTC
 
-from data_loader import ProgressTracker, Loader
+from predictions import ProgressTracker, Loader
 from maps import MapMaker
 
-
+from src.setup.config import config, choose_displayed_scenario_name
 from src.setup.paths import GEOGRAPHICAL_DATA, INFERENCE_DATA, INDEXER_ONE, INDEXER_TWO
 
 
-intro_page = st.Page(
-    page="intro.py", 
-    title="Welcome to the Hourly Trip Predictor Service for Divvy Bikes", 
-    page_icon=":house_with_garden:"
-)
+intro_page = st.Page(page="intro.py", title="Welcome", icon="🏠")
 
-maps_page = st.Page(page="maps.py", title="Maps", icon=":world_map:")
-predictions_page = st.Page(page="predictions.py", title="Hourly Predictions Per Station", icon=":eye:")
+maps_page = st.Page(page="maps.py", title="Maps", icon="🗺️")
+predictions_page = st.Page(page="predictions.py", title="Hourly Predictions Per Station", icon="👁️")
 
 pages = st.navigation(pages=[intro_page, maps_page, predictions_page])
 pages.run()
@@ -39,7 +35,8 @@ def construct_page(model_name: str):
 
     progress_tracker = ProgressTracker(n_steps=4)
 
-    for scenario in displayed_scenario_names.keys():
+    for scenario in ["start", "end"]:
+        displayed_scenario_names = choose_displayed_scenario_name()
         if displayed_scenario_names[scenario] in user_scenario_choice:
 
             # Prepare geodata
@@ -47,7 +44,7 @@ def construct_page(model_name: str):
             geodata = make_geodataframe(geojson=geojson, scenario=scenario)
             
             # Fetch features and predictions<
-            features = get_features(scenario=scenario, target_date=current_hour, local=True)
+            features = get_features(scenario=scenario, target_date=current_hour,     local=True)
             st.sidebar.write("✅ Fetched features for inference")
             progress_tracker.next()
 

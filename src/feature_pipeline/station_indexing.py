@@ -178,7 +178,7 @@ class DirectIndexing:
         return True if target_condition.sum() > 0 else False
 
     @staticmethod
-    def find_rows_with_missing_ids_and_names(scenario: str, data: pd.DataFrame, first_time: bool) -> list[int]:
+    def find_rows_with_missing_ids_and_names(data: pd.DataFrame, scenario: str, first_time: bool) -> list[int]:
         """
         Search for rows with both IDs and names missing.
 
@@ -383,8 +383,8 @@ class DirectIndexing:
         logger.info("Initiating reindexing procedure for the station IDs...")
 
         leftover_rows = self.find_rows_with_missing_ids_and_names(
+            data=self.data, 
             scenario=self.scenario,
-            data=self.data,
             first_time=False
         )
 
@@ -424,7 +424,7 @@ class DirectIndexing:
         self.save_geodata(data=self.data, scenario=self.scenario, for_plotting=True)
 
         self.data = self.data.drop(
-            columns=[f"{self.scenario}_lat", f"{self.scenario}_lat", f"{self.scenario}_station_name"]
+            columns=[f"{self.scenario}_lat", f"{self.scenario}_lng", f"{self.scenario}_station_name"]
         )
 
         if save:

@@ -72,4 +72,4 @@ backfill-predictions:
 
 # Frontend
 frontend:
-	poetry run streamlit run src/inference_pipeline/frontend.py
+	poetry run streamlit run src/inference_pipeline/frontend/display.py

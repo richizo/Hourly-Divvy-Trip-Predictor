@@ -86,4 +86,5 @@ class ModelRegistry:
             scenario=self.scenario,
             tuned_or_not=self.tuned_or_not
         )
+        
         return model

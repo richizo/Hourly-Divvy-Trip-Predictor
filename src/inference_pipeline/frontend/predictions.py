@@ -17,16 +17,20 @@ from src.feature_pipeline.preprocessing import DataProcessor
 from src.feature_pipeline.feature_engineering import ReverseGeocoding
 from src.inference_pipeline.inference import InferenceModule
 from src.inference_pipeline.model_registry_api import ModelRegistry
+
+from src.setup.config import choose_displayed_scenario_name, config 
 from src.setup.paths import GEOGRAPHICAL_DATA, INFERENCE_DATA, INDEXER_ONE, INDEXER_TWO
 
+
+current_hour = pd.to_datetime(datetime.now(UTC)).floor("H")
+        
 
 class Loader:
 
     def __init__(self, scenario: str) -> None:
-        self.scenario = scenario
+        self.scenario = scenario.lower()
         assert scenario.lower() == "start" or "end"
-        self.current_hour = pd.to_datetime(datetime.now(UTC)).floor("H")
-        self.displayed_scenario_name = "Departures" if scenario.lower() == "start" else "Arrivals"
+        self.displayed_scenario_name = choose_displayed_scenario_name()[self.scenario]
         
     @st.cache_data
     def load_geojson(self, indexer: str = "two") -> dict:
@@ -93,7 +97,7 @@ class Loader:
     def get_hourly_predictions(
         self,
         model_name: str = "lightgbm", 
-        from_hour: datetime = self.current_hour - timedelta(hours=1),
+        from_hour: datetime = current_hour - timedelta(hours=1),
         to_hour: datetime = current_hour
     ) -> pd.DataFrame:
         """
@@ -115,7 +119,7 @@ class Loader:
             pd.DataFrame: dataframe containing hourly predicted arrivals or departures.
         """
         with st.spinner(
-            text=f"Fetching predicted {self.displayed_scenario_name.lower()} from the feature store..."
+            text=f"Fetching predicted {self.displayed_scenario_names.lower()} from the feature store..."
         ):
             inferrer = InferenceModule(scenario=self.scenario)
 

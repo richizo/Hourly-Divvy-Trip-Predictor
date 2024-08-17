@@ -26,6 +26,8 @@ class GeneralConfig(BaseSettings):
     feature_group_version: int
     feature_view_version: int
 
+    displayed_scenario_names: dict = {"start": "Departures", "end": "Arrivals"} 
+
 
 class FeatureGroupConfig(BaseSettings):
     name: str
@@ -39,6 +41,10 @@ class FeatureViewConfig(BaseSettings):
     name: str
     version: int
     feature_group: FeatureGroupConfig
+
+
+def choose_displayed_scenario_name() -> dict:
+    return {"start": "Departures", "end": "Arrivals"} 
 
 
 config = GeneralConfig()

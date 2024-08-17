@@ -201,9 +201,6 @@ def load_local_model(directory: Path, model_name: str, scenario: str, tuned_or_n
     Returns:
         Pipeline: the model as an object of the sklearn's Pipeline class.
     """
-    if not Path(MODELS_DIR).exists():
-        make_fundamental_paths()
-
     assert model_name.lower() in ["base", "lasso", "lightgbm", "xgboost"], \
         "The requested model is not currently among those implemented"
 

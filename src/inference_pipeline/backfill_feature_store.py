@@ -54,7 +54,7 @@ class BackFiller:
 
         self.api.event_time = "timestamp"
         self.api.primary_key = ["timestamp", f"{self.scenario}_station_id"]
-        ts_data_path = TIME_SERIES_DATA/f"{self.scenario}s_ts.parquet"
+        ts_data_path = TIME_SERIES_DATA/f"{self.scenario}_ts.parquet"
 
         if use_local_file:
 
@@ -62,19 +62,20 @@ class BackFiller:
                 ts_data = pd.read_parquet(ts_data_path)
                 logger.success("Retrieved the time series data")
             else:
-                logger.warning("There is no local time series data")
+                logger.warning("There is no local time series data. We'll make some from scratch")
                 ts_data = download_data_and_make_time_series()
 
         else:
             ts_data = download_data_and_make_time_series()
 
-        ts_data["timestamp"] = ts_data[f"{scenario}_hour"].astype(int) // 10 ** 6  # Express in milliseconds
+        ts_data["timestamp"] = pd.to_datetime(ts_data[f"{scenario}_hour"]).astype(int) // 10 ** 6  # Express in milliseconds
 
         #  ts_data = ts_data.drop(f"{scenario}_hour", axis=1)
-        feature_group = self.api.get_or_create_feature_group(
+        feature_group = self.api.setup_feature_group(
             description=f"Hourly time series data showing when trips {self.scenario}",
             name=f"{self.scenario}_feature_group",
-            version=config.feature_group_version
+            version=config.feature_group_version,
+            for_predictions=False
         )
 
         # Push time series data to the feature group
@@ -115,7 +116,7 @@ class BackFiller:
 
         predictions_df: pd.DataFrame = inferrer.get_model_predictions(model=model, features=features)
         
-        predictions_feature_group: FeatureGroup = self.api.get_or_create_feature_group(
+        predictions_feature_group: FeatureGroup = self.api.setup_feature_group(
             description=f"predictions on {self.scenario} data using the {tuned_or_not} {model_name}",
             name=f"{model_name}_{self.scenario}_predictions_feature_group",
             for_predictions=True,
@@ -134,7 +135,7 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--scenarios", type=str, nargs="+")
     parser.add_argument("--target", type=str)
-    parser.add_argument("-o", "--use-local-file", default=False, action="store_true")
+    parser.add_argument("-o", "--use-local-file", default=True, action="store_true")
     args = parser.parse_args()    
     
     for scenario in args.scenarios:

@@ -49,7 +49,7 @@ class InferenceModule:
             event_time=self.api.event_time
         )
 
-        self.feature_group: FeatureGroup = self.api.get_or_create_feature_group(
+        self.feature_group: FeatureGroup = self.api.setup_feature_group(
             description=f"Hourly time series data showing when trips {self.scenario}s",
             version=self.feature_group_metadata.version,
             name=self.feature_group_metadata.name,
@@ -136,12 +136,11 @@ class InferenceModule:
 
         tuned_or_not = "tuned" if self.scenario == "start" else "untuned"
 
-        return self.api.get_or_create_feature_group(
+        return self.api.setup_feature_group(
             description=f"predictions on {self.scenario} data using the {tuned_or_not} {model_name}",
             name=f"{model_name}_{self.scenario}_predictions_feature_group",
             version=config.feature_group_version,
             for_predictions=True
-            
         )
 
 

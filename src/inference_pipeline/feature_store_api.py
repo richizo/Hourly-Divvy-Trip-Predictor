@@ -35,13 +35,7 @@ class FeatureStoreAPI:
         project = self.login_to_hopsworks()
         return project.get_feature_store()
 
-    def get_or_create_feature_group(
-            self,
-            name: str,
-            version: int,
-            description: str,
-            for_predictions: str
-    ) -> FeatureGroup:
+    def setup_feature_group(self, name: str, version: int, description: str, for_predictions: str) -> FeatureGroup:
         """
         Create or connect to a feature group with the specified name, and 
         return an object that represents it.
@@ -54,8 +48,8 @@ class FeatureStoreAPI:
             name=name,
             version=version,
             description=description,
-            event_time=f"{self.scenario}_hour" if for_predictions else self.event_time,
-            primary_key=self.primary_key
+            primary_key=self.primary_key,
+            event_time=f"{self.scenario}_hour" if for_predictions else self.event_time
         )
         return feature_group
 
@@ -82,4 +76,5 @@ class FeatureStoreAPI:
         except Exception as error:
             logger.exception(error)
             feature_view = feature_store.get_feature_view(name=name, version=version)
+            
         return feature_view
