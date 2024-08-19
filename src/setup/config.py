@@ -1,7 +1,10 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from src.setup.paths import PARENT_DIR
+import pandas as pd 
 
+from datetime import datetime, UTC
 from dotenv import load_dotenv
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from src.setup.paths import PARENT_DIR
 
 
 load_dotenv(PARENT_DIR / ".env")
@@ -20,14 +23,14 @@ class GeneralConfig(BaseSettings):
     comet_workspace: str
     comet_project_name: str
 
-    # Hopsworks
+    # Hopsworksx
     hopsworks_api_key: str
     hopsworks_project_name: str
     feature_group_version: int
     feature_view_version: int
 
+    current_hour: datetime = pd.to_datetime(datetime.now(UTC)).floor("H")
     displayed_scenario_names: dict = {"start": "Departures", "end": "Arrivals"} 
-
 
 class FeatureGroupConfig(BaseSettings):
     name: str

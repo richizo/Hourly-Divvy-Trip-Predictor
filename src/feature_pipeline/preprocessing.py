@@ -26,8 +26,11 @@ class DataProcessor:
         self.start_ts_path = TIME_SERIES_DATA / "start_ts.parquet"
         self.end_ts_path = TIME_SERIES_DATA / "end_ts.parquet"
 
-        loaded_raw_data = list(load_raw_data(year=year))
-        self.data = pd.concat(loaded_raw_data) if not for_inference else None
+        if for_inference:
+            self.data = None  # Because the data will have been fetched from the feature store instead.
+        else:
+            loaded_raw_data = list(load_raw_data(year=year))
+            self.data = pd.concat(loaded_raw_data) 
 
     def use_custom_station_indexing(self, scenarios: list[str], data: pd.DataFrame) -> bool:
         """

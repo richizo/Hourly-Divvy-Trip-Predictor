@@ -54,13 +54,13 @@ class BackFiller:
 
         self.api.event_time = "timestamp"
         self.api.primary_key = ["timestamp", f"{self.scenario}_station_id"]
-        ts_data_path = TIME_SERIES_DATA/f"{self.scenario}_ts.parquet"
+        ts_data_path = TIME_SERIES_DATA / f"{self.scenario}_ts.parquet"
 
         if use_local_file:
 
             if Path(ts_data_path).is_file():
                 ts_data = pd.read_parquet(ts_data_path)
-                logger.success("Retrieved the time series data")
+                logger.success("Retrieved time series data from local storage")
             else:
                 logger.warning("There is no local time series data. We'll make some from scratch")
                 ts_data = download_data_and_make_time_series()
@@ -72,7 +72,7 @@ class BackFiller:
 
         #  ts_data = ts_data.drop(f"{scenario}_hour", axis=1)
         feature_group = self.api.setup_feature_group(
-            description=f"Hourly time series data showing when trips {self.scenario}",
+            description=f"Hourly time series data for {config.displayed_scenario_names[self.scenario].lower()}",
             name=f"{self.scenario}_feature_group",
             version=config.feature_group_version,
             for_predictions=False
@@ -100,8 +100,8 @@ class BackFiller:
         """
         self.api.primary_key = [f"{self.scenario}_station_id"]
 
-        # The best model for (arrivals) departures was (un)tuned
-        tuned_or_not = "tuned" if self.scenario == "start" else "untuned"
+        # The best models for arrivals and departures were tuned LGBMRegressors
+        tuned_or_not = "tuned" 
         
         inferrer = InferenceModule(scenario=self.scenario)
         registry = ModelRegistry(scenario=self.scenario, model_name=model_name, tuned_or_not=tuned_or_not)
@@ -117,7 +117,7 @@ class BackFiller:
         predictions_df: pd.DataFrame = inferrer.get_model_predictions(model=model, features=features)
         
         predictions_feature_group: FeatureGroup = self.api.setup_feature_group(
-            description=f"predictions on {self.scenario} data using the {tuned_or_not} {model_name}",
+            description=f"predicting {config.displayed_scenario_names[self.scenario]} - {tuned_or_not} {model_name}",
             name=f"{model_name}_{self.scenario}_predictions_feature_group",
             for_predictions=True,
             version=6
