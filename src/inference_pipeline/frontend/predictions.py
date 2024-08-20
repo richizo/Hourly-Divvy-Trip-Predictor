@@ -1,3 +1,4 @@
+import os 
 import json
 from typing import Any
 
@@ -14,8 +15,10 @@ from datetime import UTC, datetime, timedelta
 from src.setup.config import config 
 from src.feature_pipeline.preprocessing import DataProcessor
 from src.feature_pipeline.feature_engineering import ReverseGeocoding
+
 from src.inference_pipeline.inference import InferenceModule
 from src.inference_pipeline.model_registry_api import ModelRegistry
+from src.inference_pipeline.frontend.data import load_geojson, load_geodata, rerun_feature_pipeline, get_ids_and_names
 
 from src.setup.config import choose_displayed_scenario_name, config 
 from src.setup.paths import GEOGRAPHICAL_DATA, INFERENCE_DATA, INDEXER_ONE, INDEXER_TWO
@@ -25,80 +28,18 @@ class ProgressTracker:
 
     def __init__(self, n_steps: int):
         
-        self.current_step = 1
+        self.current_step = 0
         self.n_steps = n_steps
         self.progress_bar = st.sidebar.header("⚙️ Working Progress")
         self.progress_bar = st.sidebar.progress(value=0)
 
     def next(self) -> None:
-        self.progress_bar.progress(self.current_step/self.n_steps)
         self.current_step += 1 
+        self.progress_bar.progress(self.current_step/self.n_steps)
 
 
 displayed_scenario_names = choose_displayed_scenario_name()
 tracker = ProgressTracker(n_steps=4)
-
-
-@st.cache_data
-def load_geojson(scenario: str, indexer: str) -> dict:
-    """
-
-    Args:
-        indexer (str, optional): _description_. Defaults to "two".
-
-    Returns:
-        dict: _description_
-    """
-    with st.spinner(text="Getting the coordinates of each station..."):
-
-        if indexer == "one":
-
-            with open(GEOGRAPHICAL_DATA / f"rounded_{scenario}_points_and_new_ids.geojson") as file:
-                points_and_ids = json.load(file)
-
-            loaded_geodata = pd.DataFrame(
-                {
-                    f"{scenario}_station_id": points_and_ids.keys(), "coordinates": points_and_ids.values()
-                }
-            )
-
-            reverse_geocoding = ReverseGeocoding(scenario=scenario, geodata=loaded_geodata)
-            station_names_and_locations = reverse_geocoding.reverse_geocode()
-
-            updated_geodata = reverse_geocoding.put_station_names_in_geodata(
-                station_names_and_coordinates=station_names_and_locations
-            )
-
-            return updated_geodata
-        
-        elif indexer == "two":
-            with open(INDEXER_TWO/f"{scenario}_geojson.geojson") as file:
-                geodata_dict = json.load(file)
-            return geodata_dict
-
-    st.sidebar.write("✅ Retrieved Station Names, IDs & Coordinates")
-    tracker.next()
-
-@st.cache_data
-def get_features(scenario: str, target_date: datetime, geocode: bool = False) -> pd.DataFrame:
-    """
-    Initiate an inference object and use it to get features until the target date.
-    features that we will use to fuel the model and produce predictions.
-
-    Args:
-        scenario (str): _description_
-        target_date (datetime): _description_
-
-    Returns:
-        pd.DataFrame: the created (or fetched) features
-    """
-    with st.spinner(text="Getting a batch of features from the store..."):
-        inferrer = InferenceModule(scenario=scenario)
-        features = inferrer.fetch_time_series_and_make_features(target_date=target_date, geocode=geocode)
-
-    st.sidebar.write("✅ Fetched features for inference")
-    tracker.next()
-    return features 
 
 
 @st.cache_data
@@ -159,46 +100,51 @@ def get_hourly_predictions(
         tracker.next()
 
     return prediction_to_use
-
-
-@st.cache_data
-def make_geodataframe(scenario: str, geojson: dict) -> GeoDataFrame:
     
-    coordinates = []
-    station_ids = []
-    station_names = []
+
+@rerun_feature_pipeline(exception_to_check=FileNotFoundError)
+def get_prediction_per_station(scenario: str, predictions_df: pd.DataFrame) -> dict[str, float]:
+
+    station_ids = predictions[f"{scenario}_station_id"].values
+    predictions = predictions_df[f"predicted_{scenario}s"].values
     
-    for detail_index in range(len(geojson["features"])):
-            
-        detail: dict = geojson["features"][detail_index]
-
-        coordinates.append(
-            detail["geometry"]["coordinate"]
-        )
-
-        station_ids.append(
-            detail["properties"]["station_id"]
-        )
-
-        station_names.append(
-            detail["properties"]["station_name"]
-        )
+    ids_and_predictions = {
+        code: prediction for code, prediction in zip(station_ids, predictions) if prediction != None
+    }
     
-    latitudes = [point[1] for point in coordinates]
-    longitudes = [point[0] for point in coordinates]
+    geodata = load_geodata(scenario=scenario)
+    ids_and_names = get_ids_and_names(geodata=geodata)
 
-    data = pd.DataFrame(
-        data={
-            f"{scenario}_station_name": station_names,
-            f"{scenario}_station_id": station_ids,
-            "latitudes": latitudes,
-            "longitudes": longitudes
-        }
+    return {
+        ids_and_names[station_id]: ids_and_predictions[station_id] for station_id in ids_and_predictions.keys()
+    }
+           
+
+def deliver_predictions():
+
+    user_scenario_choice: list[str] = st.sidebar.multiselect(
+        label="Are you looking to view the number of predicted arrivals or departures?",
+        options=["Arrivals", "Departures"],
+        placeholder="Please select one of the two options."
     )
 
-    #  data["coordinates"] = data["coordinates"].apply(lambda x: Point(x[0], x[1]))
-    #  geodata = GeoDataFrame(data=data, geometry="coordinates")
+    for scenario in displayed_scenario_names.keys():
+        if displayed_scenario_names[scenario] in user_scenario_choice:
 
-    #  geodata.set_crs(epsg=4326, inplace=True)
+            # Prepare geodata   
+            geojson = load_geojson(scenario=scenario)
+            geodata = make_geodataframe(scenario=scenario, geojson=geojson)
+            tracker.next()
+            
+            # Fetch features and predictions<
+            features = get_features(scenario=scenario, target_date=config.current_hour)
+            predictions = get_hourly_predictions(scenario=scenario)
 
-    return data
+            
+
+
+            choose_station = st.selectbox(
+                label=f"Which station would you like predicted {displayed_scenario_names[scenario]}s for?"
+            
+            )
+        

@@ -63,5 +63,6 @@ jobs:
         HOPSWORKS_PROJECT_NAME: ${{ secrets.HOPSWORKS_PROJECT_NAME }}
         HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
 
-      run: make backfill-features-from-remote
-  
+      run: 
+        make backfill-features
+ 

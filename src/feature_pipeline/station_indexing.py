@@ -8,7 +8,7 @@ from pathlib import Path, PosixPath
 import numpy as np
 import pandas as pd
 
-from src.setup.paths import INDEXER_ONE, INDEXER_TWO, CLEANED_DATA
+from src.setup.paths import INDEXER_TWO, INDEXER_TWO, CLEANED_DATA
 from src.feature_pipeline.feature_engineering import ReverseGeocoding
 
 
@@ -115,7 +115,7 @@ class RoundingCoordinates:
 
         # Because tuples can't be keys of a dictionary
         swapped_dict = {station_id: point for point, station_id in points_and_new_ids.items()}
-        with open(INDEXER_ONE / f"rounded_{self.scenario}_points_and_new_ids.json", mode="w") as file:
+        with open(INDEXER_TWO / f"rounded_{self.scenario}_points_and_new_ids.json", mode="w") as file:
             json.dump(swapped_dict, file)
 
         return points_and_new_ids

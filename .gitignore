@@ -11,7 +11,7 @@ keyfile
 /BACKUP
 /models
 /.cometml-runs
-**/__pycache__
+**__pycache__
 **.ipynb
 
 iterative.jl

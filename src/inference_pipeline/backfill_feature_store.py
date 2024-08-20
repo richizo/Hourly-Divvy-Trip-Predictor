@@ -25,7 +25,7 @@ class BackFiller:
             scenario: Determines whether we are looking at arrival or departure data. 
                       Its value must be "start" or "end".
         """
-        self.scenario = scenario
+        self.scenario = scenario.lower()
         assert self.scenario.lower() in ["start", "end"], 'Only "start" or "end" are acceptable values'
         
         self.api = FeatureStoreAPI(
@@ -36,38 +36,19 @@ class BackFiller:
             primary_key=None
         )
 
-    def backfill_features(self, use_local_file: bool) -> None:
+    def backfill_features(self) -> None:
         """
-        Upload the time series data to the feature store.
+        Run the preprocessing script and upload the time series data to the feature store.
 
         Returns:
             None
         """
-        def download_data_and_make_time_series():
-            processor = DataProcessor(year=config.year, for_inference=False)
-            logger.warning(f"There is no saved time series data for the {self.scenario}s of trips -> Building it...")
-
-            ts_data = processor.make_time_series()[0] if self.scenario.lower() == "start" else \
-                processor.make_time_series()[1]
-
-            return ts_data
-
         self.api.event_time = "timestamp"
         self.api.primary_key = ["timestamp", f"{self.scenario}_station_id"]
-        ts_data_path = TIME_SERIES_DATA / f"{self.scenario}_ts.parquet"
 
-        if use_local_file:
-
-            if Path(ts_data_path).is_file():
-                ts_data = pd.read_parquet(ts_data_path)
-                logger.success("Retrieved time series data from local storage")
-            else:
-                logger.warning("There is no local time series data. We'll make some from scratch")
-                ts_data = download_data_and_make_time_series()
-
-        else:
-            ts_data = download_data_and_make_time_series()
-
+        processor = DataProcessor(year=config.year, for_inference=False)
+        ts_data = processor.make_time_series()[0] if self.scenario == "start" else processor.make_time_series()[1]
+        
         ts_data["timestamp"] = pd.to_datetime(ts_data[f"{scenario}_hour"]).astype(int) // 10 ** 6  # Express in milliseconds
 
         #  ts_data = ts_data.drop(f"{scenario}_hour", axis=1)
@@ -135,14 +116,13 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--scenarios", type=str, nargs="+")
     parser.add_argument("--target", type=str)
-    parser.add_argument("-o", "--use-local-file", default=True, action="store_true")
     args = parser.parse_args()    
     
     for scenario in args.scenarios:
         filler = BackFiller(scenario=scenario)
 
         if args.target.lower() == "features":
-            filler.backfill_features(use_local_file=args.use_local_file)
+            filler.backfill_features()
         elif args.target.lower() == "predictions":
             filler.backfill_predictions(target_date=datetime.now())
         else:

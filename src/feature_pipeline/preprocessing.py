@@ -14,7 +14,7 @@ from src.feature_pipeline.station_indexing import RoundingCoordinates, DirectInd
 from src.feature_pipeline.feature_engineering import perform_feature_engineering
 
 from src.setup.paths import (
-    CLEANED_DATA, TRAINING_DATA, TIME_SERIES_DATA, INDEXER_ONE, INDEXER_TWO, INFERENCE_DATA, make_fundamental_paths
+    CLEANED_DATA, TRAINING_DATA, TIME_SERIES_DATA, INDEXER_TWO, INDEXER_TWO, INFERENCE_DATA, make_fundamental_paths
 )
 
 
@@ -373,10 +373,10 @@ class DataProcessor:
                         # The coordinates are in 6 dp, so no rounding is happening here.
                         __investigate_making_new_station_ids(cleaned_data=data, start_or_end=scenario)
 
-                    with open(INDEXER_ONE/"rounded_start_points_and_new_ids.json", mode="r") as file:
+                    with open(INDEXER_TWO/"rounded_start_points_and_new_ids.json", mode="r") as file:
                         rounded_start_points_and_ids = json.load(file)
 
-                    with open(INDEXER_ONE/"rounded_end_points_and_new_ids.json", mode="r") as file:
+                    with open(INDEXER_TWO/"rounded_end_points_and_new_ids.json", mode="r") as file:
                         rounded_end_points_and_ids = json.load(file)
 
                     # Get all the coordinates that are common to both dictionaries

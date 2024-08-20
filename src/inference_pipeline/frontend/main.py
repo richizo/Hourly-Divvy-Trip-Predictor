@@ -6,7 +6,7 @@ from predictions import ProgressTracker
 from maps import make_scatterplot
 
 from src.setup.config import config, choose_displayed_scenario_name
-from src.setup.paths import GEOGRAPHICAL_DATA, INFERENCE_DATA, INDEXER_ONE, INDEXER_TWO
+from src.setup.paths import GEOGRAPHICAL_DATA, INFERENCE_DATA, INDEXER_TWO, INDEXER_TWO
 
 
 intro_page = st.Page(page="intro.py", title="Welcome", icon="🏠")

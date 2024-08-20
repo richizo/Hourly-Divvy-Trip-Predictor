@@ -13,21 +13,64 @@ from folium.plugins import FastMarkerCluster
 from streamlit_folium import st_folium
 
 from src.setup.config import config, choose_displayed_scenario_name
-from src.setup.paths import GEOGRAPHICAL_DATA, INFERENCE_DATA, INDEXER_ONE, INDEXER_TWO
+from src.setup.paths import GEOGRAPHICAL_DATA, INFERENCE_DATA, INDEXER_TWO, INDEXER_TWO
 
 from src.inference_pipeline.frontend.predictions import (
     tracker, load_geojson, make_geodataframe, get_features, get_hourly_predictions
 )
 
 
-def make_scatterplot(geodata: GeoDataFrame, predictions: pd.DataFrame):
+
+@st.cache_data
+def make_geodataframe(scenario: str, geojson: dict) -> GeoDataFrame:
+    
+    coordinates = []
+    station_ids = []
+    station_names = []
+    
+    for detail_index in range(len(geojson["features"])):
+            
+        detail: dict = geojson["features"][detail_index]
+
+        coordinates.append(
+            detail["geometry"]["coordinate"]
+        )
+
+        station_ids.append(
+            detail["properties"]["station_id"]
+        )
+
+        station_names.append(
+            detail["properties"]["station_name"]
+        )
+    
+    latitudes = [point[1] for point in coordinates]
+    longitudes = [point[0] for point in coordinates]
+
+    data = pd.DataFrame(
+        data={
+            f"{scenario}_station_name": station_names,
+            f"{scenario}_station_id": station_ids,
+            "latitudes": latitudes,
+            "longitudes": longitudes
+        }
+    )
+
+    #  data["coordinates"] = data["coordinates"].apply(lambda x: Point(x[0], x[1]))
+    #  geodata = GeoDataFrame(data=data, geometry="coordinates")
+
+    #  geodata.set_crs(epsg=4326, inplace=True)
+
+    return data
+
+@st.cache_resource
+def make_scatterplot(geodata: GeoDataFrame):
     """
     
     Args:
         scenario (str): _description_
         geojson (dict): _description_
         geodata (GeoDataFrame): _description_
-        predictions (pd.DataFrame): _description_
     """
     with st.spinner("Building map..."):
         centre = [41.872866, -87.63363]
@@ -51,23 +94,13 @@ def make_scatterplot(geodata: GeoDataFrame, predictions: pd.DataFrame):
     tracker.next()
     
 
-user_scenario_choice: list[str] = st.sidebar.multiselect(
-    label="Do you want predictions for the number of arrivals at or the departures from each station?",
-    options=["Arrivals", "Departures"],
-    placeholder="Please select one of the two options."
-)
-
 for scenario in ["start", "end"]:
     displayed_scenario_names = choose_displayed_scenario_name()
     if displayed_scenario_names[scenario] in user_scenario_choice:
 
         # Prepare geodata
-        geojson = load_geojson(scenario=scenario, indexer="two")
+        geojson = load_geojson(scenario="start")
         geodata = make_geodataframe(scenario=scenario, geojson=geojson)
         tracker.next()
         
-        # Fetch features and predictions<
-        features = get_features(scenario=scenario, target_date=config.current_hour)
-        predictions = get_hourly_predictions(scenario=scenario)
-
-        make_scatterplot(geodata=geodata, predictions=predictions)
+        make_scatterplot(geodata=geodata)
