@@ -1,45 +1,44 @@
-import os 
+import os
 import json 
 import pandas as pd
 import streamlit as st 
 
-from loguru import logger 
+from loguru import logger
+from datetime import datetime
 
+from src.setup.config import config
+from src.setup.paths import INDEXER_ONE, INDEXER_TWO
+
+from src.feature_pipeline.preprocessing import DataProcessor
 from src.feature_pipeline.feature_engineering import ReverseGeocoding
 from src.inference_pipeline.inference import InferenceModule
 
 
-def rerun_feature_pipeline(exception_to_check: FileNotFoundError):
+def rerun_feature_pipeline():
     """
-
-    Args:
-        exception_to_check (FileNotFoundError): _description_
+    This will be a decorator that will be applied to a few functions that will benefit from its functionality.
+    It provides logic that allows the wrapped function to be run if a certain exception is not raised, and
+    run the full feature pipeline if the exception is raised. Generally, the functions that will use this will
+    depend on the loading of some file that was generated during the preprocessing phase of the feature pipeline.
+    Running the feature pipeline will allow for the file in question to be generated if isn't present, and then
+    run the wrapped function afterwards.
     """
-    
-    def decorator(fn):
+    def decorator(fn: callable):
         def wrapper(*args, **kwargs):
             try:
                 return fn(*args, **kwargs)
-
-            # Check whether     
-            except exception_to_check as error:
+            except FileNotFoundError as error:
                 logger.error(error)
-                logger.error(
-                    "The JSON file which contains station details is missing. The feature pipeline is now being re-run..."
-                )
-
-                # Run the full preprocessing script, even though we only need the indexing to be done.
+                logger.warning("The JSON file containing station details is missing. Running feature pipeline again...")
                 processor = DataProcessor(year=config.year, for_inference=False)
                 processor.make_training_data(geocode=False)
-                
-                # Rerun the wrapped function
                 return fn(*args, **kwargs)
-                
-        return decorator
+        return wrapper
+    return decorator
 
 
 @st.cache_data
-@rerun_feature_pipeline(exception_to_check=FileNotFoundError)
+@rerun_feature_pipeline()
 def load_geodata(scenario: str) -> dict:
 
     if len(os.listdir(INDEXER_ONE)) != 0:
@@ -49,34 +48,23 @@ def load_geodata(scenario: str) -> dict:
     else:
         raise FileNotFoundError("No geodata has been made. Running the feature pipeline...")
 
-    with open(geodata_path) as file:
+    with open(geodata_path, mode="r") as file:
         geodata = json.load(file)
-
     return geodata 
 
 
 @st.cache_data
-def get_ids_and_names(geodata: dict) -> dict[str, int]:
+def get_ids_and_names(geodata: dict) -> dict[int, str]:
     ids_and_names = [(station_details["station_id"], station_details["station_name"]) for station_details in geodata]
-    return {station_id: station_name for station_ids, station_name in ids_and_names}    
+    return {station_id: station_name for station_id, station_name in ids_and_names}
 
 
-@st.cache_data
-@rerun_feature_pipeline(exception_to_check=FileNotFoundError)
+@rerun_feature_pipeline()
 def load_geojson(scenario: str) -> dict:
-    """
 
-    Args:
-        indexer (str, optional): _description_. Defaults to "two".
-
-    Returns:
-        dict: _description_
-    """
     with st.spinner(text="Getting the coordinates of each station..."):
-        
         if len(os.listdir(INDEXER_ONE)) != 0:
-
-            with open(INDEXER_ONE / f"rounded_{scenario}_points_and_new_ids.geojson") as file:
+            with open(INDEXER_ONE / f"rounded_{scenario}_points_and_new_ids.geojson", mode="r") as file:
                 points_and_ids = json.load(file)
 
             loaded_geodata = pd.DataFrame(
@@ -94,17 +82,39 @@ def load_geojson(scenario: str) -> dict:
             )
         
         elif len(os.listdir(INDEXER_TWO)) != 0:
-            with open(INDEXER_TWO/f"{scenario}_geojson.geojson") as file:
-                geodata_dict = json.load(file)      
-                
+            with open(INDEXER_TWO/f"{scenario}_geojson.geojson", mode="r") as file:
+                geodata_dict = json.load(file)
         else:
             raise FileNotFoundError("No geojson to used for plotting has been made. Running the feature pipeline...")
 
-
-        return geodata_dict
-
     st.sidebar.write("✅ Retrieved Station Names, IDs & Coordinates")
-    tracker.next()
+    return geodata_dict
+
+
+@st.cache_data
+def prepare_geodata_df(scenario: str, geojson: dict) -> pd.DataFrame:
+    coordinates = []
+    station_ids = []
+    station_names = []
+
+    for detail_index in range(len(geojson["features"])):
+        detail: dict = geojson["features"][detail_index]
+        coordinates.append(detail["geometry"]["coordinate"])
+        station_ids.append(detail["properties"]["station_id"])
+        station_names.append(detail["properties"]["station_name"])
+
+    latitudes = [point[1] for point in coordinates]
+    longitudes = [point[0] for point in coordinates]
+
+    return pd.DataFrame(
+        data={
+            f"{scenario}_station_name": station_names,
+            f"{scenario}_station_id": station_ids,
+            "latitudes": latitudes,
+            "longitudes": longitudes
+        }
+    )
+
 
 @st.cache_data
 def get_features(scenario: str, target_date: datetime, geocode: bool = False) -> pd.DataFrame:
@@ -115,6 +125,7 @@ def get_features(scenario: str, target_date: datetime, geocode: bool = False) ->
     Args:
         scenario (str): _description_
         target_date (datetime): _description_
+        geocode (bool):
 
     Returns:
         pd.DataFrame: the created (or fetched) features
@@ -124,5 +135,4 @@ def get_features(scenario: str, target_date: datetime, geocode: bool = False) ->
         features = inferrer.fetch_time_series_and_make_features(target_date=target_date, geocode=geocode)
 
     st.sidebar.write("✅ Fetched features for inference")
-    tracker.next()
-    return features 
+    return features

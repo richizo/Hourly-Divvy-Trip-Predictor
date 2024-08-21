@@ -15,7 +15,7 @@ from src.setup.config import config
 from src.setup.paths import TRAINING_DATA, LOCAL_SAVE_DIR, make_fundamental_paths
 from src.feature_pipeline.preprocessing import DataProcessor
 from src.inference_pipeline.model_registry_api import ModelRegistry
-from src.training_pipeline.models import BaseModel, get_model, load_local_model
+from src.training_pipeline.models import get_model, load_local_model
 from src.training_pipeline.hyperparameter_tuning import optimise_hyperparameters
 
 
@@ -35,7 +35,6 @@ class Trainer:
 
             hyperparameter_trials (int | None): the number of times that we will try to optimize the hyperparameters
         """
-    if not Path(MODELS_DIR).exists():
         self.scenario = scenario
         self.tune_hyperparameters = tune_hyperparameters
         self.hyperparameter_trials = hyperparameter_trials
@@ -95,10 +94,12 @@ class Trainer:
         
         if not self.tune_hyperparameters:
             experiment.set_name(name=f"{model_name.title()}(Untuned) model for the {self.scenario}s of trips")
-            
             logger.info("Using the default hyperparameters")
+
             if model_name == "base":
-                pipeline = make_pipeline(model_fn(scenario=self.scenario))
+                pipeline = make_pipeline(
+                    model_fn(scenario=self.scenario)
+                )
             else:
                 if isinstance(model_fn, XGBRegressor):
                     pipeline = make_pipeline(model_fn)
@@ -168,16 +169,7 @@ class Trainer:
         test_errors = models_and_errors.values()
         for model_name in model_names:
             if models_and_errors[model_name] == min(test_errors):
-
                 logger.info(f"The best performing model is {model_name} -> Pushing it to the CometML model registry")
-        
-                model = load_local_model(
-                    directory=LOCAL_SAVE_DIR,
-                    model_name=model_name,
-                    scenario=self.scenario,
-                    tuned_or_not=self.tuned_or_not
-                )
-
                 registry = ModelRegistry(model_name=model_name, scenario=self.scenario, tuned_or_not=self.tuned_or_not)
                 registry.push_model_to_registry(status=status.title(), version=version)
 

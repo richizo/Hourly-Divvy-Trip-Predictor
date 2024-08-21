@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 
 from tqdm import tqdm
-import geopandas as gpd
 
 
 def view_memory_usage(data: pd.DataFrame, column: str) -> pd.Series:
@@ -48,8 +47,8 @@ def add_rounded_coordinates_to_dataframe(data: pd.DataFrame, decimal_places: int
     a new column for these.
     """
 
-    new_lats = []
-    new_lngs = []
+    new_latitudes = []
+    new_longitudes = []
 
     latitudes = tqdm(
         iterable=data[f"{scenario}_lat"].values,
@@ -62,12 +61,12 @@ def add_rounded_coordinates_to_dataframe(data: pd.DataFrame, decimal_places: int
     )
 
     for latitude in latitudes:
-        new_lats.append(
+        new_latitudes.append(
             np.round(latitude, decimals=decimal_places)
         )
 
     for longitude in longitudes:
-        new_lngs.append(
+        new_longitudes.append(
             np.round(longitude, decimals=decimal_places)
         )
 
@@ -75,7 +74,7 @@ def add_rounded_coordinates_to_dataframe(data: pd.DataFrame, decimal_places: int
     data.insert(
         loc=data.shape[1],
         column=f"rounded_{scenario}_lat",
-        value=pd.Series(new_lats),
+        value=pd.Series(new_latitudes),
         allow_duplicates=False
     )
 
@@ -83,7 +82,7 @@ def add_rounded_coordinates_to_dataframe(data: pd.DataFrame, decimal_places: int
     data.insert(
         loc=data.shape[1],
         column=f"rounded_{scenario}_lng",
-        value=pd.Series(new_lngs),
+        value=pd.Series(new_longitudes),
         allow_duplicates=False
     )
 

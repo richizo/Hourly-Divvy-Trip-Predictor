@@ -3,12 +3,11 @@ import random
 
 from tqdm import tqdm
 from loguru import logger
-from pathlib import Path, PosixPath
 
 import numpy as np
 import pandas as pd
 
-from src.setup.paths import INDEXER_TWO, INDEXER_TWO, CLEANED_DATA
+from src.setup.paths import INDEXER_ONE, INDEXER_TWO, CLEANED_DATA
 from src.feature_pipeline.feature_engineering import ReverseGeocoding
 
 
@@ -115,7 +114,7 @@ class RoundingCoordinates:
 
         # Because tuples can't be keys of a dictionary
         swapped_dict = {station_id: point for point, station_id in points_and_new_ids.items()}
-        with open(INDEXER_TWO / f"rounded_{self.scenario}_points_and_new_ids.json", mode="w") as file:
+        with open(INDEXER_ONE / f"rounded_{self.scenario}_points_and_new_ids.json", mode="w") as file:
             json.dump(swapped_dict, file)
 
         return points_and_new_ids
@@ -183,6 +182,8 @@ class DirectIndexing:
         Search for rows with both IDs and names missing.
 
         Args:
+            data (pd.DataFrame):
+            scenario (str):
             first_time (bool): whether this function is being run for the first time
 
         Returns:
@@ -254,26 +255,20 @@ class DirectIndexing:
             first_time=True
         )
 
-        complete_row_indices = np.array([int(index) for index in complete_rows_and_their_original_coordinates.keys()])
-
-        complete_rows_and_their_rounded_coordinates = {
-            row_index: tuple(rounded_coordinates_of_complete_rows[i]) for i, row_index in enumerate(complete_row_indices)
-        }
-
         rounded_problem_lats = np.round(self.data.iloc[problem_rows_indices, self.latitudes_index].values, decimals=4)
         rounded_problem_lngs = np.round(self.data.iloc[problem_rows_indices, self.longitudes_index].values, decimals=4)
         rounded_problem_coordinates = list(zip(rounded_problem_lats, rounded_problem_lngs))
 
-        # Get a boolean array of the indices of rounded coordin
-        rounded_coordinates_match = np.isin(rounded_problem_coordinates, rounded_coordinates_of_complete_rows).all(axis=1)
-
-        complete_rows_with_matches = complete_row_indices[np.where(rounded_coordinates_match)[0]]  
+        # Get a boolean array of the indices of rounded coordinates
+        rounded_coordinates_match = np.isin(
+            rounded_problem_coordinates, rounded_coordinates_of_complete_rows
+        ).all(axis=1)
                     
         is_problem_row = np.isin(element=problem_rows_indices, test_elements=np.arange(len(self.data)))      
         rows_to_be_targeted = np.where(is_problem_row & rounded_coordinates_match)[0]
 
-        found_ids  = self.data.iloc[rows_to_be_targeted, self.station_id_index]
-        found_names  = self.data.iloc[rows_to_be_targeted, self.station_name_index]
+        found_ids = self.data.iloc[rows_to_be_targeted, self.station_id_index]
+        found_names = self.data.iloc[rows_to_be_targeted, self.station_name_index]
 
         problem_rows_and_their_discovered_names_and_ids = {
             int(index): (code, name) for index, code, name in zip(rows_to_be_targeted, found_ids, found_names)
@@ -287,9 +282,6 @@ class DirectIndexing:
         Take the row indices, as well as the associated IDs and names that were discovered using the matching 
         procedure. Then replace the missing station names and IDs in these rows of the dataframe with those 
         that were discovered.
-
-        Args:
-            save (bool, optional): _description_. Defaults to True.
 
         Returns:
             pd.DataFrame: _description_
@@ -361,14 +353,14 @@ class DirectIndexing:
                     "coordinates": [latitude, longitude],
                     "station_id": station_id,
                     "station_name": station_name    
-                } for latitude, longitude, station_id, station_name in 
-                    zip(latitudes, longitudes, station_ids, station_names)
+                } for latitude, longitude, station_id, station_name in
+                zip(latitudes, longitudes, station_ids, station_names)
             ]
 
         with open(file_path, mode="w") as file:
             json.dump(geodata, file)
 
-    def execute(self, delete_leftover_rows: bool = True, save: bool = True) -> pd.DataFrame:
+    def execute(self, delete_leftover_rows: bool, save: bool = True) -> pd.DataFrame:
         """
         Make a replacement for every existing ID because many of the IDs are long strings (see the preprocessing
         script for details).
@@ -395,7 +387,7 @@ class DirectIndexing:
         else:
             logger.info("Initiating reverse geocoding procedure for the leftover rows")
             coordinate_maker = RoundingCoordinates(decimal_places=6, scenario=self.scenario, data=self.data)
-            coordinate_maker.add_column_of_rounded_coordinates_to_dataframe(scenario=self.scenario, data=self.data)
+            coordinate_maker.add_column_of_rounded_coordinates_to_dataframe()
 
             for column in self.data.columns:
                 if column not in [f"{self.scenario}_station_id", f"rounded_{self.scenario}_points"]:
@@ -428,6 +420,6 @@ class DirectIndexing:
         )
 
         if save:
-            self.data.to_parquet(path=CLEANED_DATA / f"fully_cleaned_and_reindexed_{self.scenario}_data.parquet")
+            self.data.to_parquet(path=CLEANED_DATA / f"fully_cleaned_and_indexed_{self.scenario}_data.parquet")
 
         return self.data

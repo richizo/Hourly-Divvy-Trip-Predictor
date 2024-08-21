@@ -6,11 +6,10 @@ This module contains code that:
 - performs inference on features
 """
 
-from pathlib import Path 
-
 import numpy as np
 import pandas as pd
 
+from pathlib import Path
 
 from loguru import logger
 from argparse import ArgumentParser

@@ -1,10 +1,13 @@
+import json
 import pandas as pd
 
+from tqdm import tqdm
 from loguru import logger
 from warnings import simplefilter
 from geopy.geocoders import Nominatim, Photon
 
 from src.setup.config import config
+from src.setup.paths import GEOGRAPHICAL_DATA
 
 
 class GeoCoding:
@@ -85,7 +88,6 @@ class ReverseGeocoding:
 
     def find_points_simply(self) -> dict[int, list[float]]:
 
-        
         simple_match = {}
         number_of_rows = self.geodata.shape[0]
 

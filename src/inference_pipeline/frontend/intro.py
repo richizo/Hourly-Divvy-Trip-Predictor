@@ -1,7 +1,6 @@
 import streamlit as st 
 
 
-#  st.set_page_config(page_title="Welcome to the Hourly Divvy Trip Predictor", initial_sidebar_state="expanded", layout="centered")
 st.write("# Hourly Divvy Trip Predictor Service")
 
 st.markdown(

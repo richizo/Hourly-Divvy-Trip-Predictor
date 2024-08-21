@@ -1,5 +1,4 @@
-import os
-import json 
+import json
 import warnings
 from tqdm import tqdm
 from loguru import logger
@@ -14,7 +13,7 @@ from src.feature_pipeline.station_indexing import RoundingCoordinates, DirectInd
 from src.feature_pipeline.feature_engineering import perform_feature_engineering
 
 from src.setup.paths import (
-    CLEANED_DATA, TRAINING_DATA, TIME_SERIES_DATA, INDEXER_TWO, INDEXER_TWO, INFERENCE_DATA, make_fundamental_paths
+    CLEANED_DATA, TRAINING_DATA, TIME_SERIES_DATA, INDEXER_TWO, INFERENCE_DATA, make_fundamental_paths
 )
 
 
@@ -143,14 +142,14 @@ class DataProcessor:
     def clean(self, save: bool = True) -> pd.DataFrame:
 
         if self.use_custom_station_indexing(scenarios=self.scenarios, data=self.data) \
-            and self.tie_ids_to_unique_coordinates(data=self.data):
+                and self.tie_ids_to_unique_coordinates(data=self.data):
 
-            cleaned_data_file_path = CLEANED_DATA / "data_with_reindexed_stations (indexer_one).parquet"
+            cleaned_data_file_path = CLEANED_DATA / "data_with_newly_indexed_stations (indexer_one).parquet"
 
         elif self.use_custom_station_indexing(scenarios=self.scenarios, data=self.data) \
-            and not self.tie_ids_to_unique_coordinates(data=self.data):
+                and not self.tie_ids_to_unique_coordinates(data=self.data):
 
-            cleaned_data_file_path = CLEANED_DATA/"data_with_reindexed_stations (indexer_two).parquet"
+            cleaned_data_file_path = CLEANED_DATA/"data_with_newly_indexed_stations (indexer_two).parquet"
 
         # Will think of a more elegant solution in due course. This only serves my current interests.
         elif self.for_inference:
@@ -299,10 +298,6 @@ class DataProcessor:
 
                 Args:
                     cleaned_data (pd.DataFrame): the version of the dataset that has been cleaned
-
-                    decimal_places (int): the number of decimal places to which we may round the coordinates.
-                                          Choosing 6 decimal places will result in no rounding at all.
-                    
                     start_or_end (str): whether we are looking at arrivals or departures.
 
                 Returns:
@@ -316,14 +311,14 @@ class DataProcessor:
                     allow_duplicates=False
                 )
 
-                interim_data = cleaned_data.drop(f"{start_or_end}ed_at", axis=1)
+                cleaned_data = cleaned_data.drop(f"{start_or_end}ed_at", axis=1)
                 logger.info("Determining the method of dealing with invalid station indices...")
 
                 if self.use_custom_station_indexing(scenarios=[start_or_end], data=self.data) and \
                         self.tie_ids_to_unique_coordinates(data=self.data):
 
                     logger.warning("Custom station indexer required: tying new station IDs to unique coordinates")
-                    indexer = RoundingCoordinates(data= cleaned_data, scenario=start_or_end, decimal_places=4) # Default of 4 dp
+                    indexer = RoundingCoordinates(data=cleaned_data, scenario=start_or_end, decimal_places=4)
 
                     interim_data = indexer.execute()
                     interim_dataframes.append(interim_data)
@@ -338,7 +333,6 @@ class DataProcessor:
                     indexer = DirectIndexing(scenario=start_or_end, data=cleaned_data)
                     interim_data = indexer.execute(delete_leftover_rows=True)
                     interim_dataframes.append(interim_data)
-
                     return interim_data
 
                 else:
@@ -347,7 +341,9 @@ class DataProcessor:
                     )
 
             def __aggregate_final_ts(
-                interim_data: pd.DataFrame, start_or_end: str) -> pd.DataFrame | list[pd.DataFrame, pd.DataFrame]:
+                interim_data: pd.DataFrame,
+                start_or_end: str
+            ) -> pd.DataFrame | list[pd.DataFrame, pd.DataFrame]:
 
                 #  if self.use_custom_station_indexing(data=self.data, scenarios=[start_or_end]) and \
                 #        self.tie_ids_to_unique_coordinates(data=self.data):
@@ -381,8 +377,8 @@ class DataProcessor:
 
                     # Get all the coordinates that are common to both dictionaries
                     common_points = [
-                        point for point in rounded_start_points_and_ids.keys() if point in \
-                             rounded_end_points_and_ids.keys()
+                        point for point in rounded_start_points_and_ids.keys() if point in
+                        rounded_end_points_and_ids.keys()
                     ]
 
                     # Ensure that these common points have the same IDs in each dictionary.
@@ -409,33 +405,32 @@ class DataProcessor:
 
                     return ts_data
 
-
             elif self.use_custom_station_indexing(scenarios=indexer_two_scenarios, data=self.data) and \
-                not self.tie_ids_to_unique_coordinates(data=self.data):
+                    not self.tie_ids_to_unique_coordinates(data=self.data):
 
-                    if missing_scenario == "both":
-                        for data, scenario in zip([start_df, end_df], self.scenarios):
-                            __investigate_making_new_station_ids(cleaned_data=data, start_or_end=scenario)
+                if missing_scenario == "both":
+                    for data, scenario in zip([start_df, end_df], self.scenarios):
+                        __investigate_making_new_station_ids(cleaned_data=data, start_or_end=scenario)
 
-                        start_ts = __aggregate_final_ts(interim_data=interim_dataframes[0], start_or_end="start")
-                        end_ts = __aggregate_final_ts(interim_data=interim_dataframes[1], start_or_end="end")
+                    start_ts = __aggregate_final_ts(interim_data=interim_dataframes[0], start_or_end="start")
+                    end_ts = __aggregate_final_ts(interim_data=interim_dataframes[1], start_or_end="end")
 
-                        if save:
-                            start_ts.to_parquet(TIME_SERIES_DATA / "start_ts.parquet")
-                            end_ts.to_parquet(TIME_SERIES_DATA / "end_ts.parquet")
+                    if save:
+                        start_ts.to_parquet(TIME_SERIES_DATA / "start_ts.parquet")
+                        end_ts.to_parquet(TIME_SERIES_DATA / "end_ts.parquet")
 
-                        return start_ts, end_ts
+                    return start_ts, end_ts
 
-                    elif missing_scenario == "start" or "end":
+                elif missing_scenario == "start" or "end":
 
-                        data = start_df if missing_scenario == "start" else end_df
-                        data = __investigate_making_new_station_ids(cleaned_data=data, start_or_end=missing_scenario)
-                        ts_data = __aggregate_final_ts(interim_data=data, start_or_end=missing_scenario)
+                    data = start_df if missing_scenario == "start" else end_df
+                    data = __investigate_making_new_station_ids(cleaned_data=data, start_or_end=missing_scenario)
+                    ts_data = __aggregate_final_ts(interim_data=data, start_or_end=missing_scenario)
 
-                        if save:
-                            ts_data.to_parquet(TIME_SERIES_DATA / f"{missing_scenario}_ts.parquet")
+                    if save:
+                        ts_data.to_parquet(TIME_SERIES_DATA / f"{missing_scenario}_ts.parquet")
 
-                        return ts_data
+                    return ts_data
 
         return _get_ts_or_begin_transformation(start_ts_path=self.start_ts_path, end_ts_path=self.end_ts_path)
 
@@ -505,9 +500,6 @@ class DataProcessor:
             input_seq_len:
 
             ts_data: the time series data
-
-            for_inference (bool): whether we are generating this data as part of the inference pipeline, 
-                            or feature pipeline.
 
         Returns:
             pd.DataFrame: the training data

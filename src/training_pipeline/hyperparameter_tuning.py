@@ -74,7 +74,7 @@ def optimise_hyperparameters(
         y: pd.Series
 ) -> dict:
     """
-    Take a sample of values for each hyperparameter, and define an objective function whcih is to be 
+    Take a sample of values for each hyperparameter, and define an objective function which is to be
     optimised in an attempt to approximate the minimal MAE (within the set of hyperparameters sampled).
 
     Args:

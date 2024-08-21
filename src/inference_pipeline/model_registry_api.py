@@ -1,4 +1,3 @@
-import pickle
 from pathlib import Path
 
 from loguru import logger
@@ -20,7 +19,7 @@ class ModelRegistry:
     def _set_registered_name(self) -> str:
         return f"{self.model_name.title()} ({self.tuned_or_not.title()} for {self.scenario}s)"
 
-    def get_registered_model_version(self, status: str) -> list:
+    def get_registered_model_version(self) -> str:
         api = API(api_key=config.comet_api_key)
         
         model_details: dict[list | dict] = api.get_registry_model_details(
@@ -56,13 +55,12 @@ class ModelRegistry:
         logger.info(f'Pushing version {version} of the model to the registry under "{status.title()}"...')
         experiment.register_model(model_name=registered_name, status=status, version=version)
 
-    def download_latest_model(self, status: str, unzip: bool) -> Pipeline:
+    def download_latest_model(self, unzip: bool) -> Pipeline:
         """
         Download the latest version of the requested model to the MODEL_DIR directory,
         load the file using pickle, and return it.
 
         Args:
-            status: the status of the requested model on CometML
             unzip: whether to unzip the downloaded zipfile.
 
         Returns:
@@ -75,7 +73,7 @@ class ModelRegistry:
             api.download_registry_model(
                 workspace=config.comet_workspace,   
                 registry_name=self.registered_name,
-                version=self.get_registered_model_version(status=status),
+                version=self.get_registered_model_version(),
                 output_path=COMET_SAVE_DIR,
                 expand=unzip
             )

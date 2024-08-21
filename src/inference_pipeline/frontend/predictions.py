@@ -1,27 +1,13 @@
-import os 
-import json
-from typing import Any
-
-import numpy as np
-import streamlit as st
-
-from tqdm import tqdm
-from loguru import logger
-
 import pandas as pd
-from geopandas import GeoDataFrame
-from datetime import UTC, datetime, timedelta
+import streamlit as st
+from datetime import datetime, timedelta
 
-from src.setup.config import config 
-from src.feature_pipeline.preprocessing import DataProcessor
-from src.feature_pipeline.feature_engineering import ReverseGeocoding
-
+from src.setup.config import choose_displayed_scenario_name, config
 from src.inference_pipeline.inference import InferenceModule
-from src.inference_pipeline.model_registry_api import ModelRegistry
-from src.inference_pipeline.frontend.data import load_geojson, load_geodata, rerun_feature_pipeline, get_ids_and_names
 
-from src.setup.config import choose_displayed_scenario_name, config 
-from src.setup.paths import GEOGRAPHICAL_DATA, INFERENCE_DATA, INDEXER_ONE, INDEXER_TWO
+from src.inference_pipeline.frontend.data import (
+    load_geojson, load_geodata, get_features, get_ids_and_names, prepare_geodata_df
+)
 
 
 class ProgressTracker:
@@ -67,9 +53,7 @@ def get_hourly_predictions(
     Returns:
         pd.DataFrame: dataframe containing hourly predicted arrivals or departures.
     """
-    with st.spinner(
-        text=f"Fetching predicted {displayed_scenario_names[scenario].lower()} from the feature store..."
-    ):
+    with st.spinner(text=f"Fetching predicted {displayed_scenario_names[scenario].lower()} from the feature store..."):
         inferrer = InferenceModule(scenario=scenario)
 
         predictions: pd.DataFrame = inferrer.load_predictions_from_store(
@@ -78,20 +62,14 @@ def get_hourly_predictions(
             to_hour=to_hour
         )
 
-        next_hour_ready = \
-                False if predictions[predictions[f"{scenario}_hour"] == to_hour].empty else True
-                
-        previous_hour_ready = \
-                False if predictions[predictions[f"{scenario}_hour"] == from_hour].empty else True
+        next_hour_ready = False if predictions[predictions[f"{scenario}_hour"] == to_hour].empty else True
+        previous_hour_ready = False if predictions[predictions[f"{scenario}_hour"] == from_hour].empty else True
 
         if next_hour_ready: 
             prediction_to_use = predictions[predictions[f"{scenario}_hour"] == to_hour]
-
         elif previous_hour_ready:
             st.subheader("⚠️ Predictions for the current hour are unavailable. Using those from an hour ago.")
             prediction_to_use = predictions[predictions[f"{scenario}_hour"] == from_hour]
-            current_hour = from_hour
-
         else:
             raise Exception("Cannot get predictions for either hour. The feature pipeline may not be working")
 
@@ -102,18 +80,16 @@ def get_hourly_predictions(
     return prediction_to_use
     
 
-@rerun_feature_pipeline(exception_to_check=FileNotFoundError)
 def get_prediction_per_station(scenario: str, predictions_df: pd.DataFrame) -> dict[str, float]:
 
-    station_ids = predictions[f"{scenario}_station_id"].values
+    station_ids = predictions_df[f"{scenario}_station_id"].values
     predictions = predictions_df[f"predicted_{scenario}s"].values
-    
-    ids_and_predictions = {
-        code: prediction for code, prediction in zip(station_ids, predictions) if prediction != None
-    }
-    
-    geodata = load_geodata(scenario=scenario)
+    geodata: dict = load_geodata(scenario=scenario)
     ids_and_names = get_ids_and_names(geodata=geodata)
+
+    ids_and_predictions: dict[int, float] = {
+        code: prediction for code, prediction in zip(station_ids, predictions) if prediction is not None
+    }
 
     return {
         ids_and_names[station_id]: ids_and_predictions[station_id] for station_id in ids_and_predictions.keys()
@@ -133,15 +109,12 @@ def deliver_predictions():
 
             # Prepare geodata   
             geojson = load_geojson(scenario=scenario)
-            geodata = make_geodataframe(scenario=scenario, geojson=geojson)
+            geodata = prepare_geodata_df(scenario=scenario, geojson=geojson)
             tracker.next()
             
             # Fetch features and predictions<
             features = get_features(scenario=scenario, target_date=config.current_hour)
             predictions = get_hourly_predictions(scenario=scenario)
-
-            
-
 
             choose_station = st.selectbox(
                 label=f"Which station would you like predicted {displayed_scenario_names[scenario]}s for?"

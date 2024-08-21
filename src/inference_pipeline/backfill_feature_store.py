@@ -49,7 +49,7 @@ class BackFiller:
         processor = DataProcessor(year=config.year, for_inference=False)
         ts_data = processor.make_time_series()[0] if self.scenario == "start" else processor.make_time_series()[1]
         
-        ts_data["timestamp"] = pd.to_datetime(ts_data[f"{scenario}_hour"]).astype(int) // 10 ** 6  # Express in milliseconds
+        ts_data["timestamp"] = pd.to_datetime(ts_data[f"{scenario}_hour"]).astype(int) // 10 ** 6  # Express in ms
 
         #  ts_data = ts_data.drop(f"{scenario}_hour", axis=1)
         feature_group = self.api.setup_feature_group(
