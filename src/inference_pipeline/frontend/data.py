@@ -87,6 +87,7 @@ def load_geojson(scenario: str) -> dict:
         else:
             raise FileNotFoundError("No geojson to used for plotting has been made. Running the feature pipeline...")
 
+    tracker.next()
     st.sidebar.write("✅ Retrieved Station Names, IDs & Coordinates")
     return geodata_dict
 

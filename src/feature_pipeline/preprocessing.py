@@ -445,7 +445,7 @@ class DataProcessor:
         Then the function will slide "step_size" steps and repeat the process. The function
         terminates once it reaches the last row of the dataframe.
 
-        Credit to Pau Labarta Bajo.
+        Credit to P.L.B.
 
         Args:
             ts_data (pd.DataFrame): the time series dataset that serves as the input

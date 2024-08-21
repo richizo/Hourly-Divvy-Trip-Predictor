@@ -86,7 +86,7 @@ class BackFiller:
         
         inferrer = InferenceModule(scenario=self.scenario)
         registry = ModelRegistry(scenario=self.scenario, model_name=model_name, tuned_or_not=tuned_or_not)
-        model = registry.download_latest_model(status="production", unzip=True)
+        model = registry.download_latest_model(unzip=True)
 
         features = inferrer.fetch_time_series_and_make_features(target_date=datetime.now(), geocode=False)
 

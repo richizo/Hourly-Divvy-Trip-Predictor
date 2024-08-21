@@ -11,7 +11,10 @@ from src.inference_pipeline.frontend.data import (
 
 
 class ProgressTracker:
-
+    """
+    A way for me to more conveniently advance the various progress bars that I will have 
+    in the sidebar.
+    """
     def __init__(self, n_steps: int):
         
         self.current_step = 0
@@ -66,21 +69,31 @@ def get_hourly_predictions(
         previous_hour_ready = False if predictions[predictions[f"{scenario}_hour"] == from_hour].empty else True
 
         if next_hour_ready: 
-            prediction_to_use = predictions[predictions[f"{scenario}_hour"] == to_hour]
+            fetched_predictions = predictions[predictions[f"{scenario}_hour"] == to_hour]
         elif previous_hour_ready:
             st.subheader("⚠️ Predictions for the current hour are unavailable. Using those from an hour ago.")
-            prediction_to_use = predictions[predictions[f"{scenario}_hour"] == from_hour]
+            fetched_predictions = predictions[predictions[f"{scenario}_hour"] == from_hour]
         else:
             raise Exception("Cannot get predictions for either hour. The feature pipeline may not be working")
 
-    if not prediction_to_use.empty:
+    if not fetched_predictions.empty:
         st.sidebar.write("✅ Model's predictions received")
         tracker.next()
 
-    return prediction_to_use
+    return fetched_predictions
     
 
 def get_prediction_per_station(scenario: str, predictions_df: pd.DataFrame) -> dict[str, float]:
+    """
+
+
+    Args:
+        scenario (str): _description_
+        predictions_df (pd.DataFrame): _description_
+
+    Returns:
+        dict[str, float]: _description_
+    """
 
     station_ids = predictions_df[f"{scenario}_station_id"].values
     predictions = predictions_df[f"predicted_{scenario}s"].values
@@ -100,24 +113,27 @@ def deliver_predictions():
 
     user_scenario_choice: list[str] = st.sidebar.multiselect(
         label="Are you looking to view the number of predicted arrivals or departures?",
-        options=["Arrivals", "Departures"],
-        placeholder="Please select one of the two options."
+        placeholder="Please select one of the two options",
+        options=["Arrivals", "Departures"]
     )
 
     for scenario in displayed_scenario_names.keys():
         if displayed_scenario_names[scenario] in user_scenario_choice:
 
-            # Prepare geodata   
-            geojson = load_geojson(scenario=scenario)
-            geodata = prepare_geodata_df(scenario=scenario, geojson=geojson)
-            tracker.next()
-            
-            # Fetch features and predictions<
-            features = get_features(scenario=scenario, target_date=config.current_hour)
-            predictions = get_hourly_predictions(scenario=scenario)
+            predictions_df = get_hourly_predictions(scenario=scenario)
+            predictions_per_station = get_prediction_per_station(scenario=scenario, predictions_df=predictions_df)
 
-            choose_station = st.selectbox(
-                label=f"Which station would you like predicted {displayed_scenario_names[scenario]}s for?"
-            
+            chosen_station = st.selectbox(
+                label=f"Which station would you like predicted {displayed_scenario_names[scenario]}s for?",
+                options=list(predictions_per_station.keys()),
+                placeholder="Please choose a station"
             )
-        
+
+            st.write(
+                f"We predict {predictions_per_station[chosen_station]} {displayed_scenario_names[scenario].lower()}s \
+                    in the next hour"
+            )
+
+
+if __name__ != "__main__":
+    deliver_predictions()
