@@ -2,37 +2,19 @@ import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta
 
-from src.setup.config import choose_displayed_scenario_name, config
+from loguru import logger
 from src.inference_pipeline.inference import InferenceModule
+from src.setup.config import config
 
 from src.inference_pipeline.frontend.data import (
     load_geojson, load_geodata, get_features, get_ids_and_names, prepare_geodata_df
 )
 
-
-class ProgressTracker:
-    """
-    A way for me to more conveniently advance the various progress bars that I will have 
-    in the sidebar.
-    """
-    def __init__(self, n_steps: int):
-        
-        self.current_step = 0
-        self.n_steps = n_steps
-        self.progress_bar = st.sidebar.header("⚙️ Working Progress")
-        self.progress_bar = st.sidebar.progress(value=0)
-
-    def next(self) -> None:
-        self.current_step += 1 
-        self.progress_bar.progress(self.current_step/self.n_steps)
-
-
-displayed_scenario_names = choose_displayed_scenario_name()
-tracker = ProgressTracker(n_steps=4)
+from src.inference_pipeline.frontend.main import ProgressTracker
 
 
 @st.cache_data
-def get_hourly_predictions(
+def get_all_predictions(
     scenario: str,
     model_name: str = "lightgbm", 
     from_hour: datetime = config.current_hour - timedelta(hours=1),
@@ -56,7 +38,7 @@ def get_hourly_predictions(
     Returns:
         pd.DataFrame: dataframe containing hourly predicted arrivals or departures.
     """
-    with st.spinner(text=f"Fetching predicted {displayed_scenario_names[scenario].lower()} from the feature store..."):
+    with st.spinner(text=f"Fetching predicted {config.displayed_scenario_names[scenario].lower()} from feature store"):
         inferrer = InferenceModule(scenario=scenario)
 
         predictions: pd.DataFrame = inferrer.load_predictions_from_store(
@@ -76,20 +58,19 @@ def get_hourly_predictions(
         else:
             raise Exception("Cannot get predictions for either hour. The feature pipeline may not be working")
 
-    if not fetched_predictions.empty:
-        st.sidebar.write("✅ Model's predictions received")
-        tracker.next()
-
     return fetched_predictions
     
 
+@st.cache_data
 def get_prediction_per_station(scenario: str, predictions_df: pd.DataFrame) -> dict[str, float]:
     """
-
+    Go through the dataframe of predictions and obtain the prediction associated with each station
+    ID. Then get the name of each station, and return a dictionary with names as keys and predictions 
+    as values.
 
     Args:
-        scenario (str): _description_
-        predictions_df (pd.DataFrame): _description_
+        scenario (str): "start" or "end"
+        predictions_df (pd.DataFrame): the dataframe of predictions downloaded from the feature store.
 
     Returns:
         dict[str, float]: _description_
@@ -97,6 +78,7 @@ def get_prediction_per_station(scenario: str, predictions_df: pd.DataFrame) -> d
 
     station_ids = predictions_df[f"{scenario}_station_id"].values
     predictions = predictions_df[f"predicted_{scenario}s"].values
+
     geodata: dict = load_geodata(scenario=scenario)
     ids_and_names = get_ids_and_names(geodata=geodata)
 
@@ -104,36 +86,45 @@ def get_prediction_per_station(scenario: str, predictions_df: pd.DataFrame) -> d
         code: prediction for code, prediction in zip(station_ids, predictions) if prediction is not None
     }
 
+    if len(predictions_df[f"{scenario}_station_id"].unique()) == len(ids_and_predictions.keys()):
+        logger.success("Predictions retrieved for all stations")
+
     return {
         ids_and_names[station_id]: ids_and_predictions[station_id] for station_id in ids_and_predictions.keys()
     }
            
 
-def deliver_predictions():
-
+if __name__ != "__main__":  
+    tracker = ProgressTracker(n_steps=2)
+    
     user_scenario_choice: list[str] = st.sidebar.multiselect(
         label="Are you looking to view the number of predicted arrivals or departures?",
         placeholder="Please select one of the two options",
         options=["Arrivals", "Departures"]
     )
 
-    for scenario in displayed_scenario_names.keys():
-        if displayed_scenario_names[scenario] in user_scenario_choice:
+    tracker.next()
+    for scenario in config.displayed_scenario_names.keys():
+        arrival_or_departure = config.displayed_scenario_names[scenario]
+        if arrival_or_departure in user_scenario_choice:
 
-            predictions_df = get_hourly_predictions(scenario=scenario)
+            predictions_df = get_all_predictions(scenario=scenario)
+
+            if not predictions_df.empty:
+                st.sidebar.write("✅ All models predictions received")
+                tracker.next()
+
             predictions_per_station = get_prediction_per_station(scenario=scenario, predictions_df=predictions_df)
 
             chosen_station = st.selectbox(
-                label=f"Which station would you like predicted {displayed_scenario_names[scenario]}s for?",
+                label=f"Which station would you like predicted {arrival_or_departure} for?",
                 options=list(predictions_per_station.keys()),
                 placeholder="Please choose a station"
             )
+ 
+            requested_prediction = int(predictions_per_station[chosen_station])
 
             st.write(
-                f"We predict {predictions_per_station[chosen_station]} {displayed_scenario_names[scenario].lower()}s \
+                f"We predict {requested_prediction} {config.displayed_scenario_names[scenario].lower()} here \
                     in the next hour"
             )
-
-
-if __name__ != "__main__":
-    deliver_predictions()

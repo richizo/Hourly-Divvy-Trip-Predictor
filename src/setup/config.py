@@ -47,8 +47,4 @@ class FeatureViewConfig(BaseSettings):
     feature_group: FeatureGroupConfig
 
 
-def choose_displayed_scenario_name() -> dict:
-    return {"start": "Departures", "end": "Arrivals"} 
-
-
 config = GeneralConfig()

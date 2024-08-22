@@ -157,7 +157,6 @@ class DirectIndexing:
 
         self.station_ids = data.iloc[:, self.station_id_index]
         self.station_names = data.iloc[:, self.station_name_index]
-        self.proper_name_of_scenario = "departure" if scenario == "start" else "arrival"
 
     def found_rows_with_either_missing_ids_or_names(self) -> bool:
         """

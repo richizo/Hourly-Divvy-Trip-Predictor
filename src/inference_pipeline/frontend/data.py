@@ -1,3 +1,8 @@
+"""
+This module contains code responsible for loading the various pieces of data 
+that will be used to deliver the predictions to the streamlit interface.
+"""
+
 import os
 import json 
 import pandas as pd
@@ -40,7 +45,21 @@ def rerun_feature_pipeline():
 @st.cache_data
 @rerun_feature_pipeline()
 def load_geodata(scenario: str) -> dict:
+    """
+    Load the json file that contains the geographical information for 
+    each station.
 
+    Args:
+        scenario (str): "start" or "end" 
+
+    Raises:
+        FileNotFoundError: raised when said json file cannot be found. In that case, 
+        the feature pipeline will be re-run. As part of this, the file will be created,
+        and the function will then load the generated data.
+
+    Returns:
+        dict: the loaded json file as a dictionary
+    """
     if len(os.listdir(INDEXER_ONE)) != 0:
         geodata_path = INDEXER_ONE / f"{scenario}_geodata.json"
     elif len(os.listdir(INDEXER_TWO)) != 0:
@@ -61,6 +80,21 @@ def get_ids_and_names(geodata: dict) -> dict[int, str]:
 
 @rerun_feature_pipeline()
 def load_geojson(scenario: str) -> dict:
+    """
+    Load the geojson file that was generated during the feature pipeline. It will be used to 
+    generate the points on the map.
+
+    Args:
+        scenario (str): "start" or "end"
+
+    Raises:
+        FileNotFoundError: raised when said json file cannot be found. In that case, 
+        the feature pipeline will be re-run. As part of this, the file will be created,
+        and the function will then load the generated data.
+
+    Returns:
+        dict: the loaded geojson file.
+    """
 
     with st.spinner(text="Getting the coordinates of each station..."):
         if len(os.listdir(INDEXER_ONE)) != 0:
@@ -87,13 +121,22 @@ def load_geojson(scenario: str) -> dict:
         else:
             raise FileNotFoundError("No geojson to used for plotting has been made. Running the feature pipeline...")
 
-    tracker.next()
     st.sidebar.write("✅ Retrieved Station Names, IDs & Coordinates")
     return geodata_dict
 
 
 @st.cache_data
 def prepare_geodata_df(scenario: str, geojson: dict) -> pd.DataFrame:
+    """
+    
+
+    Args:
+        scenario (str): _description_
+        geojson (dict): _description_
+
+    Returns:
+        pd.DataFrame: _description_
+    """
     coordinates = []
     station_ids = []
     station_names = []

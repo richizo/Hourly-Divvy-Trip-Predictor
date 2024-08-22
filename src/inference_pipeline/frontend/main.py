@@ -1,9 +1,26 @@
 import streamlit as st
 
 
+class ProgressTracker:
+    """
+    A way for me to more conveniently advance the various progress bars that I will have 
+    in the sidebar.
+    """
+    def __init__(self, n_steps: int):
+        
+        self.current_step = 0
+        self.n_steps = n_steps
+        self.progress_bar = st.sidebar.header("⚙️ Working Progress")
+        self.progress_bar = st.sidebar.progress(value=0)
+
+    def next(self) -> None:
+        self.current_step += 1 
+        self.progress_bar.progress(self.current_step/self.n_steps)
+        
+
 intro_page = st.Page(page="intro.py", title="Welcome", icon="🏠")
-maps_page = st.Page(page="maps.py", title="Maps", icon="🗺️")
+maps_page = st.Page(page="maps.py", title="Maps (Experimental)", icon="🗺️")
 predictions_page = st.Page(page="predictions.py", title="Trip Predictions", icon="👁️")
 
-pages = st.navigation(pages=[intro_page, maps_page, predictions_page])
+pages = st.navigation(pages=[intro_page, predictions_page, maps_page])
 pages.run()

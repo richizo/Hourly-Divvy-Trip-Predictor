@@ -6,8 +6,9 @@ from geopandas import GeoDataFrame
 from folium.plugins import FastMarkerCluster
 from streamlit_folium import st_folium
 
-from src.inference_pipeline.frontend.predictions import tracker, load_geojson
+from src.inference_pipeline.frontend.main import ProgressTracker
 from src.inference_pipeline.frontend.data import prepare_geodata_df
+from src.inference_pipeline.frontend.predictions import load_geojson
 
 
 @st.cache_resource
@@ -33,16 +34,17 @@ def make_scatterplot(geodata: pd.DataFrame | GeoDataFrame):
         st_folium(fig=folium_map, width=900, height=650)
 
     st.sidebar.write("✅ Map Drawn")
-    tracker.next()
     
 
-# Prepare geodata
-geojson = load_geojson(scenario="start")
+if __name__ == "__main__":
+    tracker = ProgressTracker(n_steps=3)
 
-print(geojson)
-breakpoint()
+    # Keeping the progress bar code outside the execution of these cached functions
+    geojson = load_geojson(scenario="start")
+    tracker.next() 
 
-geodata = prepare_geodata_df(scenario="start", geojson=geojson)
-tracker.next()
+    geodata = prepare_geodata_df(scenario="start", geojson=geojson)
+    tracker.next()
 
-make_scatterplot(geodata=geodata)
+    make_scatterplot(geodata=geodata)
+    tracker.next()

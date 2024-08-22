@@ -53,7 +53,7 @@ class BackFiller:
 
         #  ts_data = ts_data.drop(f"{scenario}_hour", axis=1)
         feature_group = self.api.setup_feature_group(
-            description=f"Hourly time series data for {config.displayed_scenario_names[self.scenario].lower()}",
+            description=f"Hourly time series data for {displayed_scenario_names[self.scenario].lower()}",
             name=f"{self.scenario}_feature_group",
             version=config.feature_group_version,
             for_predictions=False
