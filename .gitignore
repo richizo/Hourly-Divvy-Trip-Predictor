@@ -11,13 +11,9 @@ keyfile
 /BACKUP
 /models
 /.cometml-runs
-**__pycache__
-**.ipynb
-
-iterative.jl
-
 /Mapping attempts
-kepler_map.html
+**__pycache__
 
-data_after_replacement.parquet
-data_before_replacement.parquet
+
+Files
+**.ipynb

@@ -1,15 +1,19 @@
+"""
+Contains code responsible for fetching predictions from the feature store 
+and displaying it in the streamlit interface. 
+"""
 import pandas as pd
 import streamlit as st
+from loguru import logger
 from datetime import datetime, timedelta
 
-from loguru import logger
-from src.inference_pipeline.inference import InferenceModule
 from src.setup.config import config
 
 from src.inference_pipeline.frontend.data import (
     load_geojson, load_geodata, get_features, get_ids_and_names, prepare_geodata_df
 )
 
+from src.inference_pipeline.inference import InferenceModule
 from src.inference_pipeline.frontend.main import ProgressTracker
 
 
@@ -39,8 +43,8 @@ def get_all_predictions(
         pd.DataFrame: dataframe containing hourly predicted arrivals or departures.
     """
     with st.spinner(text=f"Fetching predicted {config.displayed_scenario_names[scenario].lower()} from feature store"):
-        inferrer = InferenceModule(scenario=scenario)
 
+        inferrer = InferenceModule(scenario=scenario)        
         predictions: pd.DataFrame = inferrer.load_predictions_from_store(
             model_name=model_name,
             from_hour=from_hour, 
@@ -73,7 +77,7 @@ def get_prediction_per_station(scenario: str, predictions_df: pd.DataFrame) -> d
         predictions_df (pd.DataFrame): the dataframe of predictions downloaded from the feature store.
 
     Returns:
-        dict[str, float]: _description_
+        dict[str, float]: 
     """
 
     station_ids = predictions_df[f"{scenario}_station_id"].values
@@ -87,7 +91,7 @@ def get_prediction_per_station(scenario: str, predictions_df: pd.DataFrame) -> d
     }
 
     if len(predictions_df[f"{scenario}_station_id"].unique()) == len(ids_and_predictions.keys()):
-        logger.success("Predictions retrieved for all stations")
+        logger.success("✅ Predictions retrieved for all stations")
 
     return {
         ids_and_names[station_id]: ids_and_predictions[station_id] for station_id in ids_and_predictions.keys()
@@ -96,35 +100,33 @@ def get_prediction_per_station(scenario: str, predictions_df: pd.DataFrame) -> d
 
 if __name__ != "__main__":  
     tracker = ProgressTracker(n_steps=2)
-    
+
     user_scenario_choice: list[str] = st.sidebar.multiselect(
-        label="Are you looking to view the number of predicted arrivals or departures?",
+        label="Do you want to view the number of predicted arrivals or departures?",
         placeholder="Please select one of the two options",
-        options=["Arrivals", "Departures"]
+        options=config.displayed_scenario_names.values()
     )
 
-    tracker.next()
     for scenario in config.displayed_scenario_names.keys():
         arrival_or_departure = config.displayed_scenario_names[scenario]
-        if arrival_or_departure in user_scenario_choice:
 
+        if arrival_or_departure in user_scenario_choice:
             predictions_df = get_all_predictions(scenario=scenario)
 
             if not predictions_df.empty:
-                st.sidebar.write("✅ All models predictions received")
+                st.sidebar.write("✅ Predictions received")
                 tracker.next()
 
             predictions_per_station = get_prediction_per_station(scenario=scenario, predictions_df=predictions_df)
 
             chosen_station = st.selectbox(
-                label=f"Which station would you like predicted {arrival_or_departure} for?",
+                label=f"For which station would you like predicted {arrival_or_departure.lower()} for?",
                 options=list(predictions_per_station.keys()),
                 placeholder="Please choose a station"
             )
- 
-            requested_prediction = int(predictions_per_station[chosen_station])
 
-            st.write(
-                f"We predict {requested_prediction} {config.displayed_scenario_names[scenario].lower()} here \
-                    in the next hour"
-            )
+            st.sidebar.write("✅ Presented list of stations")
+            requested_prediction = int(predictions_per_station[chosen_station])
+            st.write(f"We predict {requested_prediction} {arrival_or_departure.lower()} here in the next hour")
+        else:
+            break

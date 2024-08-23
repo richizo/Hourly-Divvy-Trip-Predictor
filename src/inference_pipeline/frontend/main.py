@@ -1,3 +1,8 @@
+"""
+This module initiates the streamlit app.s
+"""
+
+
 import streamlit as st
 
 
@@ -19,8 +24,8 @@ class ProgressTracker:
         
 
 intro_page = st.Page(page="intro.py", title="Welcome", icon="🏠")
-maps_page = st.Page(page="maps.py", title="Maps (Experimental)", icon="🗺️")
 predictions_page = st.Page(page="predictions.py", title="Trip Predictions", icon="👁️")
+# maps_page = st.Page(page="maps.py", title="Maps (Experimental)", icon="🗺️")
 
-pages = st.navigation(pages=[intro_page, predictions_page, maps_page])
+pages = st.navigation(pages=[intro_page, predictions_page])
 pages.run()

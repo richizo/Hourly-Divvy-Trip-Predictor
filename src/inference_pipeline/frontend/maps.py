@@ -1,3 +1,8 @@
+"""
+This experimental module contains code that displays the locations of the various 
+stations using a map. It has been challenging to create an implementation of this that 
+produces a good experience.
+"""
 import pandas as pd
 import streamlit as st
 
@@ -24,27 +29,22 @@ def make_scatterplot(geodata: pd.DataFrame | GeoDataFrame):
         latitudes = geodata["latitudes"].values
         longitudes = geodata["longitudes"].values
 
-        print(len(latitudes))
-        breakpoint()
-
-        marker_cluster = FastMarkerCluster(data=zip(latitudes, longitudes))
         folium_map = Map(location=centre)
+        marker_cluster = FastMarkerCluster(data=zip(latitudes, longitudes))
         marker_cluster.add_to(parent=folium_map)
 
-        st_folium(fig=folium_map, width=900, height=650)
+        return folium_map  
 
-    st.sidebar.write("✅ Map Drawn")
-    
-
-if __name__ == "__main__":
+            
+if __name__ != "__main__":
     tracker = ProgressTracker(n_steps=3)
-
-    # Keeping the progress bar code outside the execution of these cached functions
     geojson = load_geojson(scenario="start")
-    tracker.next() 
+    tracker.next()  # Keeping the progress bar code outside the execution of these cached functions
 
     geodata = prepare_geodata_df(scenario="start", geojson=geojson)
     tracker.next()
 
-    make_scatterplot(geodata=geodata)
+    map = make_scatterplot(geodata=geodata)
+    st_folium(fig=map, width=900, height=650)  
+    st.sidebar.write("✅ Map Drawn")
     tracker.next()

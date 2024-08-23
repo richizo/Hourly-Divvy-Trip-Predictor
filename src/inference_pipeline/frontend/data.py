@@ -95,7 +95,6 @@ def load_geojson(scenario: str) -> dict:
     Returns:
         dict: the loaded geojson file.
     """
-
     with st.spinner(text="Getting the coordinates of each station..."):
         if len(os.listdir(INDEXER_ONE)) != 0:
             with open(INDEXER_ONE / f"rounded_{scenario}_points_and_new_ids.geojson", mode="r") as file:
@@ -137,18 +136,20 @@ def prepare_geodata_df(scenario: str, geojson: dict) -> pd.DataFrame:
     Returns:
         pd.DataFrame: _description_
     """
-    coordinates = []
-    station_ids = []
-    station_names = []
+    with st.spinner(text="Preparing a dataframe of station details for plotting..."):
 
-    for detail_index in range(len(geojson["features"])):
-        detail: dict = geojson["features"][detail_index]
-        coordinates.append(detail["geometry"]["coordinate"])
-        station_ids.append(detail["properties"]["station_id"])
-        station_names.append(detail["properties"]["station_name"])
+        coordinates = []
+        station_ids = []
+        station_names = []
 
-    latitudes = [point[1] for point in coordinates]
-    longitudes = [point[0] for point in coordinates]
+        for detail_index in range(len(geojson["features"])):
+            detail: dict = geojson["features"][detail_index]
+            coordinates.append(detail["geometry"]["coordinate"])
+            station_ids.append(detail["properties"]["station_id"])
+            station_names.append(detail["properties"]["station_name"])
+
+        latitudes = [point[1] for point in coordinates]
+        longitudes = [point[0] for point in coordinates]
 
     return pd.DataFrame(
         data={
