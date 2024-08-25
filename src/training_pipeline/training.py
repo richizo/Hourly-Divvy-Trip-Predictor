@@ -1,3 +1,7 @@
+"""
+Contains code for model training with and without hyperparameter tuning, as well as 
+experiment tracking.
+"""
 import pickle
 from pathlib import Path
 from argparse import ArgumentParser
@@ -15,7 +19,7 @@ from src.setup.config import config
 from src.setup.paths import TRAINING_DATA, LOCAL_SAVE_DIR, make_fundamental_paths
 from src.feature_pipeline.preprocessing import DataProcessor
 from src.inference_pipeline.model_registry_api import ModelRegistry
-from src.training_pipeline.models import get_model, load_local_model
+from src.training_pipeline.models import get_model
 from src.training_pipeline.hyperparameter_tuning import optimise_hyperparameters
 
 

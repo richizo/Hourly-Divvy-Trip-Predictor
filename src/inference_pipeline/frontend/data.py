@@ -2,7 +2,6 @@
 This module contains code responsible for loading the various pieces of data 
 that will be used to deliver the predictions to the streamlit interface.
 """
-
 import os
 import json 
 import pandas as pd
@@ -86,7 +85,7 @@ def get_ids_and_names(geodata: dict) -> dict[int, str]:
     Returns:
         dict[int, str]: station IDs as keys and station names as values
     """
-    with st.spinner("Accumulating station details..."):
+    with st.spinner(text="Accumulating station details..."):
         ids_and_names = [(station_details["station_id"], station_details["station_name"]) for station_details in geodata]
         return {station_id: station_name for station_id, station_name in ids_and_names}
 
@@ -140,14 +139,14 @@ def load_geojson(scenario: str) -> dict:
 @st.cache_data
 def prepare_geodata_df(scenario: str, geojson: dict) -> pd.DataFrame:
     """
-    
+    Make a dataframe of geographical information out of the geojson file.
 
     Args:
-        scenario (str): _description_
-        geojson (dict): _description_
+        scenario (str): "start" or "end"
+        geojson (dict): the geojson file containing stations and their geographical details.
 
     Returns:
-        pd.DataFrame: _description_
+        pd.DataFrame: the created dataframe.
     """
     with st.spinner(text="Preparing a dataframe of station details for plotting..."):
 

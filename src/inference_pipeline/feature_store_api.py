@@ -35,7 +35,7 @@ class FeatureStoreAPI:
         project = hopsworks.login(project=self.project_name, api_key_value=self.api_key)
         return project.get_feature_store()
 
-    def setup_feature_group(self, name: str, version: int, description: str, for_predictions: str) -> FeatureGroup:
+    def setup_feature_group(self, name: str, version: int, description: str, for_predictions: bool) -> FeatureGroup:
         """
         Create or connect to a feature group with the specified name, and 
         return an object that represents it.
@@ -58,7 +58,7 @@ class FeatureStoreAPI:
         name: str, 
         version: int, 
         feature_group: FeatureGroup,
-        sub_query: Query | None,
+        sub_query: Query | None = None,
         use_sub_query: bool = False,
     ) -> FeatureView:
         """
@@ -70,7 +70,7 @@ class FeatureStoreAPI:
             name: the name of the feature view to fetch or create
             version: the version of the feature view
             feature_group: the feature group object that will be queried if the feature view needs to be created
-            subquery: the specific part of the feature data that is to be retrieved.
+            sub_query: the specific part of the feature data that is to be retrieved.
             use_sub_query (bool, optional): a boolean indicating whether a subquery is to be used. Defaults to False.
 
         Returns:

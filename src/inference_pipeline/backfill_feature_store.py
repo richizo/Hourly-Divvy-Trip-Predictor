@@ -1,3 +1,7 @@
+"""
+This module contains the code that is used to backfill feature and prediction 
+data.
+"""
 import json 
 import pandas as pd
 from pathlib import Path
@@ -104,7 +108,6 @@ class BackFiller:
             version=6
         )
 
-        # Push predictions to the feature group
         predictions_feature_group.insert(
             predictions_df,
             write_options={"wait_for_job": True}

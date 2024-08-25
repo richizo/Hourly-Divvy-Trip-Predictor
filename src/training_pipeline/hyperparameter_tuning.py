@@ -1,23 +1,23 @@
-# Data Manipulation and Access
+"""
+The module starts with a function that provide a set of values of each of the hyperparameters 
+that we consider with respect to each of the candidate model architectures. It also contains 
+a function that provides hyperparameter tuning during model training.
+
+"""
 import numpy as np
 import pandas as pd
 
-# Logging
 from loguru import logger
 
-# Experiment Tracking
 from comet_ml import Experiment
 
-# Hyperparameter Tuning
 import optuna
 from optuna.samplers import TPESampler
 
-# Metrics & Sklearn Pipelines
 from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.pipeline import make_pipeline
 
-# Models
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 from sklearn.linear_model import Lasso
@@ -29,10 +29,10 @@ def sample_hyperparameters(
         trial: optuna.trial.Trial
 ) -> dict[str, str | int | float]:
     """
-      Define a range of values of the hyperparameters which we will be looking to optimise. 
+    Define a range of values of the hyperparameters which we will be looking to optimise. 
 
-      Returns:
-          dict: the range of hyperparameter values to be considered
+    Returns:
+        dict: the range of hyperparameter values to be considered
     """
     if model_fn == Lasso:
         return {

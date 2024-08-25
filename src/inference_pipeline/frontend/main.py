@@ -1,8 +1,6 @@
 """
-This module initiates the streamlit app.s
+This module initiates the streamlit app.
 """
-
-
 import streamlit as st
 
 

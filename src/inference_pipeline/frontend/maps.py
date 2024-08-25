@@ -13,7 +13,7 @@ from streamlit_folium import st_folium
 
 from src.inference_pipeline.frontend.main import ProgressTracker
 from src.inference_pipeline.frontend.data import prepare_geodata_df
-from src.inference_pipeline.frontend.predictions import load_geojson
+from src.inference_pipeline.frontend.data import load_geojson
 
 
 @st.cache_resource
@@ -44,7 +44,7 @@ if __name__ != "__main__":
     geodata = prepare_geodata_df(scenario="start", geojson=geojson)
     tracker.next()
 
-    map = make_scatterplot(geodata=geodata)
-    st_folium(fig=map, width=900, height=650)  
+    map_ = make_scatterplot(geodata=geodata)
+    st_folium(fig=map_, width=900, height=650)
     st.sidebar.write("✅ Map Drawn")
     tracker.next()

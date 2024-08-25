@@ -1,3 +1,6 @@
+"""
+This module contains all the code that allows interaction with the model registry of CometML.
+"""
 from pathlib import Path
 
 from loguru import logger

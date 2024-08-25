@@ -4,24 +4,21 @@ for features and predictions. This feature view will be referenced in order to g
 feature and prediction data for the purpose of monitoring model performance inside 
 the streamlit frontend.
 """
-
-
 import pandas as pd 
-from datetime import datetime, timedelta
-from argparse import ArgumentParser
+from datetime import datetime
 
 from src.setup.config import config
 from src.inference_pipeline.feature_store_api import FeatureStoreAPI
 
 
 def load_predictions_and_historical_trips(
-        scenario: str, 
-        model_name: str,
-        from_date: datetime, 
-        to_date: datetime
-    ) -> pd.DataFrame:
+    scenario: str,
+    model_name: str,
+    from_date: datetime,
+    to_date: datetime
+) -> pd.DataFrame:
     """
-    
+
 
     Args:
         scenario (str): _description_
@@ -38,10 +35,10 @@ def load_predictions_and_historical_trips(
     arrivals_or_departures: str = config.displayed_scenario_names[scenario].lower()
 
     api = FeatureStoreAPI(
-        scenario=scenario, 
-        api_key=config.hopsworks_api_key, 
+        scenario=scenario,
+        api_key=config.hopsworks_api_key,
         project_name=config.hopsworks_project_name,
-        event_time=None, 
+        event_time=None,
         primary_key=None
     )
 
@@ -51,7 +48,7 @@ def load_predictions_and_historical_trips(
         for_predictions=True,
         version=6
     )
-    
+
     historical_fg = api.setup_feature_group(
         description=f"Hourly time series data for {arrivals_or_departures.lower()}",
         name=f"{scenario}_feature_group",
@@ -60,41 +57,26 @@ def load_predictions_and_historical_trips(
     )
 
     query = (
-        predictions_fg 
-        .select_all() 
+        predictions_fg
+        .select_all()
         .join(
-            sub_query=historical_fg.select(features=[f"{scenario}_station_id", f"{scenario}_hour", "trips"]), 
+            sub_query=historical_fg.select(features=[f"{scenario}_station_id", f"{scenario}_hour", "trips"]),
             on=[f"{scenario}_station_id", f"{scenario}_hour"]
         )
         .filter(predictions_fg[f"{scenario}_hour"] >= from_ts)
         .filter(predictions_fg[f"{scenario}_hour"] <= to_ts)
-    ) 
+    )
 
-    try:
-        monitoring_feature_view = api.get_or_create_feature_view(
-            feature_group=historical_fg,
-            name=f"monitoring_feature_group_for_{arrivals_or_departures.lower()}",
-            use_sub_query=True,
-            sub_query=query,
-            version=1
-        )
-
-    except Exception as error:
-        logger.exception(error)
-        feature_view = feature_store.get_feature_view(name=name, version=version)
+    monitoring_feature_view = api.get_or_create_feature_view(
+        feature_group=historical_fg,
+        name=f"monitoring_feature_group_for_{arrivals_or_departures.lower()}",
+        use_sub_query=True,
+        sub_query=query,
+        version=1
+    )
 
     monitoring_data = monitoring_feature_view.get_batch_data(start_time=from_date, end_time=to_date)
 
     return monitoring_data[
         monitoring_data[f"{scenario}_hour"].between(from_ts, to_ts)
     ]
-
-
-# if __name__ == "__main__":
-    # parser = ArgumentParser()
-    # parser.add_argument(
-    #    "--from_date",
-    #    type=lambda 
-    #)
-
-    

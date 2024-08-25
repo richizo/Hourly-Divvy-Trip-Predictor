@@ -125,6 +125,7 @@ class InferenceModule:
 
     def fetch_predictions_group(self, model_name: str) -> FeatureGroup:
         """
+        Return the feature group used for predictions.
 
         Args:
             model_name (str): the name of the model
