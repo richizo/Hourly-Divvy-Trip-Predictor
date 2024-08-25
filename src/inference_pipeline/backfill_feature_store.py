@@ -53,7 +53,7 @@ class BackFiller:
 
         #  ts_data = ts_data.drop(f"{scenario}_hour", axis=1)
         feature_group = self.api.setup_feature_group(
-            description=f"Hourly time series data for {displayed_scenario_names[self.scenario].lower()}",
+            description=f"Hourly time series data for {config.displayed_scenario_names[self.scenario].lower()}",
             name=f"{self.scenario}_feature_group",
             version=config.feature_group_version,
             for_predictions=False
@@ -97,7 +97,7 @@ class BackFiller:
 
         predictions_df: pd.DataFrame = inferrer.get_model_predictions(model=model, features=features)
         
-        predictions_feature_group: FeatureGroup = self.api.setup_feature_group(
+        predictions_feature_group = self.api.setup_feature_group(
             description=f"predicting {config.displayed_scenario_names[self.scenario]} - {tuned_or_not} {model_name}",
             name=f"{model_name}_{self.scenario}_predictions_feature_group",
             for_predictions=True,

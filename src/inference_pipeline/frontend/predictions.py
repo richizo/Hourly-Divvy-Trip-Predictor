@@ -40,7 +40,8 @@ def get_all_predictions(
                     This exception suggests that the feature pipeline may not be working properly.
 
     Returns:
-        pd.DataFrame: dataframe containing hourly predicted arrivals or departures.
+        pd.DataFrame: dataframe containing hourly predicted arrivals or departures.ose from an hour ago.")
+            fetched_predictions = predictions[predictions[f"{scenario}_hour"] == from_
     """
     with st.spinner(text=f"Fetching predicted {config.displayed_scenario_names[scenario].lower()} from feature store"):
 
@@ -57,7 +58,7 @@ def get_all_predictions(
         if next_hour_ready: 
             fetched_predictions = predictions[predictions[f"{scenario}_hour"] == to_hour]
         elif previous_hour_ready:
-            st.subheader("⚠️ Predictions for the current hour are unavailable. Using those from an hour ago.")
+            st.subheader("⚠️ Predictions for the current hour are unavailable. Now using those from an hour ago.")
             fetched_predictions = predictions[predictions[f"{scenario}_hour"] == from_hour]
         else:
             raise Exception("Cannot get predictions for either hour. The feature pipeline may not be working")
@@ -103,7 +104,7 @@ if __name__ != "__main__":
 
     user_scenario_choice: list[str] = st.sidebar.multiselect(
         label="Do you want to view the number of predicted arrivals or departures?",
-        placeholder="Please select one of the two options",
+        placeholder="Please select one of the two given options",
         options=config.displayed_scenario_names.values()
     )
 
@@ -120,7 +121,7 @@ if __name__ != "__main__":
             predictions_per_station = get_prediction_per_station(scenario=scenario, predictions_df=predictions_df)
 
             chosen_station = st.selectbox(
-                label=f"For which station would you like predicted {arrival_or_departure.lower()} for?",
+                label=f"Which station would you like predicted {arrival_or_departure.lower()} for?",
                 options=list(predictions_per_station.keys()),
                 placeholder="Please choose a station"
             )

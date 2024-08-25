@@ -9,7 +9,7 @@ import pandas as pd
 import streamlit as st 
 
 from loguru import logger
-from datetime import datetime
+from datetime import datetime, UTC
 
 from src.setup.config import config
 from src.setup.paths import INDEXER_ONE, INDEXER_TWO
@@ -34,7 +34,10 @@ def rerun_feature_pipeline():
                 return fn(*args, **kwargs)
             except FileNotFoundError as error:
                 logger.error(error)
-                logger.warning("The JSON file containing station details is missing. Running feature pipeline again...")
+                message = "The JSON file containing station details is missing. Running feature pipeline again..."
+                logger.warning(message)
+                st.spinner(message)
+
                 processor = DataProcessor(year=config.year, for_inference=False)
                 processor.make_training_data(geocode=False)
                 return fn(*args, **kwargs)
@@ -74,8 +77,18 @@ def load_geodata(scenario: str) -> dict:
 
 @st.cache_data
 def get_ids_and_names(geodata: dict) -> dict[int, str]:
-    ids_and_names = [(station_details["station_id"], station_details["station_name"]) for station_details in geodata]
-    return {station_id: station_name for station_id, station_name in ids_and_names}
+    """
+    Extract the station IDs and names from the dictionary of station details.
+
+    Args:
+        geodata (dict): disctionary containing geographical details of each station
+
+    Returns:
+        dict[int, str]: station IDs as keys and station names as values
+    """
+    with st.spinner("Accumulating station details..."):
+        ids_and_names = [(station_details["station_id"], station_details["station_name"]) for station_details in geodata]
+        return {station_id: station_name for station_id, station_name in ids_and_names}
 
 
 @rerun_feature_pipeline()
