@@ -36,4 +36,4 @@ backfill-all: backfill-features backfill-predictions
 
 # Frontend
 frontend:
-	poetry run streamlit run src/inference_pipeline/frontend/main.py --server.port 8555
+	poetry run streamlit run src/inference_pipeline/frontend/main.py --server.port 8501

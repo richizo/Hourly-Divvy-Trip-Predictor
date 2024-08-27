@@ -7,7 +7,6 @@ import pandas as pd
 import streamlit as st
 
 from folium import Map
-from geopandas import GeoDataFrame
 from folium.plugins import FastMarkerCluster
 from streamlit_folium import st_folium
 
@@ -17,11 +16,11 @@ from src.inference_pipeline.frontend.data import load_geojson
 
 
 @st.cache_resource
-def make_scatterplot(geodata: pd.DataFrame | GeoDataFrame):
+def make_scatterplot(geodata: pd.DataFrame):
     """
     
     Args:
-        geodata (GeoDataFrame): _description_
+        geodata (pd. DataFrame): _description_
     """
     with st.spinner("Building map..."):
         centre = [41.872866, -87.63363]
