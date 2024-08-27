@@ -5,7 +5,6 @@ This module contains code that:
 - loads model predictions from the Hopsworks feature store.
 - performs inference on features
 """
-
 import numpy as np
 import pandas as pd
 

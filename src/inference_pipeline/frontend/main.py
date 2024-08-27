@@ -23,6 +23,7 @@ class ProgressTracker:
 
 intro_page = st.Page(page="intro.py", title="Welcome", icon="🏠")
 predictions_page = st.Page(page="predictions.py", title="Predictions", icon="👁️")
+
 # monitoring_page = st.Page(page="monitoring.py", title="Model Performance", icon="📈")
 # maps_page = st.Page(page="maps.py", title="Maps (Experimental)", icon="🗺️")
 

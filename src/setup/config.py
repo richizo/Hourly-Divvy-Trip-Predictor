@@ -13,9 +13,9 @@ load_dotenv(PARENT_DIR / ".env")
 class GeneralConfig(BaseSettings):
     model_config = SettingsConfigDict(env_file=f"{PARENT_DIR}/.env", env_file_encoding="utf-8", extra="allow")
 
-    # Names
-    year: int
-    n_features: int
+    # Names 
+    year: int = 2024
+    n_features: int = 672
     email: str
 
     # CometML
@@ -26,8 +26,8 @@ class GeneralConfig(BaseSettings):
     # Hopsworks
     hopsworks_api_key: str
     hopsworks_project_name: str
-    feature_group_version: int
-    feature_view_version: int
+    feature_group_version: int = 6
+    feature_view_version: int = 1
 
     current_hour: datetime = pd.to_datetime(datetime.now(UTC)).floor("H")
     displayed_scenario_names: dict = {"start": "Departures", "end": "Arrivals"} 

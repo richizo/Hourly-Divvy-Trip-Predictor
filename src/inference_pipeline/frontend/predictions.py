@@ -64,7 +64,7 @@ def get_all_predictions(
     
 
 @st.cache_data
-def get_prediction_per_station(scenario: str, predictions: pd.DataFrame) -> dict[str, float]:
+def get_prediction_per_station(scenario: str, predictions_df: pd.DataFrame) -> dict[str, float]:
     """
     Go through the dataframe of predictions and obtain the prediction associated with each station
     ID. Then get the name of each station, and return a dictionary with names as keys and predictions 
@@ -78,8 +78,8 @@ def get_prediction_per_station(scenario: str, predictions: pd.DataFrame) -> dict
         dict[str, float]: 
     """
 
-    station_ids = predictions[f"{scenario}_station_id"].values
-    predictions = predictions[f"predicted_{scenario}s"].values
+    station_ids = predictions_df[f"{scenario}_station_id"].values
+    predictions = predictions_df[f"predicted_{scenario}s"].values
 
     geodata: dict = load_geodata(scenario=scenario)
     ids_and_names = get_ids_and_names(geodata=geodata)
@@ -88,7 +88,7 @@ def get_prediction_per_station(scenario: str, predictions: pd.DataFrame) -> dict
         code: prediction for code, prediction in zip(station_ids, predictions) if prediction is not None
     }
 
-    if len(predictions[f"{scenario}_station_id"].unique()) == len(ids_and_predictions.keys()):
+    if len(predictions_df[f"{scenario}_station_id"].unique()) == len(ids_and_predictions.keys()):
         logger.success("✅ Predictions retrieved for all stations")
 
     return {
@@ -98,41 +98,46 @@ def get_prediction_per_station(scenario: str, predictions: pd.DataFrame) -> dict
 
 if __name__ != "__main__": 
 
-    st.markdown(
-        """
-        After responding to the prompt in the sidebar, and a bit of waiting, you should receive a 
-        dropdown menu allowing you to see the predictions for a selected Divvy station.
-        """
-    )
+    try:
+        user_scenario_choice: list[str] = st.multiselect(
+            label="Do you want to view the predicted number of arrivals or departures?",
+            placeholder="Please select one of the two given options",
+            options=config.displayed_scenario_names.values()
+        )
 
-    user_scenario_choice: list[str] = st.sidebar.multiselect(
-        label="Do you want to view the number of predicted arrivals or departures?",
-        placeholder="Please select one of the two given options",
-        options=config.displayed_scenario_names.values()
-    )
+        displayed_names = list(config.displayed_scenario_names.values())
 
-    for scenario in config.displayed_scenario_names.keys():
-        arrival_or_departure = config.displayed_scenario_names[scenario]
+        chosen_option = displayed_names[0] if displayed_names[0] in user_scenario_choice else displayed_names[1]
+        reversed_dict = {proper_name: scenario for scenario, proper_name in config.displayed_scenario_names.items()}
+        scenario = reversed_dict[chosen_option]
+        
+        for scenario in config.displayed_scenario_names.keys():
 
-        if arrival_or_departure in user_scenario_choice:
-            tracker = ProgressTracker(n_steps=2)
-            predictions_df = get_all_predictions(scenario=scenario)
+            arrival_or_departure = config.displayed_scenario_names[scenario]
 
-            if not predictions_df.empty:
-                st.sidebar.write("✅ Predictions received")
+            if arrival_or_departure in user_scenario_choice:
+                tracker = ProgressTracker(n_steps=2)
+                predictions_df = get_all_predictions(scenario=scenario)
+
+                if not predictions_df.empty:
+                    st.sidebar.write("✅ Predictions received")
+                    tracker.next()
+
+                predictions_per_station = get_prediction_per_station(scenario=scenario, predictions_df=predictions_df)
+
+                chosen_station = st.selectbox(
+                    label=f"Which station would you like predicted {chosen_option.lower()} for?",
+                    options=list(predictions_per_station.keys()),
+                    placeholder="Please choose a station"
+                )
+
                 tracker.next()
-
-            predictions_per_station = get_prediction_per_station(scenario=scenario, predictions=predictions_df)
-
-            chosen_station = st.selectbox(
-                label=f"Which station would you like predicted {arrival_or_departure.lower()} for?",
-                options=list(predictions_per_station.keys()),
-                placeholder="Please choose a station"
-            )
-
-            tracker.next()
-            st.sidebar.write("✅ Presented list of stations")
-            requested_prediction = int(predictions_per_station[chosen_station])
-            st.write(f"We predict {requested_prediction} {arrival_or_departure.lower()} here in the next hour")
-        else:
-            continue
+                st.sidebar.write("✅ Results presented")
+                requested_prediction = int(predictions_per_station[chosen_station])
+                st.write(f"We predict {requested_prediction} {chosen_option.lower()} here in the next hour")
+                
+            else:
+                continue 
+        
+    except Exception as error:
+        logger.error(error)

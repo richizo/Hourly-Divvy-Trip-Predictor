@@ -129,5 +129,5 @@ if __name__ == "__main__":
         elif args.target.lower() == "predictions":
             filler.backfill_predictions(target_date=datetime.now())
         else:
-            raise Exception('The only acceptable backfilling targets are "features" and "predictions"')
+            raise Exception('The only acceptable targets of the command are "features" and "predictions"')
     

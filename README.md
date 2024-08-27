@@ -1,4 +1,4 @@
-# Divvy Bikes Demand Predictor
+# Hourly Divvy Trip Predictor Service
 
 ## Introduction
 
@@ -6,14 +6,65 @@ The city of Chicago is home to nearly 3 million people, and it is currently the 
 
 
 ## The Business Problem
+### How can we predict the number of trips that will start and end at various stations in the city each hour?
 
-The problem boils down to this: 
-**How can we predict the amount of demand for these bikes in each area of the city?** 
-
-Being able to spot spikes in demand like this will enable Divvy to determine how many bikes it would be appropriate to provide in each area. This will allow the the City of Chicago to devote its resources more economically by facilitating the provision of an appropriate number of bikes for each area. It will also help the managers of Divvy to plan any possible expansions of their services in a given area.
-
+1. Being able to anticipate spikes in activity will enable Divvy to allocate bikes and scooters more efficiently over time. 
+2. This capabability could help the management to plan any possible changes in the scale of their services in a given area.
+3. Having models that predict customer activity in this way can provide a sense of confidence in managements understanding 
+   customer behaviour.
 
 ## The Objective 
+Build a complete end-to-end machine learning system that culminates in a simple frontend that provides the desired predictions.
 
+## System Design
 
+### Feature Pipeline
+- ingests the available recent monthly usage data
+- runs preprocessing procedures to produce time series data
+- transforms the time series data into training data
 
+### Training Pipline 
+- trains models (with selected architectures) to predict hourly arrivals and departures
+- implements optional hyperparameter tuning during training
+- logs the best model to CometML's model registry
+
+### Inference Pipeline
+- Backfills the Hopsworks feature store with time series data
+
+## Build the project locally
+
+1. Clone this repository in a designated project directory
+    ```
+    $ git clone https://github.com/maadabrandon/Hourly-Divvy-Trip-Predictor
+    ```
+
+2. Install [Poetry](https://python-poetry.org/)
+   ```
+   $ curl -sSL https://install.python-poetry.org | python3 -
+   ```
+
+3. Enter the project directory and run:
+    ```
+    $ poetry install
+    ```
+
+4. Register free accounts on [Hopsworks](https://c.app.hopsworks.ai/) and [CometML](https://www.comet.com/). 
+   Then, copy your project names(for both platforms), API keys(again for both platforms), Comet workspace name, and email address into a .env file.
+
+5. Backfill the Hopsworks feature groups with historical data:
+    ```
+    $ make backfill-features
+    ```
+6. Run the training pipeline:
+    ```
+    $ make train-all
+    ```
+7. Backfill the Hopsworks feature groups with predictions:
+    ```
+    $ make backfill-predictions
+    ```
+
+8. View the frontend:
+    ```
+    $ make frontend
+    ```
