@@ -37,3 +37,10 @@ backfill-all: backfill-features backfill-predictions
 # Frontend
 frontend:
 	poetry run streamlit run src/inference_pipeline/frontend/main.py --server.port 8501
+
+
+start-docker:
+	sudo systemctl start docker
+
+image:
+	sudo docker build -t divvy .

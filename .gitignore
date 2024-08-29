@@ -17,3 +17,5 @@ keyfile
 
 Files
 **.ipynb
+Dockerfile
+.dockerignore
