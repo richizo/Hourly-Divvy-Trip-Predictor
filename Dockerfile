@@ -18,9 +18,6 @@ COPY . /app/
 COPY data/ /data/
 COPY  models/ /models/
 
-VOLUME /data
-VOLUME /models
-
 RUN poetry install 
 
 ENTRYPOINT ["/bin/bash", "-c", "poetry", "run", "streamlit", "run", "src/inference_pipeline/frontend/main.py", "--server.port", "8501"]
