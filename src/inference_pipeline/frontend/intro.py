@@ -9,8 +9,8 @@ st.markdown(
     city of Chicago. Divvy have generously made their trip data publicly available, and I've used it to build an 
     end-to-end machine learning system that provides this service.
 
-    Take a look at the "Predictions" page, where we provide the main results of the model: the predicted number of 
-    arrivals and departures per hour at various Divvy stations in the city.
+    Take a look at the "Predictions" page, where we provide the main results of the model: the number of 
+    arrivals and departures predicted to take place in the next hour at various Divvy stations in the city.
     """
 )
     

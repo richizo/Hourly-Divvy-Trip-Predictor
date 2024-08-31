@@ -55,7 +55,7 @@ def get_all_predictions(
         if next_hour_ready: 
             fetched_predictions = predictions[predictions[f"{scenario}_hour"] == to_hour]
         elif previous_hour_ready:
-            st.write("⚠️ Predictions for the current hour are unavailable. Now using those from an hour ago.")
+            st.write("⚠️ Predictions for the current hour are unavailable. Using those from an hour ago.")
             fetched_predictions = predictions[predictions[f"{scenario}_hour"] == from_hour]
         else:
             raise Exception("Cannot get predictions for either hour. The feature pipeline may not be working")

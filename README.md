@@ -31,9 +31,15 @@ Build a complete end-to-end machine learning system that culminates in a simple 
 ### Inference Pipeline
 - Backfills the Hopsworks feature store with time series data
 
-## Build the project locally
+## Use the App
+A containerised version of the app is available here.
+```
+$ https://melodious-wisdom-production-2431.up.railway.app/
+```
 
-1. Clone this repository in a designated project directory
+## Alternatively, you can build the project locally by doing the following:
+
+1. Clone the repository:
     ```
     $ git clone https://github.com/maadabrandon/Hourly-Divvy-Trip-Predictor
     ```
@@ -49,7 +55,7 @@ Build a complete end-to-end machine learning system that culminates in a simple 
     ```
 
 4. Register free accounts on [Hopsworks](https://c.app.hopsworks.ai/) and [CometML](https://www.comet.com/). 
-   Then, copy your project names(for both platforms), API keys(again for both platforms), Comet workspace name, and email address into a .env file.
+   Then copy your project names(for both platforms), API keys(again for both platforms), Comet workspace name, and email address into a .env file.
 
 5. Backfill the Hopsworks feature groups with historical data:
     ```

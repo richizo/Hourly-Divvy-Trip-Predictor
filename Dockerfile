@@ -15,8 +15,13 @@ RUN pip install poetry
 WORKDIR /app
 
 COPY . /app/
+RUN rm -rf /app/data
 COPY data/ /data/
-COPY  models/ /models/
+
+# Prevents the streamlit app from asking for an email address
+RUN mkdir -p ~/.streamlit/
+RUN echo "[general]"  > ~/.streamlit/credentials.toml
+RUN echo "email = \"\""  >> ~/.streamlit/credentials.toml
 
 RUN poetry install 
 
