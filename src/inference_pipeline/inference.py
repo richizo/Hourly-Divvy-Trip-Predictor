@@ -81,7 +81,11 @@ class InferenceModule:
         )
 
         logger.warning("Fetching time series data from the offline feature store...")
-        ts_data: pd.DataFrame = feature_view.get_batch_data(start_time=fetch_from, end_time=target_date)
+        ts_data: pd.DataFrame = feature_view.get_batch_data(
+            start_time=fetch_from, 
+            end_time=target_date,
+            read_options={"use_hive": True}
+        )
 
         ts_data = ts_data.sort_values(
             by=[f"{self.scenario}_station_id", f"{self.scenario}_hour"]

@@ -166,7 +166,7 @@ class DirectIndexing:
         Returns:
             bool: a truth value indicating the existence or lack thereof of such rows. 
         """
-        logger.info("Checking for rows that either have missing station names or missing IDs")
+        logger.info("Checking for rows that either have missing station names or IDs")
 
         # Boolean pandas series 
         only_missing_id = self.station_names.notnull() & self.station_ids.isnull()
@@ -273,7 +273,7 @@ class DirectIndexing:
             int(index): (code, name) for index, code, name in zip(rows_to_be_targeted, found_ids, found_names)
         }
 
-        logger.success(f"Found {len(problem_rows_and_their_discovered_names_and_ids)} station names and IDs")
+        logger.success(f"Found names and IDs for {len(problem_rows_and_their_discovered_names_and_ids)} stations.")
         return problem_rows_and_their_discovered_names_and_ids
 
     def replace_missing_station_names_and_ids(self) -> pd.DataFrame:
@@ -285,6 +285,7 @@ class DirectIndexing:
         Returns:
             pd.DataFrame: _description_
         """
+        logger.info
         rows_with_new_names_and_ids: dict[int, tuple[str, str]] = self.match_names_and_ids_by_station_proximity()
 
         # Write the target row indices, the new IDs, and the new names as vectors
@@ -372,6 +373,8 @@ class DirectIndexing:
             pd.DataFrame: the data, but with all the station IDs re-indexed
         """
         logger.info("Initiating reindexing procedure for the station IDs...")
+        
+        self.data = self.replace_missing_station_names_and_ids()
 
         leftover_rows = self.find_rows_with_missing_ids_and_names(
             data=self.data, 

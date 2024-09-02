@@ -99,7 +99,9 @@ class DataProcessor:
 
         training_sets = []
         for scenario in ts_data_per_scenario.keys():
-            logger.info(f"Turning the time series data on the {scenario}s of trips into training data...")
+            logger.info(
+                f"Turning time series data into training data ({config.displayed_scenario_names[scenario].lower()})"
+            )
 
             training_data = self.transform_ts_into_training_data(
                 ts_data=ts_data_per_scenario[scenario],
@@ -183,7 +185,7 @@ class DataProcessor:
                     longs = self.data.columns.get_loc(f"{scenario}_lng")
                     station_names_col = self.data.columns.get_loc(f"{scenario}_station_name")
 
-                    logger.info(f"Deleting rows with missing station names and coordinates ({scenario}s)...")
+                    logger.info(f"Deleting rows with missing station names and coordinates ({config.displayed_scenario_names[scenario]})...")
 
                     where_missing_latitudes = self.data.iloc[:, lats].isnull()
                     where_missing_longitudes = self.data.iloc[:, longs].isnull()
@@ -350,7 +352,7 @@ class DataProcessor:
 
                 #    interim_data = interim_data.drop(f"rounded_{start_or_end}_points", axis=1)
 
-                logger.info(f"Aggregating the final time series data for the {start_or_end}s of trips...")
+                logger.info(f"Aggregating the final time series data for the {config.displayed_scenario_names[start_or_end].lower()}...")
 
                 agg_data = interim_data.groupby(
                     [f"{start_or_end}_hour", f"{start_or_end}_station_id"]).size().reset_index()

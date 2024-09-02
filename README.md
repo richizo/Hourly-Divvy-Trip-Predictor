@@ -29,13 +29,13 @@ Build a complete end-to-end machine learning system that culminates in a simple 
 - logs the best model to CometML's model registry
 
 ### Inference Pipeline
-- Backfills the Hopsworks feature store with time series data
+- Provides code that allows for interaction with the Hopsorks Feature Store API.
+- Backfills the Hopsworks feature store with time series data and predictions
+- Delivers these predictions through a simple Streamlit frontend.
+- Github actions are used to backfill the feature store with new predictions every hour.
 
 ## Use the App
-A containerised version of the app is available here.
-```
-$ https://melodious-wisdom-production-2431.up.railway.app/
-```
+A containerised version of the app is available [here](https://melodious-wisdom-production-2431.up.railway.app/).
 
 ## Alternatively, you can build the project locally by doing the following:
 
