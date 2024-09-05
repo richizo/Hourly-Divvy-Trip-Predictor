@@ -14,6 +14,33 @@ from src.inference_pipeline.frontend.main import ProgressTracker
 from src.inference_pipeline.frontend.data import load_geodata, get_ids_and_names
 
 
+def respond_to_click(clicked_option: str):
+
+    with st.spinner(f"Loading predicted {clicked_option.lower()}..."):
+        options_and_scenarios = {option: scenario for scenario, option in config.displayed_scenario_names.items()}
+        scenario = options_and_scenarios[clicked_option]
+
+        tracker = ProgressTracker(n_steps=2)
+        predictions_df = get_all_predictions(scenario=scenario)
+
+        if not predictions_df.empty:
+            st.sidebar.write("✅ Predictions received")
+            tracker.next()
+
+        predictions_per_station = get_prediction_per_station(scenario=scenario, predictions_df=predictions_df)
+
+        chosen_station = st.selectbox(
+            label=f"Which station would you like predicted {clicked_option.lower()} for?",
+            options=list(predictions_per_station.keys()),
+            placeholder="Please choose a station"
+        )
+
+        tracker.next()
+        st.sidebar.write("✅ Results presented")
+        requested_prediction = int(predictions_per_station[chosen_station])
+        st.write(f"We predict {requested_prediction} {clicked_option.lower()} here in the next hour")
+        
+
 @st.cache_data
 def get_all_predictions(
     scenario: str,
@@ -98,46 +125,15 @@ def get_prediction_per_station(scenario: str, predictions_df: pd.DataFrame) -> d
 
 if __name__ != "__main__": 
 
+    st.write("For which of the following would you like predictions?")
     try:
-        user_scenario_choice: list[str] = st.multiselect(
-            label="Do you want to view the predicted number of arrivals or departures?",
-            placeholder="Please select one of the two given options",
-            options=config.displayed_scenario_names.values()
-        )
+        if st.button("Arrivals"):
+            respond_to_click(clicked_option="Arrivals")
+        elif st.button("Departures"):
+            respond_to_click(clicked_option="Departures")
+        elif st.button("Both"):
+            respond_to_click(clicked_option="Arrivals")
+            respond_to_click(clicked_option="Departures")
 
-        displayed_names = list(config.displayed_scenario_names.values())
-
-        chosen_option = displayed_names[0] if displayed_names[0] in user_scenario_choice else displayed_names[1]
-        reversed_dict = {proper_name: scenario for scenario, proper_name in config.displayed_scenario_names.items()}
-        scenario = reversed_dict[chosen_option]
-        
-        for scenario in config.displayed_scenario_names.keys():
-
-            arrival_or_departure = config.displayed_scenario_names[scenario]
-
-            if arrival_or_departure in user_scenario_choice:
-                tracker = ProgressTracker(n_steps=2)
-                predictions_df = get_all_predictions(scenario=scenario)
-
-                if not predictions_df.empty:
-                    st.sidebar.write("✅ Predictions received")
-                    tracker.next()
-
-                predictions_per_station = get_prediction_per_station(scenario=scenario, predictions_df=predictions_df)
-
-                chosen_station = st.selectbox(
-                    label=f"Which station would you like predicted {chosen_option.lower()} for?",
-                    options=list(predictions_per_station.keys()),
-                    placeholder="Please choose a station"
-                )
-
-                tracker.next()
-                st.sidebar.write("✅ Results presented")
-                requested_prediction = int(predictions_per_station[chosen_station])
-                st.write(f"We predict {requested_prediction} {chosen_option.lower()} here in the next hour")
-                
-            else:
-                continue 
-        
     except Exception as error:
         logger.error(error)

@@ -1,6 +1,7 @@
 import json
 import random
 
+from jupyter_client.session import new_id
 from tqdm import tqdm
 from loguru import logger
 
@@ -182,7 +183,7 @@ class DirectIndexing:
 
         Args:
             data (pd.DataFrame):
-            scenario (str):
+            scenario (str): "start" or "end"
             first_time (bool): whether this function is being run for the first time
 
         Returns:
@@ -260,7 +261,7 @@ class DirectIndexing:
 
         # Get a boolean array of the indices of rounded coordinates
         rounded_coordinates_match = np.isin(
-            rounded_problem_coordinates, rounded_coordinates_of_complete_rows
+            element=rounded_problem_coordinates, test_elements=rounded_coordinates_of_complete_rows
         ).all(axis=1)
                     
         is_problem_row = np.isin(element=problem_rows_indices, test_elements=np.arange(len(self.data)))      
@@ -273,11 +274,12 @@ class DirectIndexing:
             int(index): (code, name) for index, code, name in zip(rows_to_be_targeted, found_ids, found_names)
         }
 
-        logger.success(f"Found names and IDs for {len(problem_rows_and_their_discovered_names_and_ids)} stations.")
+        logger.success(f"Found new names and IDs for {len(problem_rows_and_their_discovered_names_and_ids)} stations.")
         return problem_rows_and_their_discovered_names_and_ids
 
+
     def replace_missing_station_names_and_ids(self) -> pd.DataFrame:
-        """
+        """ 
         Take the row indices, as well as the associated IDs and names that were discovered using the matching 
         procedure. Then replace the missing station names and IDs in these rows of the dataframe with those 
         that were discovered.
@@ -285,28 +287,31 @@ class DirectIndexing:
         Returns:
             pd.DataFrame: _description_
         """
-        logger.info
-        rows_with_new_names_and_ids: dict[int, tuple[str, str]] = self.match_names_and_ids_by_station_proximity()
+        rows_with_new_names_and_ids = self.match_names_and_ids_by_station_proximity()
 
         # Write the target row indices, the new IDs, and the new names as vectors
-        target_rows_indices = [int(row) for row in rows_with_new_names_and_ids.keys()]
+        indices_of_target_rows = [
+            int(row) for row in rows_with_new_names_and_ids.keys()
+        ]
 
-        new_ids = {
+        rows_and_new_ids = {
             int(row): new_id for row, (new_id, new_name) in rows_with_new_names_and_ids.items()
         }
 
-        new_names = {
+        rows_and_new_names = {
             int(row): new_name for row, (new_id, new_name) in rows_with_new_names_and_ids.items()
         }
-        
-        # Perform the replacement
-        self.data.iloc[target_rows_indices, self.station_id_index] = \
-            self.data.iloc[target_rows_indices, self.station_id_index].map(new_ids)
-        
-        self.data.iloc[target_rows_indices, self.station_name_index] = \
-            self.data.iloc[target_rows_indices, self.station_name_index].map(new_names)
 
-        return self.data
+        self.data["index"] = self.data.index 
+
+        self.data[f"{self.scenario}_station_id"] = \
+                self.data[f"{self.scenario}_station_id"].fillna(self.data["index"].map(rows_and_new_ids))
+
+        self.data[f"{self.scenario}_station_name"] = \
+                self.data[f"{self.scenario}_station_name"].fillna(self.data["index"].map(rows_and_new_names))
+
+        return self.data.drop("index", axis=1)
+
 
     @staticmethod
     def save_geodata(data: pd.DataFrame, scenario: str, for_plotting: bool) -> None:
@@ -353,8 +358,7 @@ class DirectIndexing:
                     "coordinates": [latitude, longitude],
                     "station_id": station_id,
                     "station_name": station_name    
-                } for latitude, longitude, station_id, station_name in
-                zip(latitudes, longitudes, station_ids, station_names)
+                } for latitude, longitude, station_id, station_name in zip(latitudes, longitudes, station_ids, station_names)
             ]
 
         with open(file_path, mode="w") as file:
@@ -373,10 +377,9 @@ class DirectIndexing:
             pd.DataFrame: the data, but with all the station IDs re-indexed
         """
         logger.info("Initiating reindexing procedure for the station IDs...")
-        
         self.data = self.replace_missing_station_names_and_ids()
 
-        leftover_rows = self.find_rows_with_missing_ids_and_names(
+        leftover_rows: pd.Index = self.find_rows_with_missing_ids_and_names(
             data=self.data, 
             scenario=self.scenario,
             first_time=False
@@ -384,7 +387,7 @@ class DirectIndexing:
 
         if delete_leftover_rows:
             logger.warning(f"Deleting the {len(leftover_rows)} rows that still have no station IDs and names.")
-            self.data = self.data.drop(self.data.index[leftover_rows], axis=0)
+            self.data = self.data.drop(leftover_rows, axis=0)
 
         else:
             logger.info("Initiating reverse geocoding procedure for the leftover rows")
@@ -406,11 +409,11 @@ class DirectIndexing:
         station_ids = self.data.iloc[:, self.station_id_index]
         unique_old_ids = station_ids.unique()
         
-        # Use the indices of this enumerate as the new station IDs
+        # Use the indices of this enumeration as the new station IDs
         old_and_new_ids = {old_id: index for index, old_id in enumerate(unique_old_ids)}
         self.data.iloc[:, self.station_id_index] = station_ids.map(old_and_new_ids)
         self.data = self.data.reset_index(drop=True)
-
+ 
         for column in self.data.select_dtypes(include=["datetime64[ns]"]):
             self.data[column] = self.data[column].astype(str)
 

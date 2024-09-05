@@ -1,3 +1,9 @@
+"""
+Consists of :
+- functions that are not in use at the moment, but may prove useful in the future
+- functions that are needed in aspects of the code that are yet to be fully fleshed out
+"""
+
 import json
 import random
 import pathlib

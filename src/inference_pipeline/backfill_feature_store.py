@@ -85,8 +85,8 @@ class BackFiller:
         """
         self.api.primary_key = [f"{self.scenario}_station_id"]
 
-        # The best models for arrivals and departures were tuned LGBMRegressors
-        tuned_or_not = "tuned" 
+        # The best model for arrivals (departures) was an untuned (tuned) LGBMRegressor
+        tuned_or_not = "untuned" if scenario == "starts" else "tuned"
         
         inferrer = InferenceModule(scenario=self.scenario)
         registry = ModelRegistry(scenario=self.scenario, model_name=model_name, tuned_or_not=tuned_or_not)

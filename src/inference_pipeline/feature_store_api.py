@@ -52,7 +52,7 @@ class FeatureStoreAPI:
             event_time=f"{self.scenario}_hour" if for_predictions else self.event_time
         )
         return feature_group
-
+    
     def get_or_create_feature_view(
         self, 
         name: str, 
