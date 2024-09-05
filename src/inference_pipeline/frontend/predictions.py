@@ -15,7 +15,7 @@ from src.inference_pipeline.frontend.data import load_geodata, get_ids_and_names
 
 
 def respond_to_click(clicked_option: str):
-
+    
     with st.spinner(f"Loading predicted {clicked_option.lower()}..."):
         options_and_scenarios = {option: scenario for scenario, option in config.displayed_scenario_names.items()}
         scenario = options_and_scenarios[clicked_option]
@@ -121,8 +121,7 @@ def get_prediction_per_station(scenario: str, predictions_df: pd.DataFrame) -> d
     return {
         ids_and_names[station_id]: ids_and_predictions[station_id] for station_id in ids_and_predictions.keys()
     }
-           
-
+          
 if __name__ != "__main__": 
 
     st.write("For which of the following would you like predictions?")
@@ -136,4 +135,4 @@ if __name__ != "__main__":
             respond_to_click(clicked_option="Departures")
 
     except Exception as error:
-        logger.error(error)
+        logger.error(error) 
