@@ -98,13 +98,16 @@ def get_predictions_per_station(scenario: str, predictions_df: pd.DataFrame) -> 
 if __name__ != "__main__": 
 
     try:
-        st.header(":red[Welcome] to the :violet[Predictions] Page!")
+        st.header(":red[Welcome] :orange[to the] :violet[Predictions] :blue[Page!]")
         st.markdown(
-            "Here you can see the number of :green[arrivals] and :orange[departures] that our models predicts will occur in the next hour \
-            at various Divvy stations in the city."
+            """
+            Here you can see the number of :green[arrivals] and :orange[departures] that our models predict will 
+            occur in the next hour at various Divvy stations in the city. 
+            
+            Please specify whether you would like to view predicted :green[arrivals] or :orange[departures].
+            """
         )
         
-        st.subheader("For which of the following would you like predictions?")
         options_and_colours = {"Arrivals": ":green", "Departures": ":orange"}
 
         for user_choice in list(options_and_colours.keys()):
