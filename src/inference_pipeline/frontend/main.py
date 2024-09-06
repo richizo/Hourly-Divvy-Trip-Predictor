@@ -10,7 +10,6 @@ class ProgressTracker:
     in the sidebar.
     """
     def __init__(self, n_steps: int):
-        
         self.current_step = 0
         self.n_steps = n_steps
         self.progress_bar = st.sidebar.header("⚙️ Working Progress")
@@ -19,14 +18,15 @@ class ProgressTracker:
     def next(self) -> None:
         self.current_step += 1 
         self.progress_bar.progress(self.current_step/self.n_steps)
-        
 
+
+st.sidebar.header("Please pan to your page of choice ")
 intro_page = st.Page(page="intro.py", title="Welcome", icon="🏠")
 predictions_page = st.Page(page="predictions.py", title="Predictions", icon="👁️")
 
-# monitoring_page = st.Page(page="monitoring.py", title="Model Performance", icon="📈")
+monitoring_page = st.Page(page="monitoring.py", title="Model Performance", icon="📈")
 # maps_page = st.Page(page="maps.py", title="Maps (Experimental)", icon="🗺️")
 
 
-pages = st.navigation(pages=[intro_page, predictions_page])
+pages = st.navigation(pages=[intro_page, predictions_page, monitoring_page])
 pages.run()

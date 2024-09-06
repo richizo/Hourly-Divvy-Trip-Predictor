@@ -1,7 +1,6 @@
 """
 Contains code responsible for fetching predictions from the feature store 
 and displaying it in the streamlit interface. 
-
 """
 import pandas as pd
 import streamlit as st
@@ -89,7 +88,7 @@ def get_predictions_per_station(scenario: str, predictions_df: pd.DataFrame) -> 
     }
 
     if len(predictions_df[f"{scenario}_station_id"].unique()) == len(ids_and_predictions.keys()):
-        logger.success("✅ Predictions retrieved for all stations")
+        logger.success("✅ Predictions retrieved")
 
     return {
         ids_and_names[station_id]: ids_and_predictions[station_id] for station_id in ids_and_predictions.keys()
@@ -97,14 +96,21 @@ def get_predictions_per_station(scenario: str, predictions_df: pd.DataFrame) -> 
 
 
 if __name__ != "__main__": 
+
     try:
+        st.header(":red[Welcome] to the :violet[Predictions] Page!")
+        st.markdown(
+            "Here you can see the number of :green[arrivals] and :orange[departures] that our models predicts will occur in the next hour \
+            at various Divvy stations in the city."
+        )
+        
         st.subheader("For which of the following would you like predictions?")
-        choices_and_colours = {"Arrivals": ":green", "Departures": ":orange", "Both": ":red"}
+        options_and_colours = {"Arrivals": ":green", "Departures": ":orange"}
 
-        for user_choice in list(choices_and_colours.keys()):
-            if st.button(f"{choices_and_colours[user_choice]}[{user_choice}]"):
+        for user_choice in list(options_and_colours.keys()):
+            if st.button(f"{options_and_colours[user_choice]}[{user_choice}]"):
 
-                with st.spinner(f"Loading predicted {user_choice.lower()} for various stations..."):
+                with st.spinner(f"Loading the predicted {options_and_colours[user_choice]}[{user_choice.lower()}] for various stations..."):
                     options_and_scenarios = {option: scenario for scenario, option in config.displayed_scenario_names.items()}
                     scenario = options_and_scenarios[user_choice]
 
@@ -118,7 +124,7 @@ if __name__ != "__main__":
                     predictions_per_station = get_predictions_per_station(scenario=scenario, predictions_df=predictions_df)  
                     
                     chosen_station = st.selectbox(
-                        label=f"For which station would you like the predicted {user_choice.lower()}?",
+                        label=f"For which :blue[station] would you like the predicted :red[{user_choice.lower()}]?",
                         options=list(predictions_per_station.keys()),
                         placeholder="Please choose a station"
                     )
@@ -128,8 +134,11 @@ if __name__ != "__main__":
                     requested_prediction = int(predictions_per_station[chosen_station])
             
                     st.write(
-                        f"{choices_and_colours[user_choice]}[{requested_prediction} {user_choice.lower()}] at :blue[{chosen_station}] in the next hour"
+                        f"{options_and_colours[user_choice]}[{requested_prediction} {user_choice.lower()}] at :blue[{chosen_station}] in the next hour"
                     )
+
+            else:
+                continue
 
     except Exception as error:
         logger.error(error)
