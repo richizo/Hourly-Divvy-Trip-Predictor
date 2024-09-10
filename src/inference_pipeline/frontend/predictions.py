@@ -6,9 +6,10 @@ import pandas as pd
 import streamlit as st
 from loguru import logger
 from datetime import datetime, timedelta
+from streamlit_extras.customize_running import center_running
+from streamlit_extras.colored_header import colored_header
 
 from src.setup.config import config
-
 from src.inference_pipeline.inference import InferenceModule
 from src.inference_pipeline.frontend.main import ProgressTracker
 from src.inference_pipeline.frontend.data import load_geodata, get_ids_and_names
@@ -95,53 +96,55 @@ def get_predictions_per_station(scenario: str, predictions_df: pd.DataFrame) -> 
     }
 
 
-if __name__ != "__main__": 
+def deliver_predictions(options_and_colours: dict, user_choice: str):
+
+    with st.spinner(
+        f"Loading predicted {options_and_colours[user_choice]}[{user_choice.lower()}] for various stations"
+    ):
+        options_and_scenarios = {
+            option: scenario for scenario, option in config.displayed_scenario_names.items()
+        }
+
+        scenario = options_and_scenarios[user_choice]
+        tracker = ProgressTracker(n_steps=2)
+        predictions_df = get_all_predictions(scenario=scenario)
+
+        if not predictions_df.empty:
+            st.sidebar.write("✅ Predictions received")
+            tracker.next()
+        
+        predictions_per_station = get_predictions_per_station(scenario=scenario, predictions_df=predictions_df)  
+        
+        chosen_station = st.selectbox(
+            label=f"For which :blue[station] would you like the predicted :red[{user_choice.lower()}]?",
+            options=list(predictions_per_station.keys()),
+            placeholder="Please choose a station"
+        )
+
+        tracker.next()
+        st.sidebar.write("✅ Results presented")
+        requested_prediction = int(predictions_per_station[chosen_station])
+
+        st.write(
+            f"{options_and_colours[user_choice]}[{requested_prediction} {user_choice.lower()}] at \
+            :blue[{chosen_station}] in the next hour"
+        )
+
+
+if __name__ != "__main__":    
 
     try:
-        st.header(":red[Welcome] :orange[to the] :violet[Predictions] :blue[Page!]")
-        st.markdown(
-            """
-            Here you can see the number of :green[arrivals] and :orange[departures] that our models predict will 
-            occur in the next hour at various Divvy stations in the city. 
-            
-            Please specify whether you would like to view predicted :green[arrivals] or :orange[departures].
-            """
-        )
-        
         options_and_colours = {"Arrivals": ":green", "Departures": ":orange"}
 
-        for user_choice in list(options_and_colours.keys()):
-            if st.button(f"{options_and_colours[user_choice]}[{user_choice}]"):
+        user_choice = st.radio(
+            options=["Please select an option", "Arrivals", "Departures"],
+            label="Please specify whether you would like to see the predicted :green[arrivals] or :orange[departures]."
+        )
 
-                with st.spinner(f"Loading the predicted {options_and_colours[user_choice]}[{user_choice.lower()}] for various stations..."):
-                    options_and_scenarios = {option: scenario for scenario, option in config.displayed_scenario_names.items()}
-                    scenario = options_and_scenarios[user_choice]
-
-                    tracker = ProgressTracker(n_steps=2)
-                    predictions_df = get_all_predictions(scenario=scenario)
-
-                    if not predictions_df.empty:
-                        st.sidebar.write("✅ Predictions received")
-                        tracker.next()
-                    
-                    predictions_per_station = get_predictions_per_station(scenario=scenario, predictions_df=predictions_df)  
-                    
-                    chosen_station = st.selectbox(
-                        label=f"For which :blue[station] would you like the predicted :red[{user_choice.lower()}]?",
-                        options=list(predictions_per_station.keys()),
-                        placeholder="Please choose a station"
-                    )
-
-                    tracker.next()
-                    st.sidebar.write("✅ Results presented")
-                    requested_prediction = int(predictions_per_station[chosen_station])
-            
-                    st.write(
-                        f"{options_and_colours[user_choice]}[{requested_prediction} {user_choice.lower()}] at :blue[{chosen_station}] in the next hour"
-                    )
-
-            else:
-                continue
-
+        for scenario in config.displayed_scenario_names.keys():
+            arrival_or_departure = config.displayed_scenario_names[scenario]
+            if arrival_or_departure in user_choice:
+                deliver_predictions(options_and_colours=options_and_colours, user_choice=arrival_or_departure)
+    
     except Exception as error:
         logger.error(error)

@@ -29,9 +29,10 @@ def load_predictions_and_historical_trips(
     Returns:
         pd.DataFrame: the data to be used fo
     """
-    tuned_or_not = "tuned"
+    tuned_or_not = "untuned"
     from_ts = int(from_date.timestamp() * 1000)
     to_ts = int(to_date.timestamp() * 1000)
+
     arrivals_or_departures: str = config.displayed_scenario_names[scenario].lower()
 
     api = FeatureStoreAPI(
@@ -69,7 +70,7 @@ def load_predictions_and_historical_trips(
 
     monitoring_feature_view = api.get_or_create_feature_view(
         feature_group=historical_fg,
-        name=f"monitoring_feature_group_for_{arrivals_or_departures.lower()}",
+        name=f"monitoring_feature_view_for_{arrivals_or_departures.lower()}",
         use_sub_query=True,
         sub_query=query,
         version=1

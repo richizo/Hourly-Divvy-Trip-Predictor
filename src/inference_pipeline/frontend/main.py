@@ -2,6 +2,9 @@
 This module initiates the streamlit app.
 """
 import streamlit as st
+from streamlit_extras.app_logo import add_logo
+
+from src.setup.paths import IMAGES_DIR
 
 
 class ProgressTracker:
@@ -20,13 +23,15 @@ class ProgressTracker:
         self.progress_bar.progress(self.current_step/self.n_steps)
 
 
-st.sidebar.header("Please pan to your page of choice ")
-intro_page = st.Page(page="intro.py", title="Welcome", icon="🏠")
-predictions_page = st.Page(page="predictions.py", title="Predictions", icon="👁️")
+add_logo(logo_url=IMAGES_DIR/"logo.png", height=120)
 
-monitoring_page = st.Page(page="monitoring.py", title="Model Performance", icon="📈")
-# maps_page = st.Page(page="maps.py", title="Maps (Experimental)", icon="🗺️")
+pages = st.navigation(
+    pages=[
+        st.Page(page="intro.py", title="Welcome", icon="🏠"), 
+        st.Page(page="predictions.py", title="Predictions", icon="👁️")
+        # st.Page(page="monitoring.py", title="Model Performance", icon="📈")
+        # maps_page = st.Page(page="maps.py", title="Maps (Experimental)", icon="🗺️")
+    ]
+)
 
-
-pages = st.navigation(pages=[intro_page, predictions_page, monitoring_page])
 pages.run()

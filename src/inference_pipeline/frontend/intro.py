@@ -1,17 +1,21 @@
 import streamlit as st 
+from streamlit_extras.colored_header import colored_header
 
 
-st.header(":red[Welcome] :orange[to the] :green[Hourly] :blue[Divvy Trip] :violet[Predictor]")
+colored_header(
+    label=":red[Welcome] :orange[to the] :green[Hourly] :blue[Divvy Trip] :violet[Predictor]",
+    description="By Kobina Brandon",
+    color_name="green-70"
+    )
 
 st.markdown(
-    """
-    This service provides hourly :violet[predictions] of the number of :green[arrivals] and :orange[departures] at various 
-    :blue[Divvy stations] around the :blue[city of Chicago]. It is the culmination of an :red[end-to-end] machine learning system trained on
-    publicly available :blue[Divvy] trip data.
-
-    Take a look at the :violet["Predictions"] page, where we provide the main results of the model.
+    f"""
+    The Divvy bike sharing system (managed by Lyft) is one of the Chicago's has many transportation providers. 
+    
+    This application provides hourly :violet[predictions] of the number of :green[arrivals] and :orange[departures] 
+    at various :blue[Divvy stations] around the city, which you can view on the :violet["Predictions"] page. It is 
+    the culmination of an end-to-end machine learning system trained on publicly available :blue[Divvy] trip data.
     """
 )
 
-
-    
+st.link_button(label="View the code here", url="http://github.com/kobinabrandon/hourly-divvy-trip-predictor")
