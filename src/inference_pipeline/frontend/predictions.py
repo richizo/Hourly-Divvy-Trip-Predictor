@@ -110,13 +110,13 @@ def deliver_predictions(options_and_colours: dict, user_choice: str):
         predictions_df = get_all_predictions(scenario=scenario)
 
         if not predictions_df.empty:
-            st.sidebar.write("✅ Predictions received")
+            st.sidebar.write(f"✅ Predicted {user_choice} received")
             tracker.next()
         
         predictions_per_station = get_predictions_per_station(scenario=scenario, predictions_df=predictions_df)  
         
         chosen_station = st.selectbox(
-            label=f"For which :blue[station] would you like the predicted :red[{user_choice.lower()}]?",
+            label=f"Which :blue[station's] predicted :red[{user_choice.lower()}] would you like to view?",
             options=list(predictions_per_station.keys()),
             placeholder="Please choose a station"
         )
@@ -136,9 +136,10 @@ if __name__ != "__main__":
     try:
         options_and_colours = {"Arrivals": ":green", "Departures": ":orange"}
 
-        user_choice = st.radio(
-            options=["Please select an option", "Arrivals", "Departures"],
-            label="Please specify whether you would like to see the predicted :green[arrivals] or :orange[departures]."
+        user_choice = st.selectbox(
+            options=["Select an option", "Arrivals", "Departures"],
+            label="Please specify whether you'd like to see the predicted :green[arrivals] or :orange[departures]. \
+                If you'd like to see both, please select one, wait for the results, and then select the other."
         )
 
         for scenario in config.displayed_scenario_names.keys():

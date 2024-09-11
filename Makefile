@@ -43,4 +43,7 @@ start-docker:
 	sudo systemctl start docker
 
 image:
-	sudo docker build -t divvy .
+	docker build -t divvy-hourly .
+
+container:
+	docker run -it --env-file .env -p 8501:8501/tcp divvy-hourly:latest 
