@@ -55,6 +55,11 @@ class BackFiller:
         
         ts_data["timestamp"] = pd.to_datetime(ts_data[f"{scenario}_hour"]).astype(int) // 10 ** 6  # Express in ms
 
+        logger.info(
+            f"There are {len(ts_data[f"{self.scenario}_station_id"].unique())} stations in the time series data \
+                 for {self.scenario}s"
+        )
+        
         #  ts_data = ts_data.drop(f"{scenario}_hour", axis=1)
         feature_group = self.api.setup_feature_group(
             description=f"Hourly time series data for {config.displayed_scenario_names[self.scenario].lower()}",
@@ -100,6 +105,12 @@ class BackFiller:
             logger.error(error)    
 
         predictions_df: pd.DataFrame = inferrer.get_model_predictions(model=model, features=features)
+
+        logger.info(
+            f"There are {len(predictions_df[f"{self.scenario}_station_id"].unique())} stations in the predictions \
+                 for {self.scenario}s"
+        )
+        breakpoint()
         
         predictions_feature_group = self.api.setup_feature_group(
             description=f"predicting {config.displayed_scenario_names[self.scenario]} - {tuned_or_not} {model_name}",

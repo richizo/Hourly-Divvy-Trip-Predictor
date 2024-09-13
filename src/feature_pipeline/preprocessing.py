@@ -13,7 +13,7 @@ from src.feature_pipeline.station_indexing import RoundingCoordinates, DirectInd
 from src.feature_pipeline.feature_engineering import perform_feature_engineering
 
 from src.setup.paths import (
-    CLEANED_DATA, TRAINING_DATA, TIME_SERIES_DATA, INDEXER_TWO, INFERENCE_DATA, make_fundamental_paths
+    CLEANED_DATA, TRAINING_DATA, TIME_SERIES_DATA, INDEXER_TWO, INFERENCE_DATA, make_fundamental_paths, PARQUETS
 )
 
 
@@ -52,14 +52,16 @@ class DataProcessor:
             results = []
 
             for scenario in scenarios:
+                long_id_count = 0
 
-                long_id_counter = 0
                 for station_id in data.loc[:, f"{scenario}_station_id"]:
-                    if len(str(station_id)) > 7 and not pd.isnull(station_id):
-                        long_id_counter += 1
+                    if len(str(station_id)) >= 7 and not pd.isnull(station_id):
+                        long_id_count += 1
 
-                num_missing_indices = data[f"{scenario}_station_id"].isna().sum()
-                result = True if (num_missing_indices + long_id_counter) / data.shape[0] >= 0.5 else False
+                number_of_missing_indices = data[f"{scenario}_station_id"].isna().sum()
+                proportion_of_problem_rows = (number_of_missing_indices + long_id_count) / data.shape[0] 
+                result = True if proportion_of_problem_rows >= 0.5 else False
+
                 results.append(result)
 
             return True if False not in results else False
@@ -99,10 +101,7 @@ class DataProcessor:
 
         training_sets = []
         for scenario in ts_data_per_scenario.keys():
-            logger.info(
-                f"Turning time series data into training data ({config.displayed_scenario_names[scenario].lower()})"
-            )
-
+            
             training_data = self.transform_ts_into_training_data(
                 ts_data=ts_data_per_scenario[scenario],
                 geocode=geocode,
@@ -468,7 +467,6 @@ class DataProcessor:
         subsequence_last_index = input_seq_len + 1
 
         indices = []
-
         while subsequence_last_index <= stop_position: 
             indices.append(
                 (subsequence_first_index, subsequence_mid_index, subsequence_last_index)
@@ -512,22 +510,25 @@ class DataProcessor:
         # Ensure first that these are the columns of the chosen data set (and they are listed in this order)
         assert set(ts_data.columns) == {f"{scenario}_hour", f"{scenario}_station_id", "trips"}
 
-        station_ids = ts_data[f"{scenario}_station_id"].unique()
-
         # Prepare the dataframe which will contain the features and targets
         features = pd.DataFrame()
         targets = pd.DataFrame()
 
-        for station_id in tqdm(station_ids):
-
+        for station_id in tqdm(
+            iterable=ts_data[f"{scenario}_station_id"].unique(), 
+            desc=f"Turning time series data into training data ({config.displayed_scenario_names[scenario].lower()})"
+        ):
+            
             # Isolate a part of the dataframe that relates to each station ID
             ts_data_per_station = ts_data.loc[
-                ts_data[f"{scenario}_station_id"] == station_id, [f"{scenario}_hour", "trips"]
+                ts_data[f"{scenario}_station_id"] == station_id, [f"{scenario}_hour", f"{scenario}_station_id", "trips"]
             ].sort_values(by=[f"{scenario}_hour"])
 
             # Compute cutoff indices
             indices = self.get_cutoff_indices(
-                ts_data=ts_data_per_station, input_seq_len=input_seq_len, step_size=step_size
+                ts_data=ts_data_per_station, 
+                input_seq_len=input_seq_len, 
+                step_size=step_size
             )
 
             # Create a multidimensional array for the features, and a column vector for the target
@@ -547,39 +548,35 @@ class DataProcessor:
                 )
 
             # Make a dataframe of features
-            features_per_location = pd.DataFrame(
+            features_per_station = pd.DataFrame(
                 x, columns=[
                     f"trips_previous_{i + 1}_hour" for i in reversed(range(input_seq_len))
                 ]
             )
 
-            features_per_location[f"{scenario}_hour"] = hours
-            features_per_location[f"{scenario}_station_id"] = station_id
+            features_per_station[f"{scenario}_hour"] = hours
+            features_per_station[f"{scenario}_station_id"] = station_id
+
+            #features_per_station.to_parquet(path=PARQUETS/f"#{station_id}.parquet")
 
             targets_per_location = pd.DataFrame(
                 y, columns=["trips_next_hour"]
             )
 
-            with warnings.catch_warnings():
-
-                # There is a warning from pandas about concatenating dataframes that are empty or have missing values
-                warnings.filterwarnings(action="ignore", category=FutureWarning)
-
-                # Concatenate the dataframes
-                features = pd.concat([features, features_per_location], axis=0)
-                targets = pd.concat([targets, targets_per_location], axis=0)
+            # Concatenate the dataframes
+            features = pd.concat([features, features_per_station], axis=0)
+            targets = pd.concat([targets, targets_per_location], axis=0)
 
         features = features.reset_index(drop=True)
         targets = targets.reset_index(drop=True)
 
         engineered_features = perform_feature_engineering(features=features, scenario=scenario, geocode=geocode)
-    
-        data_to_save = pd.concat([engineered_features, targets["trips_next_hour"]], axis=1)
+        training_data = pd.concat([engineered_features, targets["trips_next_hour"]], axis=1)
 
         logger.success("Saving the data so we (hopefully) won't have to do that again...")
         final_data_path = INFERENCE_DATA if self.for_inference else TRAINING_DATA
-        data_to_save.to_parquet(path=final_data_path / f"{scenario}s.parquet")
-        return data_to_save
+        training_data.to_parquet(path=final_data_path / f"{scenario}s.parquet")
+        return training_data
 
 
 if __name__ == "__main__":

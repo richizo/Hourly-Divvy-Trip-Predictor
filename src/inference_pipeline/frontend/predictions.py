@@ -81,15 +81,14 @@ def get_predictions_per_station(scenario: str, predictions_df: pd.DataFrame) -> 
     station_ids = predictions_df[f"{scenario}_station_id"].values
     predictions = predictions_df[f"predicted_{scenario}s"].values
 
+    logger.info(f"Predictions for {len(station_ids)} stations were fetched")
+
     geodata: dict = load_geodata(scenario=scenario)
     ids_and_names = get_ids_and_names(geodata=geodata)
 
     ids_and_predictions: dict[int, float] = {
         code: prediction for code, prediction in zip(station_ids, predictions) if prediction is not None
     }
-
-    if len(predictions_df[f"{scenario}_station_id"].unique()) == len(ids_and_predictions.keys()):
-        logger.success("✅ Predictions retrieved")
 
     return {
         ids_and_names[station_id]: ids_and_predictions[station_id] for station_id in ids_and_predictions.keys()

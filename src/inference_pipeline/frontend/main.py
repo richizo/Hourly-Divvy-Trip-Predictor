@@ -28,9 +28,9 @@ add_logo(logo_url=IMAGES_DIR/"logo.png", height=120)
 pages = st.navigation(
     pages=[
         st.Page(page="intro.py", title="Welcome", icon="🏠"), 
-        st.Page(page="predictions.py", title="Predictions", icon="👁️")
+        st.Page(page="predictions.py", title="Predictions", icon="👁️"),
+        st.Page(page="maps.py", title="Map (Experimental)", icon="🗺️")
         # st.Page(page="monitoring.py", title="Model Performance", icon="📈")
-        # maps_page = st.Page(page="maps.py", title="Maps (Experimental)", icon="🗺️")
     ]
 )
 

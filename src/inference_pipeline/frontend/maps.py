@@ -15,6 +15,7 @@ from src.inference_pipeline.frontend.data import prepare_geodata_df
 from src.inference_pipeline.frontend.data import load_geojson
 
 
+@st.cache_data
 @st.cache_resource
 def make_scatterplot(geodata: pd.DataFrame):
     """

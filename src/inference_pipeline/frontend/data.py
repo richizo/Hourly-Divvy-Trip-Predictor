@@ -163,14 +163,18 @@ def prepare_geodata_df(scenario: str, geojson: dict) -> pd.DataFrame:
         latitudes = [point[1] for point in coordinates]
         longitudes = [point[0] for point in coordinates]
 
-    return pd.DataFrame(
-        data={
-            f"{scenario}_station_name": station_names,
-            f"{scenario}_station_id": station_ids,
-            "latitudes": latitudes,
-            "longitudes": longitudes
-        }
-    )
+        geodata_df = pd.DataFrame(
+            data={
+                f"{scenario}_station_name": station_names,
+                f"{scenario}_station_id": station_ids,
+                "latitudes": latitudes,
+                "longitudes": longitudes
+            }
+        )
+
+        logger.info(f"There are {geodata_df[f"{scenario}_station_id"].unique()} stations in the {scenario} geodata")
+
+    return geodata_df
 
 
 @st.cache_data
