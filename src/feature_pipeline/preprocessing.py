@@ -13,7 +13,7 @@ from src.feature_pipeline.station_indexing import RoundingCoordinates, DirectInd
 from src.feature_pipeline.feature_engineering import perform_feature_engineering
 
 from src.setup.paths import (
-    CLEANED_DATA, TRAINING_DATA, TIME_SERIES_DATA, INDEXER_TWO, INFERENCE_DATA, make_fundamental_paths, PARQUETS
+    CLEANED_DATA, TRAINING_DATA, RAW_DATA_DIR, TIME_SERIES_DATA, INDEXER_TWO, INFERENCE_DATA, make_fundamental_paths, PARQUETS
 )
 
 
@@ -101,18 +101,24 @@ class DataProcessor:
 
         training_sets = []
         for scenario in ts_data_per_scenario.keys():
-            
-            training_data = self.transform_ts_into_training_data(
-                ts_data=ts_data_per_scenario[scenario],
-                geocode=geocode,
-                scenario=scenario,
-                input_seq_len=config.n_features,
-                step_size=24
-            )
 
-            training_sets.append(training_data)
+            if not Path(TRAINING_DATA/f"{scenario}s.parquet").is_file():
 
-        return training_sets
+                training_data = self.transform_ts_into_training_data(
+                    ts_data=ts_data_per_scenario[scenario],
+                    geocode=geocode,
+                    scenario=scenario,
+                    input_seq_len=1,
+                    step_size=1,
+                    track_partials=True
+                )
+
+                training_sets.append(training_data)
+            else:
+                logger.success(f"You already have training data for the {config.displayed_scenario_names[scenario]}s")  
+                continue            
+
+            return training_sets
 
     def make_time_series(self) -> tuple[pd.DataFrame, pd.DataFrame]:
         """
@@ -475,7 +481,7 @@ class DataProcessor:
             subsequence_first_index += step_size
             subsequence_mid_index += step_size
             subsequence_last_index += step_size
-
+        
         return indices
 
     def transform_ts_into_training_data(
@@ -484,7 +490,8 @@ class DataProcessor:
             scenario: str,
             step_size: int,
             input_seq_len: int,
-            ts_data: pd.DataFrame
+            ts_data: pd.DataFrame,
+            track_partials: bool
     ) -> pd.DataFrame:
         """
         Transpose the time series data into a feature-target format.
@@ -494,7 +501,7 @@ class DataProcessor:
             
             geocode:
             
-            step_size:from src.setup.config import config
+            step_size:
 
             
             input_seq_len:
@@ -553,6 +560,9 @@ class DataProcessor:
                     f"trips_previous_{i + 1}_hour" for i in reversed(range(input_seq_len))
                 ]
             )
+            
+            if track_partials:
+                features_per_station.to_csv(PARQUETS/f"#{station_id}.csv")
 
             features_per_station[f"{scenario}_hour"] = hours
             features_per_station[f"{scenario}_station_id"] = station_id
@@ -570,12 +580,17 @@ class DataProcessor:
         features = features.reset_index(drop=True)
         targets = targets.reset_index(drop=True)
 
+        features.to_parquet(TRAINING_DATA/f"{scenario}_raw_features.parquet")
+        breakpoint()
+
         engineered_features = perform_feature_engineering(features=features, scenario=scenario, geocode=geocode)
         training_data = pd.concat([engineered_features, targets["trips_next_hour"]], axis=1)
 
         logger.success("Saving the data so we (hopefully) won't have to do that again...")
         final_data_path = INFERENCE_DATA if self.for_inference else TRAINING_DATA
-        training_data.to_parquet(path=final_data_path / f"{scenario}s.parquet")
+
+        if scenario == "end":
+            training_data.to_csv(final_data_path / f"{scenario}s.csv")
         return training_data
 
 
