@@ -15,110 +15,6 @@ from src.setup.paths import (
     CLEANED_DATA, TRAINING_DATA, TIME_SERIES_DATA, INDEXER_TWO, INFERENCE_DATA, make_fundamental_paths
 )
 
-class CutoffIndexer:
-    def __init__(self, ts_data: pd.DataFrame, input_seq_len: int, step_size: int) -> None:
-        """
-
-        Args:
-            ts_data (pd.DataFrame): the time series dataset that serves as the input
-            input_seq_len (int): the number of rows to be considered at any one time
-            step_size (int): how many rows down we move as we repeat the process
-        """
-
-        self.ts_data = ts_data
-        self.step_size = step_size
-        self.input_seq_len = input_seq_len
-        self.stop_position = len(ts_data) - 1
-
-        self.use_standard_indexer = self.use_standard_cutoff_indexer()
-        self.indices = self._get_cutoff_indices()
-
-    def use_standard_cutoff_indexer(self) -> bool:
-        """
-        Determines whether the standard cutoff indexer is to be used, based on the number of rows 
-        in the time series data. In particular, the function checks whether the input sequence
-        length is no more than the length of the data. This condition is required for the standard
-        indexer to be used in the first place.
-
-        Returns:
-            bool: whether to use the standard indexer or not.
-        """
-        stop_position = len(self.ts_data) - 1  
-        return True if stop_position >= self.input_seq_len + 1 else False
-
-    def _get_cutoff_indices(self) -> list[tuple[int, int, int]]:
-        """
-        Starts by taking a certain number of rows of a given dataframe as an input, and the
-        indices of the row on which the selected rows start and end. These will be placed
-        in the first and second positions of a three element tuple. The third position of
-        said tuple will be occupied by the index of the row that comes after.
-
-        Then the function will slide "step_size" steps and repeat the process. The function
-        terminates once it reaches the last row of the dataframe. 
-
-        Credit to P.L.B.
-
-        Returns:
-            list: the list of cutoff indices
-        """
-        if self.use_standard_indexer:
-            indices = self._standard_cutoff_indexer(
-                first_index=0, 
-                mid_index=self.input_seq_len, 
-                last_index=self.input_seq_len+1
-            )     
-
-            return indices
-            
-        elif not self.use_standard_indexer and len(self.ts_data) >= 2:
-            indices = self._modified_cutoff_indexer(first_index=0, mid_index=1, last_index=2)
-            return indices
-
-        elif not self.use_standard_indexer and len(self.ts_data) == 1:
-            return [self.ts_data.index[0]]
-
-    def _modified_cutoff_indexer(self, first_index: int, mid_index: int, last_index: int) -> list[tuple[int, int, int]]:
-        """
-
-        Args:
-            first_index:
-            mid_index:
-            last_index:
-
-        Returns:
-        """
-        indices = []
-        while mid_index < self.stop_position:
-            index = (first_index, mid_index, last_index)
-            indices.append(index)
-        
-            first_index += self.step_size
-            mid_index += self.step_size
-            last_index += self.step_size
-
-        return indices
-
-    def _standard_cutoff_indexer(self, first_index: int, mid_index: int, last_index: int) -> list[tuple[int, int, int]]:
-        """
-
-        Args:
-            first_index (int): _description_
-            mid_index (int): _description_
-            last_index (int): _description
-
-        Returns:
-            list[tuple[int]]: _description_
-        """
-        indices = []
-        while last_index <= self.stop_position: 
-            index = (first_index, mid_index, last_index)
-            indices.append(index)
-
-            first_index += self.step_size
-            mid_index += self.step_size
-            last_index += self.step_size
-            
-        return indices
 
 class DataProcessor:
     def __init__(self, year: int, for_inference: bool):
@@ -192,7 +88,7 @@ class DataProcessor:
         """
         Extract raw data, clean it, transform it into time series data, and transform that in turn into
         training data which is subsequently saved. 
--
+
         Args:
             geocode (bool): whether to geocode as part of feature engineering.
             
@@ -214,9 +110,11 @@ class DataProcessor:
                 )
 
                 training_sets.append(training_data)
+
             else:
                 logger.success(f"You already have training data for the {config.displayed_scenario_names[scenario]}s")  
-
+            
+            continue
             return training_sets
 
     def make_time_series(self) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -552,18 +450,13 @@ class DataProcessor:
 
         Args:
             scenario: a string that indicates whether we are dealing with the starts or ends of trips
-            
-            geocode:
-            
-            step_size:
-
-            
-            input_seq_len:
-
-            ts_data: the time series data
+            geocode: whether to use geocoding during feature engineering 
+            step_size: the step size to be used by the standard cutoff indexer.
+            input_seq_len: the input sequence length to be used to construct the training data
+            ts_data: the full time series dataset for arrivals and departures
 
         Returns:
-            pd.DataFrame: the training data
+            pd.DataFrame: the training data for arrivals or departures
         """
         if self.for_inference and "timestamp" in ts_data.columns:
             ts_data = ts_data.drop("timestamp", axis=1)
@@ -571,7 +464,6 @@ class DataProcessor:
         # Ensure first that these are the columns of the chosen data set (and they are listed in this order)
         assert set(ts_data.columns) == {f"{scenario}_hour", f"{scenario}_station_id", "trips"}
 
-        # Prepare the dataframe which will contain the features and targets
         features = pd.DataFrame()
         targets = pd.DataFrame()
     
@@ -590,9 +482,6 @@ class DataProcessor:
 
             x = np.empty(shape=(num_indices, input_seq_len), dtype=np.float32)
             y = np.empty(shape=(num_indices, 1), dtype=np.float32)
-
-            # x = np.ndarray(shape=(num_indices, input_seq_len), dtype=np.float32)
-            # y = np.ndarray(shape=(num_indices, 1), dtype=np.float32)
 
             hours = []    
             if use_standard_cutoff_indexer:
@@ -622,12 +511,7 @@ class DataProcessor:
                 columns=[f"trips_previous_{i + 1}_hour" for i in reversed(range(input_seq_len))]
             )
             
-            try: 
-                features_per_station[f"{scenario}_hour"] = hours
-            except Exception as error:
-                logger.error(error)
-                breakpoint()
-            
+            features_per_station[f"{scenario}_hour"] = hours  
             features_per_station[f"{scenario}_station_id"] = station_id
             targets_per_station = pd.DataFrame(data=y, columns=["trips_next_hour"])
 
@@ -645,6 +529,118 @@ class DataProcessor:
         training_data.to_parquet(final_data_path / f"{scenario}s.parquet")
 
         return training_data
+
+
+class CutoffIndexer:
+    def __init__(self, ts_data: pd.DataFrame, input_seq_len: int, step_size: int) -> None:
+        """
+        Allows us to invoke a particular method of getting the cutoff indices for each 
+        station. These indices will be needed when converting time series data into 
+        training data.
+
+        Args:
+            ts_data (pd.DataFrame): the time series dataset that serves as the input
+            input_seq_len (int): the number of rows to be considered at any one time
+            step_size (int): how many rows down we move as we repeat the process
+        """
+
+        self.ts_data = ts_data
+        self.step_size = step_size
+        self.input_seq_len = input_seq_len
+        self.stop_position = len(ts_data) - 1
+
+        self.use_standard_indexer = self.use_standard_cutoff_indexer()
+        self.indices = self._get_cutoff_indices()
+
+    def use_standard_cutoff_indexer(self) -> bool:
+        """
+        Determines whether the standard cutoff indexer is to be used, based on the number of rows 
+        in the time series data. In particular, the function checks whether the input sequence
+        length is no more than the length of the data. This condition is required for the standard
+        indexer to be used in the first place.
+
+        Returns:
+            bool: whether to use the standard indexer or not.
+        """
+        stop_position = len(self.ts_data) - 1  
+        return True if stop_position >= self.input_seq_len + 1 else False
+
+    def _get_cutoff_indices(self) -> list[tuple[int, int, int]]:
+        """
+        
+
+        Returns:
+            list: the list of cutoff indices
+        """
+        if self.use_standard_indexer:
+            indices = self._standard_cutoff_indexer(
+                first_index=0, 
+                mid_index=self.input_seq_len, 
+                last_index=self.input_seq_len+1
+            )     
+
+            return indices
+            
+        elif not self.use_standard_indexer and len(self.ts_data) >= 2:
+            indices = self._modified_cutoff_indexer(first_index=0, mid_index=1, last_index=2)
+            return indices
+
+        elif not self.use_standard_indexer and len(self.ts_data) == 1:
+            return [self.ts_data.index[0]]
+
+    def _modified_cutoff_indexer(self, first_index: int, mid_index: int, last_index: int) -> list[tuple[int, int, int]]:
+        """
+        A modified version of the standard indexer, which is meant to deal with a specific problem that emerges when
+        the given station's time series data has only two rows.
+
+        Args:
+            first_index:
+            mid_index:
+            last_index:
+
+        Returns:
+        """
+        indices = []
+        while mid_index <= self.stop_position:
+            index = (first_index, mid_index, last_index)
+            indices.append(index)
+        
+            first_index += self.step_size
+            mid_index += self.step_size
+            last_index += self.step_size
+
+        return indices
+
+    def _standard_cutoff_indexer(self, first_index: int, mid_index: int, last_index: int) -> list[tuple[int, int, int]]:
+        """
+        Starts by taking a certain number of rows of a given dataframe as an input, and the
+        indices of the row on which the selected rows start and end. These will be placed
+        in the first and second positions of a three element tuple. The third position of
+        said tuple will be occupied by the index of the row that comes after.
+
+        Then the function will slide "step_size" steps and repeat the process. The function
+        terminates once it reaches the last row of the dataframe. 
+
+        Credit to P.L.B.
+
+        Args:
+            first_index (int): _description_
+            mid_index (int): _description_
+            last_index (int): _description
+
+        Returns:
+            list[tuple[int]]: _description_
+        """
+        indices = []
+        while last_index <= self.stop_position: 
+            index = (first_index, mid_index, last_index)
+            indices.append(index)
+
+            first_index += self.step_size
+            mid_index += self.step_size
+            last_index += self.step_size
+            
+        return indices
 
 
 if __name__ == "__main__":
