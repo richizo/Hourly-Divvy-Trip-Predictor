@@ -216,7 +216,6 @@ class DataProcessor:
                 training_sets.append(training_data)
             else:
                 logger.success(f"You already have training data for the {config.displayed_scenario_names[scenario]}s")  
-                continue            
 
             return training_sets
 
@@ -589,13 +588,14 @@ class DataProcessor:
             indices = cutoff_indexer.indices
             num_indices = len(indices) 
 
-            if use_standard_cutoff_indexer or (not use_standard_cutoff_indexer and len(ts_per_station) >= 2):
-                x = np.ndarray(shape=(num_indices, input_seq_len), dtype=np.float32)
+            x = np.empty(shape=(num_indices, input_seq_len), dtype=np.float32)
+            y = np.empty(shape=(num_indices, 1), dtype=np.float32)
 
-            y = np.ndarray(shape=(num_indices, 1), dtype=np.float32)
+            # x = np.ndarray(shape=(num_indices, input_seq_len), dtype=np.float32)
+            # y = np.ndarray(shape=(num_indices, 1), dtype=np.float32)
 
             hours = []    
-            if use_standard_cutoff_indexer
+            if use_standard_cutoff_indexer:
                 for i, index in enumerate(indices):
                     hour = ts_per_station.iloc[index[1]][f"{scenario}_hour"]
                     x[i, :] = ts_per_station.iloc[index[0]: index[1]]["trips"].values
@@ -603,21 +603,11 @@ class DataProcessor:
 
                     hours.append(hour)
             
-            elif not use_standard_cutoff_indexer and len(ts_per_station) == 1:                   
-
-                logger.warning("SPECIAL PROCEDURE, ONE ROW")
-                print(ts_per_station)
-                print(indices)
-
-                try:
-                    x = np.full(shape=(1, input_seq_len), fill_value= ts_per_station["trips"].iloc[0])  
-                    y = np.vstack([y, ts_per_station["trips"].iloc[0]])
-                    hour = ts_per_station[f"{scenario}_hour"].values[0]
-                    hours.append(hour)
-
-                except Exception as error:
-                    logger.error(error)
-                    breakpoint()
+            elif not use_standard_cutoff_indexer and len(ts_per_station) == 1:
+                x[0, :] = np.full(shape=(1, input_seq_len), fill_value=ts_per_station["trips"].iloc[0])
+                y[0] = ts_per_station["trips"].iloc[0]
+                hour = ts_per_station[f"{scenario}_hour"].values[0]
+                hours.append(hour)
             
             else:
                 ts_per_station = ts_per_station.reset_index(drop=True)
@@ -639,10 +629,8 @@ class DataProcessor:
                 breakpoint()
             
             features_per_station[f"{scenario}_station_id"] = station_id
-            #features_per_station.to_parquet(path=PARQUETS/f"#{station_id}.parquet")=
             targets_per_station = pd.DataFrame(data=y, columns=["trips_next_hour"])
 
-            # Concatenate the dataframes
             features = pd.concat([features, features_per_station], axis=0)
             targets = pd.concat([targets, targets_per_station], axis=0)
 

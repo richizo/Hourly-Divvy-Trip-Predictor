@@ -57,7 +57,7 @@ class Trainer:
         
         if Path(data_path).is_file():
             training_data = pd.read_parquet(path=data_path)
-            logger.success("Fetched the training data that has already been created.")
+            logger.success("Fetched saved training data.")
         else:
             logger.warning("No training data is stored. Creating the dataset will take a long time...")
 
