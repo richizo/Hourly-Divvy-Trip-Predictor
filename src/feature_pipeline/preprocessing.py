@@ -1,5 +1,4 @@
 import json
-import warnings
 from tqdm import tqdm
 from loguru import logger
 from pathlib import Path
@@ -13,9 +12,113 @@ from src.feature_pipeline.station_indexing import RoundingCoordinates, DirectInd
 from src.feature_pipeline.feature_engineering import perform_feature_engineering
 
 from src.setup.paths import (
-    CLEANED_DATA, TRAINING_DATA, RAW_DATA_DIR, TIME_SERIES_DATA, INDEXER_TWO, INFERENCE_DATA, make_fundamental_paths, PARQUETS
+    CLEANED_DATA, TRAINING_DATA, TIME_SERIES_DATA, INDEXER_TWO, INFERENCE_DATA, make_fundamental_paths
 )
 
+class CutoffIndexer:
+    def __init__(self, ts_data: pd.DataFrame, input_seq_len: int, step_size: int) -> None:
+        """
+
+        Args:
+            ts_data (pd.DataFrame): the time series dataset that serves as the input
+            input_seq_len (int): the number of rows to be considered at any one time
+            step_size (int): how many rows down we move as we repeat the process
+        """
+
+        self.ts_data = ts_data
+        self.step_size = step_size
+        self.input_seq_len = input_seq_len
+        self.stop_position = len(ts_data) - 1
+
+        self.use_standard_indexer = self.use_standard_cutoff_indexer()
+        self.indices = self._get_cutoff_indices()
+
+    def use_standard_cutoff_indexer(self) -> bool:
+        """
+        Determines whether the standard cutoff indexer is to be used, based on the number of rows 
+        in the time series data. In particular, the function checks whether the input sequence
+        length is no more than the length of the data. This condition is required for the standard
+        indexer to be used in the first place.
+
+        Returns:
+            bool: whether to use the standard indexer or not.
+        """
+        stop_position = len(self.ts_data) - 1  
+        return True if stop_position >= self.input_seq_len + 1 else False
+
+    def _get_cutoff_indices(self) -> list[tuple[int, int, int]]:
+        """
+        Starts by taking a certain number of rows of a given dataframe as an input, and the
+        indices of the row on which the selected rows start and end. These will be placed
+        in the first and second positions of a three element tuple. The third position of
+        said tuple will be occupied by the index of the row that comes after.
+
+        Then the function will slide "step_size" steps and repeat the process. The function
+        terminates once it reaches the last row of the dataframe. 
+
+        Credit to P.L.B.
+
+        Returns:
+            list: the list of cutoff indices
+        """
+        if self.use_standard_indexer:
+            indices = self._standard_cutoff_indexer(
+                first_index=0, 
+                mid_index=self.input_seq_len, 
+                last_index=self.input_seq_len+1
+            )     
+
+            return indices
+            
+        elif not self.use_standard_indexer and len(self.ts_data) >= 2:
+            indices = self._modified_cutoff_indexer(first_index=0, mid_index=1, last_index=2)
+            return indices
+
+        elif not self.use_standard_indexer and len(self.ts_data) == 1:
+            return [self.ts_data.index[0]]
+
+    def _modified_cutoff_indexer(self, first_index: int, mid_index: int, last_index: int) -> list[tuple[int, int, int]]:
+        """
+
+        Args:
+            first_index:
+            mid_index:
+            last_index:
+
+        Returns:
+        """
+        indices = []
+        while mid_index < self.stop_position:
+            index = (first_index, mid_index, last_index)
+            indices.append(index)
+        
+            first_index += self.step_size
+            mid_index += self.step_size
+            last_index += self.step_size
+
+        return indices
+
+    def _standard_cutoff_indexer(self, first_index: int, mid_index: int, last_index: int) -> list[tuple[int, int, int]]:
+        """
+
+        Args:
+            first_index (int): _description_
+            mid_index (int): _description_
+            last_index (int): _description
+
+        Returns:
+            list[tuple[int]]: _description_
+        """
+        indices = []
+        while last_index <= self.stop_position: 
+            index = (first_index, mid_index, last_index)
+            indices.append(index)
+
+            first_index += self.step_size
+            mid_index += self.step_size
+            last_index += self.step_size
+            
+        return indices
 
 class DataProcessor:
     def __init__(self, year: int, for_inference: bool):
@@ -101,16 +204,13 @@ class DataProcessor:
 
         training_sets = []
         for scenario in ts_data_per_scenario.keys():
-
             if not Path(TRAINING_DATA/f"{scenario}s.parquet").is_file():
-
-                training_data = self.transform_ts_into_training_data(
+                training_data: pd.DataFrame = self.transform_ts_into_training_data(
                     ts_data=ts_data_per_scenario[scenario],
                     geocode=geocode,
                     scenario=scenario,
-                    input_seq_len=1,
-                    step_size=1,
-                    track_partials=True
+                    input_seq_len=config.n_features,
+                    step_size=1
                 )
 
                 training_sets.append(training_data)
@@ -142,7 +242,6 @@ class DataProcessor:
         start_df = self.data[start_df_columns]
         end_df = self.data[end_df_columns]
 
-        logger.info("Transforming data into a time series...")
         start_ts, end_ts = self.transform_cleaned_data_into_ts_data(start_df=start_df, end_df=end_df)
         return start_ts, end_ts
 
@@ -441,57 +540,13 @@ class DataProcessor:
 
         return _get_ts_or_begin_transformation(start_ts_path=self.start_ts_path, end_ts_path=self.end_ts_path)
 
-    @staticmethod
-    def get_cutoff_indices(ts_data: pd.DataFrame, input_seq_len: int, step_size: int) -> list:
-        """
-        Starts by taking a certain number of rows of a given dataframe as an input, and the
-        indices of the row on which the selected rows start and end. These will be placed
-        in the first and second positions of a three element tuple. The third position of
-        said tuple will be occupied by the index of the row that comes after.
-
-        Then the function will slide "step_size" steps and repeat the process. The function
-        terminates once it reaches the last row of the dataframe.
-
-        Credit to P.L.B.
-
-        Args:
-            ts_data (pd.DataFrame): the time series dataset that serves as the input
-            
-            input_seq_len (int): the number of rows to be considered at any one time
-
-            step_size (int): how many rows down we move as we repeat the process
-
-        Returns:
-            list: the list of cutoff indices
-        """
-        # The function has to stop at the last row of the dataframe
-        stop_position = len(ts_data) - 1
-
-        # These numbers will be the first, second, and third elements of each tuple of indices.
-        subsequence_first_index = 0
-        subsequence_mid_index = input_seq_len
-        subsequence_last_index = input_seq_len + 1
-
-        indices = []
-        while subsequence_last_index <= stop_position: 
-            indices.append(
-                (subsequence_first_index, subsequence_mid_index, subsequence_last_index)
-            )
-
-            subsequence_first_index += step_size
-            subsequence_mid_index += step_size
-            subsequence_last_index += step_size
-        
-        return indices
-
     def transform_ts_into_training_data(
             self,
             geocode: bool,
             scenario: str,
             step_size: int,
             input_seq_len: int,
-            ts_data: pd.DataFrame,
-            track_partials: bool
+            ts_data: pd.DataFrame
     ) -> pd.DataFrame:
         """
         Transpose the time series data into a feature-target format.
@@ -520,77 +575,87 @@ class DataProcessor:
         # Prepare the dataframe which will contain the features and targets
         features = pd.DataFrame()
         targets = pd.DataFrame()
-
+    
         for station_id in tqdm(
             iterable=ts_data[f"{scenario}_station_id"].unique(), 
             desc=f"Turning time series data into training data ({config.displayed_scenario_names[scenario].lower()})"
         ):
-            
-            # Isolate a part of the dataframe that relates to each station ID
-            ts_data_per_station = ts_data.loc[
+            ts_per_station = ts_data.loc[
                 ts_data[f"{scenario}_station_id"] == station_id, [f"{scenario}_hour", f"{scenario}_station_id", "trips"]
             ].sort_values(by=[f"{scenario}_hour"])
 
-            # Compute cutoff indices
-            indices = self.get_cutoff_indices(
-                ts_data=ts_data_per_station, 
-                input_seq_len=input_seq_len, 
-                step_size=step_size
-            )
+            cutoff_indexer = CutoffIndexer(ts_data=ts_per_station, input_seq_len=input_seq_len, step_size=step_size)
+            use_standard_cutoff_indexer = cutoff_indexer.use_standard_cutoff_indexer()
+            indices = cutoff_indexer.indices
+            num_indices = len(indices) 
 
-            # Create a multidimensional array for the features, and a column vector for the target
-            num_indices = len(indices)
-            x = np.ndarray(shape=(num_indices, input_seq_len), dtype=np.float32)
-            y = np.ndarray(shape=num_indices, dtype=np.float32)
+            if use_standard_cutoff_indexer or (not use_standard_cutoff_indexer and len(ts_per_station) >= 2):
+                x = np.ndarray(shape=(num_indices, input_seq_len), dtype=np.float32)
 
-            hours = []
-            for i, index in enumerate(indices):
-                x[i, :] = ts_data_per_station.iloc[index[0]: index[1]]["trips"].values
-                y[i] = ts_data_per_station[index[1]:index[2]]["trips"].values[0]
+            y = np.ndarray(shape=(num_indices, 1), dtype=np.float32)
 
-                # Append the "hours" list with the appropriate entry at the intersection
-                # of row "index[1]" and scenario_hour's column
-                hours.append(
-                    ts_data_per_station.iloc[index[1]][f"{scenario}_hour"]
-                )
+            hours = []    
+            if use_standard_cutoff_indexer
+                for i, index in enumerate(indices):
+                    hour = ts_per_station.iloc[index[1]][f"{scenario}_hour"]
+                    x[i, :] = ts_per_station.iloc[index[0]: index[1]]["trips"].values
+                    y[i] = ts_per_station.iloc[index[2]]["trips"]
 
-            # Make a dataframe of features
+                    hours.append(hour)
+            
+            elif not use_standard_cutoff_indexer and len(ts_per_station) == 1:                   
+
+                logger.warning("SPECIAL PROCEDURE, ONE ROW")
+                print(ts_per_station)
+                print(indices)
+
+                try:
+                    x = np.full(shape=(1, input_seq_len), fill_value= ts_per_station["trips"].iloc[0])  
+                    y = np.vstack([y, ts_per_station["trips"].iloc[0]])
+                    hour = ts_per_station[f"{scenario}_hour"].values[0]
+                    hours.append(hour)
+
+                except Exception as error:
+                    logger.error(error)
+                    breakpoint()
+            
+            else:
+                ts_per_station = ts_per_station.reset_index(drop=True)
+                for i, index in enumerate(indices):
+                    x[i, :] = ts_per_station.iloc[index[0]: index[1], 2].values
+                    y[i] = ts_per_station[index[1]:index[2]]["trips"].values[0]
+                    hour = ts_per_station.iloc[index[1]][f"{scenario}_hour"]
+                    hours.append(hour)
+
             features_per_station = pd.DataFrame(
-                x, columns=[
-                    f"trips_previous_{i + 1}_hour" for i in reversed(range(input_seq_len))
-                ]
+                data=x, 
+                columns=[f"trips_previous_{i + 1}_hour" for i in reversed(range(input_seq_len))]
             )
             
-            if track_partials:
-                features_per_station.to_csv(PARQUETS/f"#{station_id}.csv")
-
-            features_per_station[f"{scenario}_hour"] = hours
+            try: 
+                features_per_station[f"{scenario}_hour"] = hours
+            except Exception as error:
+                logger.error(error)
+                breakpoint()
+            
             features_per_station[f"{scenario}_station_id"] = station_id
-
-            #features_per_station.to_parquet(path=PARQUETS/f"#{station_id}.parquet")
-
-            targets_per_location = pd.DataFrame(
-                y, columns=["trips_next_hour"]
-            )
+            #features_per_station.to_parquet(path=PARQUETS/f"#{station_id}.parquet")=
+            targets_per_station = pd.DataFrame(data=y, columns=["trips_next_hour"])
 
             # Concatenate the dataframes
             features = pd.concat([features, features_per_station], axis=0)
-            targets = pd.concat([targets, targets_per_location], axis=0)
+            targets = pd.concat([targets, targets_per_station], axis=0)
 
         features = features.reset_index(drop=True)
         targets = targets.reset_index(drop=True)
-
-        features.to_parquet(TRAINING_DATA/f"{scenario}_raw_features.parquet")
-        breakpoint()
 
         engineered_features = perform_feature_engineering(features=features, scenario=scenario, geocode=geocode)
         training_data = pd.concat([engineered_features, targets["trips_next_hour"]], axis=1)
 
         logger.success("Saving the data so we (hopefully) won't have to do that again...")
         final_data_path = INFERENCE_DATA if self.for_inference else TRAINING_DATA
+        training_data.to_parquet(final_data_path / f"{scenario}s.parquet")
 
-        if scenario == "end":
-            training_data.to_csv(final_data_path / f"{scenario}s.csv")
         return training_data
 
 
