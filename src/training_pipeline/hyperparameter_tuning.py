@@ -8,11 +8,11 @@ import numpy as np
 import pandas as pd
 
 from loguru import logger
-
 from comet_ml import Experiment
 
 import optuna
 from optuna.samplers import TPESampler
+from optuna.pruners import MedianPruner
 
 from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import TimeSeriesSplit
@@ -133,7 +133,7 @@ def optimise_hyperparameters(
 
     logger.info("Beginning hyperparameter search")
     sampler = TPESampler(seed=69)
-    study = optuna.create_study(study_name="optuna_study", direction="minimize", sampler=sampler)
+    study = optuna.create_study(study_name="study", direction="minimize", sampler=sampler, pruner=MedianPruner())
     study.optimize(func=objective, n_trials=hyperparameter_trials)
 
     # Get the dictionary of the best hyperparameters and the error that they produce
