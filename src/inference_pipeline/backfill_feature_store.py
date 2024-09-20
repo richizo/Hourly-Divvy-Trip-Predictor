@@ -84,7 +84,7 @@ class BackFiller:
         Args:
             target_date (datetime): the date up to which we want our predictions.
             
-            model_name (str, optional): the shorthand name of the model we will use. Defaults to "lightgbm",
+            model_name (str, optional): the shorthand name of the model we will use. Defaults to "xgboost",
                                         because the best performing models (for arrivals and departures) were
                                         LGBMRegressors.
         """
@@ -108,7 +108,7 @@ class BackFiller:
 
         logger.info(
             f"There are {len(predictions_df[f"{self.scenario}_station_id"].unique())} stations in the predictions \
-                 for {self.scenario}s"
+                for {self.scenario}s"
         )
         
         predictions_feature_group = self.api.setup_feature_group(

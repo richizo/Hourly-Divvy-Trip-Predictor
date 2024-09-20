@@ -16,13 +16,13 @@ from src.inference_pipeline.frontend.main import ProgressTracker
 
 
 @st.cache_data
-def fetch_from_monitoring_feature_view(scenario: str, model_name: str = "lightgbm") -> pd.DataFrame:
+def fetch_from_monitoring_feature_view(scenario: str, model_name: str = "xgboost") -> pd.DataFrame:
     """
     Fetch historical and prediction data.
 
     Args:
         scenario (str): "start" or "end".
-        model_name (str, optional): Defaults to "lightgbm".
+        model_name (str, optional): Defaults to "xgboost".
 
     Returns:
         pd.DataFrame: the data to be used for model monitoring

@@ -18,7 +18,7 @@ from src.inference_pipeline.frontend.data import load_geodata, get_ids_and_names
 @st.cache_data
 def get_all_predictions(
     scenario: str,
-    model_name: str = "lightgbm", 
+    model_name: str = "xgboost", 
     from_hour: datetime = config.current_hour - timedelta(hours=1),
     to_hour: datetime = config.current_hour
 ) -> pd.DataFrame:
