@@ -111,7 +111,9 @@ class Trainer:
                     pipeline = make_pipeline(model_fn())
         else:
             experiment.set_name(name=f"{model_name.title()}(Tuned) model for the {self.scenario}s of trips")
-            logger.info(f"Tuning hyperparameters of the {model_name} model. Have a snack...")
+            logger.info(
+                f"Tuning hyperparameters of the {model_name} model. Have a snack and watch One Piece (it's fantastic)"
+            )
 
             best_model_hyperparameters = optimise_hyperparameters(
                 model_fn=model_fn,

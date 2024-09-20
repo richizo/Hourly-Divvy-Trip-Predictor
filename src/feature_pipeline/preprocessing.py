@@ -112,7 +112,7 @@ class DataProcessor:
                 training_sets.append(training_data)
 
             else:
-                logger.success(f"You already have training data for the {config.displayed_scenario_names[scenario]}s")  
+                logger.success(f"You already have training data for the {config.displayed_scenario_names[scenario]}")  
             
             continue
             return training_sets

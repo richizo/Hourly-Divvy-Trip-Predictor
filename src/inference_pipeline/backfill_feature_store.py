@@ -13,11 +13,11 @@ from hsfs.feature_group import FeatureGroup
 from hsfs.feature_view import FeatureView
 
 from src.setup.config import config
-from src.setup.paths import TIME_SERIES_DATA, PARENT_DIR, INFERENCE_DATA
 from src.feature_pipeline.preprocessing import DataProcessor
 from src.inference_pipeline.feature_store_api import FeatureStoreAPI
 from src.inference_pipeline.model_registry_api import ModelRegistry
 from src.inference_pipeline.inference import InferenceModule
+from src.setup.paths import TIME_SERIES_DATA, PARENT_DIR, INFERENCE_DATA
 
 
 class BackFiller:
@@ -27,7 +27,7 @@ class BackFiller:
 
         Args:
             scenario: Determines whether we are looking at arrival or departure data. 
-                      Its value must be "start" or "end".
+                    Its value must be "start" or "end".
         """
         self.scenario = scenario.lower()
         assert self.scenario.lower() in ["start", "end"], 'Only "start" or "end" are acceptable values'
@@ -56,8 +56,8 @@ class BackFiller:
         ts_data["timestamp"] = pd.to_datetime(ts_data[f"{scenario}_hour"]).astype(int) // 10 ** 6  # Express in ms
 
         logger.info(
-            f"There are {len(ts_data[f"{self.scenario}_station_id"].unique())} stations in the time series data \
-                 for {self.scenario}s"
+            f"There are {len(ts_data[f"{self.scenario}_station_id"].unique())} stations in the time series data for \
+            {config.displayed_scenario_names[self.scenario].lower()}"
         )
         
         #  ts_data = ts_data.drop(f"{scenario}_hour", axis=1)
@@ -74,7 +74,7 @@ class BackFiller:
             write_options={"wait_for_job": True}
         )
 
-    def backfill_predictions(self, target_date: datetime, model_name: str = "lightgbm") -> None:
+    def backfill_predictions(self, target_date: datetime, model_name: str = "xgboost") -> None:
         """
         Fetch the registered version of the named model, and download it. Then load a batch of features
         from the relevant feature group(whether for arrival or departure data), and make predictions on those 
@@ -90,8 +90,8 @@ class BackFiller:
         """
         self.api.primary_key = [f"{self.scenario}_station_id"]
 
-        # The best models for arrivals & departures were untuned LGBMRegressors
-        tuned_or_not = "untuned"
+        # The best models for arrivals & departures are currently tuned XGBRegressors
+        tuned_or_not = "tuned"
         
         inferrer = InferenceModule(scenario=self.scenario)
         registry = ModelRegistry(scenario=self.scenario, model_name=model_name, tuned_or_not=tuned_or_not)
@@ -110,7 +110,6 @@ class BackFiller:
             f"There are {len(predictions_df[f"{self.scenario}_station_id"].unique())} stations in the predictions \
                  for {self.scenario}s"
         )
-        breakpoint()
         
         predictions_feature_group = self.api.setup_feature_group(
             description=f"predicting {config.displayed_scenario_names[self.scenario]} - {tuned_or_not} {model_name}",

@@ -137,7 +137,7 @@ class InferenceModule:
             FeatureGroup: the feature group for the given model's predictions.
         """
 
-        tuned_or_not = "tuned" if self.scenario == "start" else "untuned"
+        tuned_or_not = "tuned" # the tuned XGBoost models are currently the best
 
         return self.api.setup_feature_group(
             description=f"predictions on {self.scenario} data using the {tuned_or_not} {model_name}",
