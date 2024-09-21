@@ -13,7 +13,9 @@ import geopandas as gpd
 from loguru import logger
 
 from src.inference_pipeline.frontend.main import ProgressTracker
-from src.inference_pipeline.frontend.data import ShapeFile, load_local_geojson, prepare_df_of_local_geodata
+from src.inference_pipeline.frontend.data import (
+load_local_geojson, prepare_df_of_local_geodata, make_geodataframes, reconcile_geodata
+)
 
 from src.inference_pipeline.frontend.predictions import (
     extract_predictions_for_this_hour, get_all_predictions, get_predictions_per_station
@@ -21,23 +23,23 @@ from src.inference_pipeline.frontend.predictions import (
 
 def remove_stations_with_no_predictions(
     scenario: str,
-    external_geodata: gpd.GeoDataFrame,
+    geo_dataframe: gpd.GeoDataFrame,
     predictions: pd.DataFrame
 ) -> pd.DataFrame:
 
     stations_we_have_predictions_for = predictions[f"{scenario}_station_names"].unique()
     external_data_rows_with_predictions = np.isin(
-        element=external_geodata["station_name"],
+        element=geo_dataframe["station_name"],
         test_elements=stations_we_have_predictions_for
     )
 
-    num_unmapped_stations = len(external_geodata) - len(external_data_rows_with_predictions)
+    num_unmapped_stations = len(geo_dataframe) - len(external_data_rows_with_predictions)
     logger.warning(
         f"{num_unmapped_stations} stations won't be plotted because we currently have no predictions for them"
     )
 
     # For plotting reasons, there's no need to keep shapefile data for stations that we don't have predictions for
-    return external_geodata.loc[external_data_rows_with_predictions, :]
+    return geo_dataframe.loc[external_data_rows_with_predictions, :]
 
 
 def pseudocolour(
@@ -141,18 +143,12 @@ def draw_map(geodata_and_predictions: pd.DataFrame):
         tooltip = {"html": "<b>Zone:</b> [{station_name} <br /> <b>Predicted arrivals:</b> {predicted_ends}"}
 
 if __name__ != "__main__":
-    st.set_page_config(layout="wide")
+    #st.set_page_config(layout="wide")
     tracker = ProgressTracker(n_steps=6)
-    shapefile = ShapeFile()
 
     with st.spinner(text=f"Fetching predicted arrivals and departures from feature store"):
         predicted_starts, predicted_ends = get_all_predictions()
 
-
-    external_geodata = remove_stations_with_no_predictions(
-        external_geodata=shapefile.load_data_from_shapefile(),
-        predictions=
-    )
 
 
     geojson = load_local_geojson(scenario="start")

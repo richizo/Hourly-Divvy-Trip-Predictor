@@ -1,14 +1,13 @@
 import json
 import random
 
-from jupyter_client.session import new_id
 from tqdm import tqdm
 from loguru import logger
 
 import numpy as np
 import pandas as pd
 
-from src.setup.paths import INDEXER_ONE, INDEXER_TWO, CLEANED_DATA
+from src.setup.paths import INDEXER_ONE, INDEXER_TWO, CLEANED_DATA, GEOGRAPHICAL_DATA
 from src.feature_pipeline.feature_engineering import ReverseGeocoding
 
 
@@ -255,8 +254,8 @@ class DirectIndexing:
             first_time=True
         )
 
-        rounded_problem_lats = np.round(self.data.iloc[problem_rows_indices, self.latitudes_index].values, decimals=4)
-        rounded_problem_lngs = np.round(self.data.iloc[problem_rows_indices, self.longitudes_index].values, decimals=4)
+        rounded_problem_lats = np.round(self.data.iloc[problem_rows_indices, self.latitudes_index].values, decimals=6)
+        rounded_problem_lngs = np.round(self.data.iloc[problem_rows_indices, self.longitudes_index].values, decimals=6)
         rounded_problem_coordinates = list(zip(rounded_problem_lats, rounded_problem_lngs))
 
         # Get a boolean array of the indices of rounded coordinates
@@ -288,11 +287,6 @@ class DirectIndexing:
             pd.DataFrame: _description_
         """
         rows_with_new_names_and_ids = self.match_names_and_ids_by_station_proximity()
-
-        # Write the target row indices, the new IDs, and the new names as vectors
-        indices_of_target_rows = [
-            int(row) for row in rows_with_new_names_and_ids.keys()
-        ]
 
         rows_and_new_ids = {
             int(row): new_id for row, (new_id, new_name) in rows_with_new_names_and_ids.items()
@@ -379,7 +373,7 @@ class DirectIndexing:
         logger.info("Initiating reindexing procedure for the station IDs...")
         self.data = self.replace_missing_station_names_and_ids()
 
-        leftover_rows: pd.Index = self.find_rows_with_missing_ids_and_names(
+        leftover_rows: list[int] = self.find_rows_with_missing_ids_and_names(
             data=self.data, 
             scenario=self.scenario,
             first_time=False
@@ -428,3 +422,25 @@ class DirectIndexing:
             self.data.to_parquet(path=CLEANED_DATA / f"fully_cleaned_and_indexed_{self.scenario}_data.parquet")
 
         return self.data
+
+
+def check_for_duplicates(scenario: str):
+    with open(INDEXER_TWO / f"{scenario}_geodata.json", mode="r") as file:
+        geodata = json.load(file)
+
+    ids_and_names = {}
+    duplicate_ids_and_names = {}
+    for detail in tqdm(geodata):
+        station_id = detail["station_id"]
+        station_name = detail["station_name"]
+
+        if f"#{station_id}" not in ids_and_names.keys():
+            ids_and_names[f"#{station_id}"] = station_name
+
+        elif f"#{station_id}" in ids_and_names.keys() and station_name == ids_and_names[f"#{station_id}"]:
+            continue
+        elif f"#{station_id}" in ids_and_names.keys() and station_name != ids_and_names[f"#{station_id}"]:
+            duplicate_ids_and_names[f"#{station_id}"] = station_name
+
+    return ids_and_names, duplicate_ids_and_names
+

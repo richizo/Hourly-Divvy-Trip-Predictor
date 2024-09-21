@@ -4,6 +4,8 @@ that will be used to deliver the predictions to the streamlit interface.
 """
 import os
 import json
+
+import numpy as np
 import requests
 import pandas as pd
 import streamlit as st
@@ -24,37 +26,53 @@ from src.feature_pipeline.preprocessing import DataProcessor
 from src.feature_pipeline.feature_engineering import ReverseGeocoding
 
 
-def make_shapefile(scenario: str) -> gpd.GeoDataFrame:
+def make_geodataframes() -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+
+    geo_dataframes = []
+    for scenario in config.displayed_scenario_names.keys():
+        points = []
+        station_names = []
+        station_details: list[dict] = load_raw_local_geodata(scenario=scenario)
+
+        for detail in tqdm(iterable=station_details, desc="Collecting station details"):
+            points.append(detail["coordinates"])
+            station_names.append(detail["station_name"])
+
+        geodata = gpd.GeoDataFrame(
+            geometry=[Point(coordinate) for coordinate in points],
+            data={
+                "station_name": station_names,
+                "coordinates": points
+            }
+        )
+
+        geodata = geodata.set_crs(epsg=4326)
+        geo_dataframes.append(geodata)
+
+    start_geodata, end_geodata = geo_dataframes[0], geo_dataframes[1]
+    return start_geodata, end_geodata
+
+
+def reconcile_geodata() -> gpd.GeoDataFrame:
     """
-    Extract the contents of the downloaded archive to access the shapefile within, and then deliver it as a
-    geo-dataframe.
+    Because a single map is to be drawn, I can only use stations that are common to both arrival and departure
+    datasets
 
     Returns:
-        gpd.GeoDataFrame: the contents of the shapefile, rendered as a geo-dataframe.
+
     """
-    points = []
-    station_ids = []
-    station_names = []
-    station_details: list[dict] = load_local_geodata(scenario=scenario)
+    start_geodata, end_geodata = make_geodataframes()
+    larger_data = start_geodata if len(start_geodata) >= len(end_geodata) else end_geodata
+    smaller_data = end_geodata if len(start_geodata) >= len(end_geodata) else start_geodata
 
-    for detail in tqdm(iterable=station_details, desc="Collecting station details"):
-        points.append(detail["coordinates"])
-        station_ids.append(detail["station_id"])
-        station_names.append(detail["station_name"])
+    shared_stations_bool = np.isin(element=larger_data["station_name"], test_elements=smaller_data["station_name"])
+    common_data = larger_data.loc[shared_stations_bool, :]
 
-
-    geodata = gpd.GeoDataFrame(
-        geometry=[Point(coordinate) for coordinate in points],
-        data={
-            "station_name": station_names,
-            "station_id": station_ids,
-            "coordinates": points
-        }
+    logger.warning(
+        f"{len(larger_data) - len(common_data)} stations were discarded because they were not common to both datasets"
     )
 
-    geodata = geodata.set_crs(epsg=4326)
-    geodata.to_file(GEOGRAPHICAL_DATA / f"{scenario}_shapefile.shp")
-    return geodata
+    return common_data
 
 
 class ExternalShapeFile:
@@ -144,7 +162,7 @@ def rerun_feature_pipeline():
 
 @st.cache_data
 @rerun_feature_pipeline()
-def load_local_geodata(scenario: str) -> list[dict]:
+def load_raw_local_geodata(scenario: str) -> list[dict]:
     """
     Load the json file that contains the geographical information for 
     each station.
@@ -173,12 +191,12 @@ def load_local_geodata(scenario: str) -> list[dict]:
 
 
 @st.cache_data
-def get_ids_and_names(local_geodata: dict) -> dict[int, str]:
+def get_ids_and_names(local_geodata: list[dict]) -> dict[int, str]:
     """
     Extract the station IDs and names from the dictionary of station details.
 
     Args:
-        local_geodata (dict): dictionary containing geographical details of each station
+        local_geodata (list[dict]): list of dictionaries containing the geographical details of each station
 
     Returns:
         dict[int, str]: station IDs as keys and station names as values

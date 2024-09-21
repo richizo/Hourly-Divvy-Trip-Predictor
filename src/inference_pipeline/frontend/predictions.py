@@ -12,7 +12,7 @@ from streamlit_extras.colored_header import colored_header
 from src.setup.config import config
 from src.inference_pipeline.inference import InferenceModule
 from src.inference_pipeline.frontend.main import ProgressTracker
-from src.inference_pipeline.frontend.data import load_local_geodata, get_ids_and_names
+from src.inference_pipeline.frontend.data import load_raw_local_geodata, get_ids_and_names
 
 
 @st.cache_data
@@ -35,15 +35,22 @@ def get_all_predictions(
     prediction_dataframes = []
     for scenario in config.displayed_scenario_names.keys():
 
-        inferrer = InferenceModule(scenario=scenario)
-        predictions: pd.DataFrame = inferrer.load_predictions_from_store(
-            model_name=model_name,
-            from_hour=from_hour,
+        infer = InferenceModule(scenario=scenario)
+        predictions: pd.DataFrame = infer.load_predictions_from_store(
+            model_name=model_name, 
+            from_hour=from_hour, 
             to_hour=to_hour
         )
+
+        geodata = load_raw_local_geodata(scenario=scenario)
+        ids_and_names = get_ids_and_names(local_geodata=geodata)
+        predictions["station_name"] = predictions[f"{scenario}_station_id"].map(ids_and_names)
         prediction_dataframes.append(predictions)
 
-    return prediction_dataframes[0], prediction_dataframes[1]
+    predicted_departures, predicted_arrivals = prediction_dataframes[0], prediction_dataframes[1] 
+    
+    breakpoint()
+    return predicted_departures, predicted_arrivals
 
 
 @st.cache_data
@@ -80,21 +87,21 @@ def extract_predictions_for_this_hour(
     for scenario in scenario_and_predictions.keys():
 
         predictions = scenario_and_predictions[scenario]
-        next_hr_ready = False if predictions[predictions[f"{scenario}_hour"] == to_hour].empty else True
-        previous_hr_ready = False if predictions[predictions[f"{scenario}_hour"] == from_hour].empty else True
+        next_hour_ready = False if predictions[predictions[f"{scenario}_hour"] == to_hour].empty else True
+        previous_hour_ready = False if predictions[predictions[f"{scenario}_hour"] == from_hour].empty else True
 
-        if next_hr_ready:
+        if next_hour_ready:
             predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == to_hour]
-        elif previous_hr_ready:
+        elif previous_hour_ready:
             st.write("⚠️ Predictions for the current hour are unavailable. Using those from an hour ago.")
             predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == from_hour]
         else:
             raise Exception("Cannot get predictions for either hour. The feature pipeline may not be working")
 
         if include_station_names:
-            target_hour = from_hour if next_hr_ready else to_hour
+            target_hour = from_hour if next_hour_ready else to_hour
             logger.info(f"Working to attach the station names to the predictions for {target_hour}")
-            raw_local_geodata = load_local_geodata(scenario=scenario)
+            raw_local_geodata = load_raw_local_geodata(scenario=scenario)
             ids_and_names = get_ids_and_names(geodata=raw_local_geodata)
 
             new_column_of_names = []
@@ -132,7 +139,7 @@ z
     predictions = predictions[f"predicted_{scenario}s"].values
 
     logger.info(f"Predictions for {len(station_ids)} stations were fetched")
-    geodata: dict = load_local_geodata(scenario=scenario)
+    geodata: list[dict] = load_raw_local_geodata(scenario=scenario)
     ids_and_names = get_ids_and_names(local_geodata=geodata)
 
     ids_and_predictions: dict[int, float] = {
@@ -181,21 +188,5 @@ def deliver_predictions(options_and_colours: dict, user_choice: str):
         )
 
 
-if __name__ != "__main__":    
-
-    try:
-        options_and_colours = {"Arrivals": ":green", "Departures": ":orange"}
-
-        user_choice = st.selectbox(
-            options=["Select an option", "Arrivals", "Departures"],
-            label="Please specify whether you'd like to see the predicted :green[arrivals] or :orange[departures]. \
-                If you'd like to see both, please select one, wait for the results, and then select the other."
-        )
-
-        for scenario in config.displayed_scenario_names.keys():
-            arrival_or_departure = config.displayed_scenario_names[scenario]
-            if arrival_or_departure in user_choice:
-                deliver_predictions(options_and_colours=options_and_colours, user_choice=arrival_or_departure)
-    
-    except Exception as error:
-        logger.error(error)
+if __name__ != "__main__":
+    get_all_predictions()

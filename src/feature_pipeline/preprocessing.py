@@ -186,7 +186,9 @@ class DataProcessor:
                     longs = self.data.columns.get_loc(f"{scenario}_lng")
                     station_names_col = self.data.columns.get_loc(f"{scenario}_station_name")
 
-                    logger.info(f"Deleting rows with missing station names and coordinates ({config.displayed_scenario_names[scenario]})...")
+                    logger.info(
+                        f"Deleting rows with missing station names & coordinates ({config.displayed_scenario_names[scenario]})"
+                    )
 
                     where_missing_latitudes = self.data.iloc[:, lats].isnull()
                     where_missing_longitudes = self.data.iloc[:, longs].isnull()

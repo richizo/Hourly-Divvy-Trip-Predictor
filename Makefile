@@ -1,6 +1,9 @@
 process:
 	poetry run python src/feature_pipeline/preprocessing.py 
 
+index:
+	poetry run python src/feature_pipeline/station_indexing.py
+
 
 # Model Training
 train-start-untuned:
