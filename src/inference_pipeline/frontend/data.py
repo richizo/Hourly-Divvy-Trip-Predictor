@@ -3,26 +3,124 @@ This module contains code responsible for loading the various pieces of data
 that will be used to deliver the predictions to the streamlit interface.
 """
 import os
-import json 
+import json
+import requests
 import pandas as pd
-import streamlit as st 
+import streamlit as st
+import geopandas as gpd
 
+from pathlib import Path
+from tqdm import tqdm
 from loguru import logger
+from zipfile import ZipFile
 from datetime import datetime, UTC
+from shapely import Point
 
 from src.setup.config import config
-from src.setup.paths import INDEXER_ONE, INDEXER_TWO
+from src.setup.paths import INDEXER_ONE, INDEXER_TWO, GEOGRAPHICAL_DATA
 
+from src.inference_pipeline.inference import InferenceModule
 from src.feature_pipeline.preprocessing import DataProcessor
 from src.feature_pipeline.feature_engineering import ReverseGeocoding
-from src.inference_pipeline.inference import InferenceModule
+
+
+def make_shapefile(scenario: str) -> gpd.GeoDataFrame:
+    """
+    Extract the contents of the downloaded archive to access the shapefile within, and then deliver it as a
+    geo-dataframe.
+
+    Returns:
+        gpd.GeoDataFrame: the contents of the shapefile, rendered as a geo-dataframe.
+    """
+    points = []
+    station_ids = []
+    station_names = []
+    station_details: list[dict] = load_local_geodata(scenario=scenario)
+
+    for detail in tqdm(iterable=station_details, desc="Collecting station details"):
+        points.append(detail["coordinates"])
+        station_ids.append(detail["station_id"])
+        station_names.append(detail["station_name"])
+
+
+    geodata = gpd.GeoDataFrame(
+        geometry=[Point(coordinate) for coordinate in points],
+        data={
+            "station_name": station_names,
+            "station_id": station_ids,
+            "coordinates": points
+        }
+    )
+
+    geodata = geodata.set_crs(epsg=4326)
+    geodata.to_file(GEOGRAPHICAL_DATA / f"{scenario}_shapefile.shp")
+    return geodata
+
+
+class ExternalShapeFile:
+    """
+    Allows us to download shapefiles and load them for later processing.
+    """
+    def __init__(self, map_type: str):
+        """
+        Args:
+            map_type: a string that specifies the type of map whose shapefile we would like.
+        """
+        urls = {
+            "pedestrian": "https://data.cityofchicago.org/api/geospatial/v6kn-gc9b?fourfour=v6kn-gc9b&cacheBust=\
+                            1712775948&date=20240920&accessType=DOWNLOAD&method=export&format=Shapefile",
+
+            "divvy_stations": "https://data.cityofchicago.org/api/geospatial/bbyy-e7gq?fourfour=bbyy-e7gq&cacheBust=\
+                              1726743616&date=20240920&accessType=DOWNLOAD&method=export&format=Shapefile"
+        }
+
+        self.file_names = {
+            "pedestrian": "pedestrian_streets_shapefile.zip",
+            "divvy_stations": "divvy_stations_shapefile.zip"
+        }
+
+        self.map_type = map_type
+        self.url = urls[map_type]
+        self.zipfile_path = GEOGRAPHICAL_DATA / self.file_names[self.map_type]
+
+    def download_archive(self) -> None:
+        """
+        Download the zipfile that contains the shapefile for the given map type.
+
+        Returns:
+            None
+        """
+        logger.info(f"Downloading shapefile for {self.map_type}s")
+        response = requests.get(url=self.url)
+        if response.status_code == 200:
+            open(self.zipfile_path, mode="wb").write(response.content)
+        else:
+            raise Exception(f"The URL for {self.map_type}s is not available")
+
+    def load_data_from_shapefile(self) -> gpd.GeoDataFrame:
+        """
+        Extract the contents of the downloaded archive to access the shapefile within, and then deliver it as a
+        geo-dataframe.
+
+        Returns:
+            gpd.GeoDataFrame: the contents of the shapefile, rendered as a geo-dataframe.
+        """
+        if Path(self.zipfile_path).is_file():
+            logger.success(f"The shapefile for {self.map_type}s is already saved to disk.")
+        else:
+            self.download_archive()
+
+        with ZipFile(self.zipfile_path, mode="r") as zipfile:
+            zipfile.extractall(GEOGRAPHICAL_DATA/self.file_names[:-4])
+
+        return gpd.read_file(filename=self.zipfile_path / f"{self.file_names}[:-4].shp").to_crs("epsg:4326")
 
 
 def rerun_feature_pipeline():
     """
-    This will be a decorator that will be applied to a few functions that will benefit from its functionality.
+    This is a decorator that will be applied to a couple of functions that will benefit from its functionality.
     It provides logic that allows the wrapped function to be run if a certain exception is not raised, and
-    run the full feature pipeline if the exception is raised. Generally, the functions that will use this will
+    the full feature pipeline if the exception is raised. Generally, the functions that will use this will
     depend on the loading of some file that was generated during the preprocessing phase of the feature pipeline.
     Running the feature pipeline will allow for the file in question to be generated if isn't present, and then
     run the wrapped function afterwards.
@@ -46,7 +144,7 @@ def rerun_feature_pipeline():
 
 @st.cache_data
 @rerun_feature_pipeline()
-def load_geodata(scenario: str) -> dict:
+def load_local_geodata(scenario: str) -> list[dict]:
     """
     Load the json file that contains the geographical information for 
     each station.
@@ -60,7 +158,7 @@ def load_geodata(scenario: str) -> dict:
         and the function will then load the generated data.
 
     Returns:
-        dict: the loaded json file as a dictionary
+        list[dict]: the loaded json file as a dictionary
     """
     if len(os.listdir(INDEXER_ONE)) != 0:
         geodata_path = INDEXER_ONE / f"{scenario}_geodata.json"
@@ -75,23 +173,25 @@ def load_geodata(scenario: str) -> dict:
 
 
 @st.cache_data
-def get_ids_and_names(geodata: dict) -> dict[int, str]:
+def get_ids_and_names(local_geodata: dict) -> dict[int, str]:
     """
     Extract the station IDs and names from the dictionary of station details.
 
     Args:
-        geodata (dict): disctionary containing geographical details of each station
+        local_geodata (dict): dictionary containing geographical details of each station
 
     Returns:
         dict[int, str]: station IDs as keys and station names as values
     """
     with st.spinner(text="Accumulating station details..."):
-        ids_and_names = [(station_details["station_id"], station_details["station_name"]) for station_details in geodata]
+        ids_and_names = [
+            (station_details["station_id"], station_details["station_name"]) for station_details in local_geodata
+        ]
         return {station_id: station_name for station_id, station_name in ids_and_names}
 
 
 @rerun_feature_pipeline()
-def load_geojson(scenario: str) -> dict:
+def load_local_geojson(scenario: str) -> dict:
     """
     Load the geojson file that was generated during the feature pipeline. It will be used to 
     generate the points on the map.
@@ -100,10 +200,9 @@ def load_geojson(scenario: str) -> dict:
         scenario (str): "start" or "end"
 
     Raises:
-        FileNotFoundError: raised when said json file cannot be found. In that case, 
-        the feature pipeline will be re-run. As part of this, the file will be created,
-        and the function will then load the generated data.
-
+        FileNotFoundError: raised when said json file cannot be found. In that case, the feature pipeline
+                           will be re-run. As part of this, the file will be created, and the function will
+                           then load the generated data.
     Returns:
         dict: the loaded geojson file.
     """
@@ -137,7 +236,7 @@ def load_geojson(scenario: str) -> dict:
 
 
 @st.cache_data
-def prepare_geodata_df(scenario: str, geojson: dict) -> pd.DataFrame:
+def prepare_df_of_local_geodata(scenario: str, geojson: dict) -> pd.DataFrame:
     """
     Make a dataframe of geographical information out of the geojson file.
 
