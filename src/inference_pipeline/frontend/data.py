@@ -23,7 +23,7 @@ from src.setup.paths import INDEXER_ONE, INDEXER_TWO, GEOGRAPHICAL_DATA
 
 from src.inference_pipeline.inference import InferenceModule
 from src.feature_pipeline.preprocessing import DataProcessor
-from src.feature_pipeline.feature_engineering import ReverseGeocoding
+from src.feature_pipeline.feature_engineering import ReverseGeocoder
 
 
 def make_geodataframes() -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
@@ -236,7 +236,7 @@ def load_local_geojson(scenario: str) -> dict:
                 }
             )
 
-            reverse_geocoding = ReverseGeocoding(scenario=scenario, geodata=loaded_geodata)
+            reverse_geocoding = ReverseGeocoder(scenario=scenario, geodata=loaded_geodata)
             station_names_and_locations = reverse_geocoding.reverse_geocode()
 
             geodata_dict = reverse_geocoding.put_station_names_in_geodata(

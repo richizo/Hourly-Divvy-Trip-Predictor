@@ -1,5 +1,7 @@
 import json
+import numpy as np
 import pandas as pd
+from pathlib import Path
 
 from tqdm import tqdm
 from loguru import logger
@@ -7,10 +9,10 @@ from warnings import simplefilter
 from geopy.geocoders import Nominatim, Photon
 
 from src.setup.config import config
-from src.setup.paths import GEOGRAPHICAL_DATA
+from src.setup.paths import GEOGRAPHICAL_DATA, INDEXER_TWO
 
 
-class GeoCoding:
+class Geocoder:
     """
     The code that makes up what is now this class was created in order to geocode an older version
     of this dataset which did not contain the coordinates of each station. In 2024's data, coordinates are
@@ -67,74 +69,101 @@ class GeoCoding:
 
             return places_and_points
 
-        nominatim_results = _trigger_geocoder(
-            geocoder=Nominatim(user_agent=config.email),
-            place_names=self.place_names
-        )
-        final_places_and_points = _trigger_geocoder(
-            geocoder=Photon(),
-            place_names=[key for key, value in nominatim_results if value == (0, 0)]
-        )
+        nominatim_results = _trigger_geocoder(geocoder=Nominatim(user_agent=config.email), place_names=self.place_names)
+        places_nominatim_couldnt_get = [key for key, value in nominatim_results if value == (0, 0)]
+        final_places_and_points = _trigger_geocoder(geocoder=Photon(), place_names=places_nominatim_couldnt_get)
         return final_places_and_points
 
 
-class ReverseGeocoding:
-    def __init__(self, scenario: str, geodata: pd.DataFrame, simple: bool = True) -> None:
-        self.geodata = geodata
-        self.simple = simple
-        self.scenario = scenario
-        self.coordinates = geodata["coordinates"].values
-        self.station_ids = geodata[f"{scenario}_station_id"].unique()
-
-    def find_points_simply(self) -> dict[int, list[float]]:
-
-        simple_match = {}
-        number_of_rows = self.geodata.shape[0]
-
-        for row in tqdm(range(number_of_rows)):
-            for station_id in self.station_ids:
-                if station_id not in simple_match.keys() and station_id == self.geodata.iloc[row, 0]:
-                    simple_match[station_id] = self.geodata.iloc[row, 1]
-
-        return simple_match
-
-    def reverse_geocode(self, save: bool = True) -> dict[str, list[float]]:
+class ReverseGeocoder:
+    """
+    This class exists to solve the problem of stations that came with no names or IDs despite having coordinates.
+    It allows us to reverse geocode these coordinates in order to provide new names for these locations, and then
+    produce IDs for them. This data can then be incorporated into any existing geodata.
+    """
+    def __int__(self, scenario: str, coordinates: list[list[float]]) -> None:
         """
-        Perform reverse geocoding of each coordinate in the dataframe (avoiding duplicates), and make 
-        a dictionary of coordinates and their station addresses. That dictionary can then be saved, and 
-        is returned.
+        Args:
+            scenario (str): "start" or "end"
+            coordinates (list[list[float]]): a list of coordinates, each of which is itself a list of floating points.
+        Returns:
+            None
+        """
+        self.scenario = scenario
+        self.coordinates = coordinates
+
+    def reverse_geocode(self) -> list[dict[str, list[float] | str]]:
+        """
+        Perform reverse geocoding of each coordinate in the dataframe (avoiding duplicates), and make and return a
+        dictionary of coordinates and their station addresses.
 
         Returns:
-            dict[str, list[float]]: the station IDs obtained from reverse geocoding, and the original
-                                    coordinates.
+            list[dict[str, str | list[float]]: a list of pairings of coordinates and obtained addresses.
         """
-        addresses_and_points = {}
-        geocoder = Photon(user_agent=config.email)
+        encountered_coordinates = []
+        new_geodata: list[dict[str, str | list[float]]] = []
+        primary_geocoder = Nominatim(user_agent=config.email)
+        secondary_geocoder = Photon(user_agent=config.email)
+
+        for coordinate in tqdm(iterable=self.coordinates, desc="Reverse geocoding the coordinates"):
+            if coordinate not in encountered_coordinates:
+                try:
+                    obtained_address = str(primary_geocoder.reverse(query=coordinate, timeout=120))
+                except Exception as error:
+                    logger.error(error)
+                    logger.warning("Reverse geocoding using Nominatim failed. Trying again with Photon...")
+                    try:
+                        obtained_address = str(secondary_geocoder.reverse(query=coordinate, timeout=120))
+                    except Exception as error:
+                        logger.error(error)
+                        logger.warning("Could not reverse geocode with Photon either. This coordinate will be ignored")
+                        continue
+
+                encountered_coordinates.append(coordinate)
+                new_geodata.append(
+                    {
+                        "station_name": obtained_address,
+                        "coordinate": coordinate
+                    }
+                )
+
+        return new_geodata
+
+    @staticmethod
+    def give_ids_to_the_new_names(
+        new_addresses_and_coordinates: list[dict[str, list[float] | str]],
+        saved_geodata:  list[dict[str, list[float] | str]]
+    ):
+        established_ids = []
+        for station_information in tqdm(iterable=saved_geodata, desc="Finding established IDs"):
+            station_id = station_information["station_id"]
+            if station_id not in established_ids:
+                established_ids.append(station_id)
+
+        new_ids = np.arange(
+            start=max(established_ids) + 1,
+            stop=len(established_ids) + len(new_addresses_and_coordinates) + 1
+        )
+
         
-        coordinate_source = self.find_points_simply().values() if self.simple else self.coordinates
-        coordinates = tqdm(iterable=coordinate_source, desc="Reverse geocoding the coordinates")
 
-        for coordinate in coordinates:
-            if coordinate in addresses_and_points.values():
-                addresses_and_points[str(geocoder.reverse(query=coordinate, timeout=120))] = coordinate
-        if save:    
-            with open(GEOGRAPHICAL_DATA/f"{self.scenario}_station_names_and_coordinates.json", mode="w") as file:
-                json.dump(addresses_and_points, file)
+    def put_station_names_in_geodata(self, new_addresses_and_coordinates: dict) -> pd.DataFrame:
+        geodata_path = INDEXER_TWO / f"{self.scenario}_geodata.json"
 
-        return addresses_and_points
+        if Path(geodata_path).is_file():
+            with open(geodata_path, mode="r") as file:
+                saved_geodata = json.load(file)
 
-    def put_station_names_in_geodata(self, station_names_and_coordinates: dict) -> pd.DataFrame:
-        
-        station_names_to_add = []
+            complete_geodata = {}
+            for coordinate in new_addresses_and_coordinates["station_name"]:
+                if coordinate in saved_geodata.values():
+                    complete_geodata
 
-        for coordinate in self.coordinates:  
-            if coordinate in station_names_and_coordinates.values():
-                station_names_to_add.append(station_names_and_coordinates[coordinate])
+                saved_geodata.append()
 
-        return pd.concat(
-                [self.geodata, pd.Series(data=station_names_to_add)]
-            )
 
+        else:
+            logger.error(f"The geodata for {config.displayed_scenario_names[self.scenario]} doesn't exist.")
 
 def add_avg_trips_last_4_weeks(features: pd.DataFrame) -> pd.DataFrame:
     """
@@ -170,8 +199,8 @@ def add_hours_and_days(features: pd.DataFrame, scenario: str) -> pd.DataFrame:
         pd.DataFrame: the data frame with these features included
     """
 
-    # The values in this column change types when uploading to Hopsworks, so this avoids an attribute 
-    # errors during feature engineering.
+    # The values in this column change types when uploading to Hopsworks, so this avoids errors during
+    # feature engineering.
     features[f"{scenario}_hour"] = pd.to_datetime(features[f"{scenario}_hour"], errors="coerce")
 
     times_and_entries = {
@@ -195,7 +224,7 @@ def add_coordinates_to_dataframe(features: pd.DataFrame, scenario: str) -> pd.Da
     the latitudes, and longitudes and places them in appropriately named columns of
     a target dataframe.
     """
-    geodata = GeoCoding(data=features, scenario=scenario)
+    geodata = Geocoder(data=features, scenario=scenario)
     places_and_points = geodata.geocode()
 
     for place in geodata.place_names:
@@ -209,7 +238,7 @@ def add_coordinates_to_dataframe(features: pd.DataFrame, scenario: str) -> pd.Da
     return features
 
 
-def perform_feature_engineering(features: pd.DataFrame, scenario: str, geocode: bool) -> pd.DataFrame:
+def finish_feature_engineering(features: pd.DataFrame, scenario: str, geocode: bool) -> pd.DataFrame:
     """
     Initiate a chain of events that results in the accomplishment of the above feature
     engineering steps.

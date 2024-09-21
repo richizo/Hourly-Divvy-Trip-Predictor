@@ -1,10 +1,6 @@
 process:
 	poetry run python src/feature_pipeline/preprocessing.py 
 
-index:
-	poetry run python src/feature_pipeline/station_indexing.py
-
-
 # Model Training
 train-start-untuned:
 	poetry run python src/training_pipeline/training.py --scenario start --models lasso lightgbm xgboost

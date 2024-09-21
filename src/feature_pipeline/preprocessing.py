@@ -9,7 +9,7 @@ import pandas as pd
 from src.setup.config import config
 from src.feature_pipeline.data_extraction import load_raw_data
 from src.feature_pipeline.station_indexing import RoundingCoordinates, DirectIndexing
-from src.feature_pipeline.feature_engineering import perform_feature_engineering
+from src.feature_pipeline.feature_engineering import finish_feature_engineering
 
 from src.setup.paths import (
     CLEANED_DATA, TRAINING_DATA, TIME_SERIES_DATA, INDEXER_TWO, INFERENCE_DATA, make_fundamental_paths
@@ -336,7 +336,7 @@ class DataProcessor:
                     logger.warning("Custom station indexer required: NOT tying new IDs to unique coordinates")
         
                     indexer = DirectIndexing(scenario=start_or_end, data=cleaned_data)
-                    interim_data = indexer.execute(delete_leftover_rows=True)
+                    interim_data = indexer.execute(delete_leftover_rows=False)
                     interim_dataframes.append(interim_data)
                     return interim_data
 
@@ -523,7 +523,7 @@ class DataProcessor:
         features = features.reset_index(drop=True)
         targets = targets.reset_index(drop=True)
 
-        engineered_features = perform_feature_engineering(features=features, scenario=scenario, geocode=geocode)
+        engineered_features = finish_feature_engineering(features=features, scenario=scenario, geocode=geocode)
         training_data = pd.concat([engineered_features, targets["trips_next_hour"]], axis=1)
 
         logger.success("Saving the data so we (hopefully) won't have to do that again...")

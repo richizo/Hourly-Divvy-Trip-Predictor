@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from src.setup.paths import INDEXER_ONE, INDEXER_TWO, CLEANED_DATA, GEOGRAPHICAL_DATA
-from src.feature_pipeline.feature_engineering import ReverseGeocoding
+from src.feature_pipeline.feature_engineering import ReverseGeocoder
 
 
 class RoundingCoordinates:
@@ -100,7 +100,7 @@ class RoundingCoordinates:
         unique_coordinates = self.data[f"rounded_{self.scenario}_points"].unique()
         num_unique_points = len(unique_coordinates)
 
-        # Set a seed to ensure reproducibility. 
+        # Set a seed to ensure reproducibility. Come on...what other number would I choose?
         random.seed(69)
 
         # Make a random mixture of the numbers from 0 to len(num_unique_points) 
@@ -121,9 +121,8 @@ class RoundingCoordinates:
 
     def execute(self) -> pd.DataFrame:
         """
-        Take each point, and the ID which corresponds to it (within its dictionary),
-        and put those IDs in the relevant dataframe (in a manner that matches each 
-        point with its ID row-wise).
+        Take each point, and the ID which corresponds to it, and put those IDs in the
+        relevant dataframe (in a manner that matches each point with its ID row-wise).
         """
         self.data = self.data.drop(f"{self.scenario}_station_id", axis=1)
         self.data = self.add_column_of_rounded_coordinates_to_dataframe()
@@ -188,13 +187,15 @@ class DirectIndexing:
         Returns:
             list[int]: the indices of the rows we found.
         """
-        logger.info(f"Searching for rows that{"" if first_time else " still"} have missing station names and IDs...")
+        logger.info(f"Searching for rows that{"" if first_time else " still"} have missing station names and IDs.")
 
         missing_station_ids = data[f"{scenario}_station_id"].isnull()
         missing_station_names = data[f"{scenario}_station_name"].isnull()
 
         mask_of_problem_rows = missing_station_ids & missing_station_names
         problem_rows = data.loc[mask_of_problem_rows, :]
+
+        logger.warning(f"{len(problem_rows)} rows{"" if first_time else " still"} have missing station names and IDS.")
         return problem_rows.index
 
     def find_rows_with_known_ids_and_names(self) -> dict[str, tuple[float]]:
@@ -254,8 +255,8 @@ class DirectIndexing:
             first_time=True
         )
 
-        rounded_problem_lats = np.round(self.data.iloc[problem_rows_indices, self.latitudes_index].values, decimals=6)
-        rounded_problem_lngs = np.round(self.data.iloc[problem_rows_indices, self.longitudes_index].values, decimals=6)
+        rounded_problem_lats = np.round(self.data.iloc[problem_rows_indices, self.latitudes_index].values, decimals=5)
+        rounded_problem_lngs = np.round(self.data.iloc[problem_rows_indices, self.longitudes_index].values, decimals=5)
         rounded_problem_coordinates = list(zip(rounded_problem_lats, rounded_problem_lngs))
 
         # Get a boolean array of the indices of rounded coordinates
@@ -273,7 +274,7 @@ class DirectIndexing:
             int(index): (code, name) for index, code, name in zip(rows_to_be_targeted, found_ids, found_names)
         }
 
-        logger.success(f"Found new names and IDs for {len(problem_rows_and_their_discovered_names_and_ids)} stations.")
+        logger.success(f"Found new names and IDs for {len(problem_rows_and_their_discovered_names_and_ids)} rows.")
         return problem_rows_and_their_discovered_names_and_ids
 
 
@@ -352,7 +353,10 @@ class DirectIndexing:
                     "coordinates": [latitude, longitude],
                     "station_id": station_id,
                     "station_name": station_name    
-                } for latitude, longitude, station_id, station_name in zip(latitudes, longitudes, station_ids, station_names)
+                }
+                for latitude, longitude, station_id, station_name in zip(
+                    latitudes, longitudes, station_ids, station_names
+                )
             ]
 
         with open(file_path, mode="w") as file:
@@ -382,21 +386,16 @@ class DirectIndexing:
         if delete_leftover_rows:
             logger.warning(f"Deleting the {len(leftover_rows)} rows that still have no station IDs and names.")
             self.data = self.data.drop(leftover_rows, axis=0)
-
         else:
-            logger.info("Initiating reverse geocoding procedure for the leftover rows")
-            coordinate_maker = RoundingCoordinates(decimal_places=6, scenario=self.scenario, data=self.data)
-            coordinate_maker.add_column_of_rounded_coordinates_to_dataframe()
+            logger.warning("Initiating reverse geocoding procedure to save the leftover rows from deletion")
+            problem_data = self.data.iloc[leftover_rows, :]    
+            coordinate_maker = RoundingCoordinates(decimal_places=5, scenario=self.scenario, data=problem_data)
+            data_with_coordinates: pd.DataFrame = coordinate_maker.add_column_of_rounded_coordinates_to_dataframe()
+            
+            breakpoint()
 
-            for column in self.data.columns:
-                if column not in [f"{self.scenario}_station_id", f"rounded_{self.scenario}_points"]:
-                    self.data = self.data.drop(column, axis=1)
-
-            self.data.rename(
-                columns={f"rounded_{self.scenario}_points": "coordinates"}
-            )
-
-            reverse_geocoder = ReverseGeocoding(scenario=self.scenario, geodata=self.data)
+            ids_and_rounded_coordinates = data_with_coordinates[f"rounded_{self.scenario}_points"].to_list()
+            reverse_geocoder = ReverseGeocoder(scenario=self.scenario, geodata=self.data)
 
             # TO DO: COMPLETE THIS PROCEDURE
 
@@ -434,13 +433,12 @@ def check_for_duplicates(scenario: str):
         station_id = detail["station_id"]
         station_name = detail["station_name"]
 
-        if f"#{station_id}" not in ids_and_names.keys():
-            ids_and_names[f"#{station_id}"] = station_name
-
-        elif f"#{station_id}" in ids_and_names.keys() and station_name == ids_and_names[f"#{station_id}"]:
+        if station_id not in ids_and_names.keys():
+            ids_and_names[station_id] = station_name
+        elif station_id in ids_and_names.keys() and station_name == ids_and_names[station_id]:
             continue
-        elif f"#{station_id}" in ids_and_names.keys() and station_name != ids_and_names[f"#{station_id}"]:
-            duplicate_ids_and_names[f"#{station_id}"] = station_name
+        elif station_id in ids_and_names.keys() and station_name != ids_and_names[station_id]:
+            duplicate_ids_and_names[station_id] = station_name
 
     return ids_and_names, duplicate_ids_and_names
 
