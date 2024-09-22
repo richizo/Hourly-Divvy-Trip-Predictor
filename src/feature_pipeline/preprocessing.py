@@ -8,11 +8,12 @@ import pandas as pd
 
 from src.setup.config import config
 from src.feature_pipeline.data_extraction import load_raw_data
-from src.feature_pipeline.station_indexing import RoundingCoordinates, DirectIndexing
+from src.feature_pipeline.mixed_indexer import run_mixed_indexer
+from src.feature_pipeline.rounding_indexer import run_rounding_indexer
 from src.feature_pipeline.feature_engineering import finish_feature_engineering
 
 from src.setup.paths import (
-    CLEANED_DATA, TRAINING_DATA, TIME_SERIES_DATA, INDEXER_TWO, INFERENCE_DATA, make_fundamental_paths
+    CLEANED_DATA, TRAINING_DATA, TIME_SERIES_DATA, MIXED_INDEXER, INFERENCE_DATA, make_fundamental_paths
 )
 
 
@@ -147,16 +148,16 @@ class DataProcessor:
         if self.use_custom_station_indexing(scenarios=self.scenarios, data=self.data) \
                 and self.tie_ids_to_unique_coordinates(data=self.data):
 
-            cleaned_data_file_path = CLEANED_DATA / "data_with_newly_indexed_stations (indexer_one).parquet"
+            cleaned_data_file_path = CLEANED_DATA/"data_with_newly_indexed_stations (rounded_indexer).parquet"
 
         elif self.use_custom_station_indexing(scenarios=self.scenarios, data=self.data) \
                 and not self.tie_ids_to_unique_coordinates(data=self.data):
 
-            cleaned_data_file_path = CLEANED_DATA/"data_with_newly_indexed_stations (indexer_two).parquet"
+            cleaned_data_file_path = CLEANED_DATA/"data_with_newly_indexed_stations (mixed_indexer).parquet"
 
         # Will think of a more elegant solution in due course. This only serves my current interests.
         elif self.for_inference:
-            cleaned_data_file_path = CLEANED_DATA / "partially_cleaned_data_for_inference.parquet"
+            cleaned_data_file_path = CLEANED_DATA/"partially_cleaned_data_for_inference.parquet"
 
         else:
             raise NotImplementedError(
@@ -323,9 +324,7 @@ class DataProcessor:
                         self.tie_ids_to_unique_coordinates(data=self.data):
 
                     logger.warning("Custom station indexer required: tying new station IDs to unique coordinates")
-                    indexer = RoundingCoordinates(data=cleaned_data, scenario=start_or_end, decimal_places=4)
-
-                    interim_data = indexer.execute()
+                    interim_data = run_rounding_indexer(data=cleaned_data, scenario=start_or_end, decimal_places=6)
                     interim_dataframes.append(interim_data)
 
                     return interim_data
@@ -334,9 +333,12 @@ class DataProcessor:
                         not self.tie_ids_to_unique_coordinates(data=self.data):
 
                     logger.warning("Custom station indexer required: NOT tying new IDs to unique coordinates")
-        
-                    indexer = DirectIndexing(scenario=start_or_end, data=cleaned_data)
-                    interim_data = indexer.execute(delete_leftover_rows=False)
+                    interim_data = run_mixed_indexer(
+                        scenario=start_or_end,
+                        data=cleaned_data,
+                        delete_leftover_rows=False
+                    )
+
                     interim_dataframes.append(interim_data)
                     return interim_data
 
@@ -374,10 +376,10 @@ class DataProcessor:
                         # The coordinates are in 6 dp, so no rounding is happening here.
                         __investigate_making_new_station_ids(cleaned_data=data, start_or_end=scenario)
 
-                    with open(INDEXER_TWO/"rounded_start_points_and_new_ids.json", mode="r") as file:
+                    with open(MIXED_INDEXER / "rounded_start_points_and_new_ids.json", mode="r") as file:
                         rounded_start_points_and_ids = json.load(file)
 
-                    with open(INDEXER_TWO/"rounded_end_points_and_new_ids.json", mode="r") as file:
+                    with open(MIXED_INDEXER / "rounded_end_points_and_new_ids.json", mode="r") as file:
                         rounded_end_points_and_ids = json.load(file)
 
                     # Get all the coordinates that are common to both dictionaries

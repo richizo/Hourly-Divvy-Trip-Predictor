@@ -19,7 +19,7 @@ from datetime import datetime, UTC
 from shapely import Point
 
 from src.setup.config import config
-from src.setup.paths import INDEXER_ONE, INDEXER_TWO, GEOGRAPHICAL_DATA
+from src.setup.paths import ROUNDING_INDEXER, MIXED_INDEXER, GEOGRAPHICAL_DATA
 
 from src.inference_pipeline.inference import InferenceModule
 from src.feature_pipeline.preprocessing import DataProcessor
@@ -178,10 +178,10 @@ def load_raw_local_geodata(scenario: str) -> list[dict]:
     Returns:
         list[dict]: the loaded json file as a dictionary
     """
-    if len(os.listdir(INDEXER_ONE)) != 0:
-        geodata_path = INDEXER_ONE / f"{scenario}_geodata.json"
-    elif len(os.listdir(INDEXER_TWO)) != 0:
-        geodata_path = INDEXER_TWO / f"{scenario}_geodata.json"
+    if len(os.listdir(ROUNDING_INDEXER)) != 0:
+        geodata_path = ROUNDING_INDEXER / f"{scenario}_geodata.json"
+    elif len(os.listdir(MIXED_INDEXER)) != 0:
+        geodata_path = MIXED_INDEXER / f"{scenario}_geodata.json"
     else:
         raise FileNotFoundError("No geodata has been made. Running the feature pipeline...")
 
@@ -225,8 +225,8 @@ def load_local_geojson(scenario: str) -> dict:
         dict: the loaded geojson file.
     """
     with st.spinner(text="Getting the coordinates of each station..."):
-        if len(os.listdir(INDEXER_ONE)) != 0:
-            with open(INDEXER_ONE / f"rounded_{scenario}_points_and_new_ids.geojson", mode="r") as file:
+        if len(os.listdir(ROUNDING_INDEXER)) != 0:
+            with open(ROUNDING_INDEXER / f"rounded_{scenario}_points_and_new_ids.geojson", mode="r") as file:
                 points_and_ids = json.load(file)
 
             loaded_geodata = pd.DataFrame(
@@ -243,8 +243,8 @@ def load_local_geojson(scenario: str) -> dict:
                 station_names_and_coordinates=station_names_and_locations
             )
         
-        elif len(os.listdir(INDEXER_TWO)) != 0:
-            with open(INDEXER_TWO/f"{scenario}_geojson.geojson", mode="r") as file:
+        elif len(os.listdir(MIXED_INDEXER)) != 0:
+            with open(MIXED_INDEXER / f"{scenario}_geojson.geojson", mode="r") as file:
                 geodata_dict = json.load(file)
         else:
             raise FileNotFoundError("No geojson to used for plotting has been made. Running the feature pipeline...")

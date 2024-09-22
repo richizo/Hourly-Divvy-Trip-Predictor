@@ -9,8 +9,7 @@ from warnings import simplefilter
 from geopy.geocoders import Nominatim, Photon
 
 from src.setup.config import config
-from src.setup.paths import GEOGRAPHICAL_DATA, INDEXER_TWO
-
+                      
 
 class Geocoder:
     """
@@ -70,8 +69,8 @@ class Geocoder:
             return places_and_points
 
         nominatim_results = _trigger_geocoder(geocoder=Nominatim(user_agent=config.email), place_names=self.place_names)
-        places_nominatim_couldnt_get = [key for key, value in nominatim_results if value == (0, 0)]
-        final_places_and_points = _trigger_geocoder(geocoder=Photon(), place_names=places_nominatim_couldnt_get)
+        places_missed_by_nominatim = [key for key, value in nominatim_results if value == (0, 0)]
+        final_places_and_points = _trigger_geocoder(geocoder=Photon(), place_names=places_missed_by_nominatim)
         return final_places_and_points
 
 
@@ -81,11 +80,12 @@ class ReverseGeocoder:
     It allows us to reverse geocode these coordinates in order to provide new names for these locations, and then
     produce IDs for them. This data can then be incorporated into any existing geodata.
     """
-    def __int__(self, scenario: str, coordinates: list[list[float]]) -> None:
+    def __init__(self, scenario: str, coordinates: list[tuple[float, float]]) -> None:
         """
         Args:
             scenario (str): "start" or "end"
-            coordinates (list[list[float]]): a list of coordinates, each of which is itself a list of floating points.
+            coordinates (list[tuple[float, float]]): a list of coordinates, each of which is itself a list of floating 
+                                                     points.
         Returns:
             None
         """
@@ -134,6 +134,15 @@ class ReverseGeocoder:
         new_addresses_and_coordinates: list[dict[str, list[float] | str]],
         saved_geodata:  list[dict[str, list[float] | str]]
     ):
+        """
+
+        Args:
+            new_addresses_and_coordinates (list[dict[str, list[float]  |  str]]): _description_
+            saved_geodata (list[dict[str, list[float]  |  str]]): _description_
+
+        Returns:
+            _type_: _description_
+        """
         established_ids = []
         for station_information in tqdm(iterable=saved_geodata, desc="Finding established IDs"):
             station_id = station_information["station_id"]
@@ -145,25 +154,29 @@ class ReverseGeocoder:
             stop=len(established_ids) + len(new_addresses_and_coordinates) + 1
         )
 
+        new_id_index = 0
+        for new_information in tqdm(
+            iterable=new_addresses_and_coordinates, 
+            desc="Making IDs for the newly identified stations"
+        ):
+            new_information["station_id"] = new_ids[new_id_index]
+            new_id_index += 1
+
+        return new_addresses_and_coordinates
         
+    def put_new_information_in_geodata(
+        self, 
+        saved_geodata: list[dict[str, list[float] | str]], 
+        new_addresses_and_coordinates: list[dict]
+    ) -> list[dict]:
+  
+        new_addresses_and_coordinates = self.give_ids_to_the_new_names(
+            saved_geodata=saved_geodata,
+            new_addresses_and_coordinates=new_addresses_and_coordinates
+        )
 
-    def put_station_names_in_geodata(self, new_addresses_and_coordinates: dict) -> pd.DataFrame:
-        geodata_path = INDEXER_TWO / f"{self.scenario}_geodata.json"
+        return saved_geodata.extend(new_addresses_and_coordinates)
 
-        if Path(geodata_path).is_file():
-            with open(geodata_path, mode="r") as file:
-                saved_geodata = json.load(file)
-
-            complete_geodata = {}
-            for coordinate in new_addresses_and_coordinates["station_name"]:
-                if coordinate in saved_geodata.values():
-                    complete_geodata
-
-                saved_geodata.append()
-
-
-        else:
-            logger.error(f"The geodata for {config.displayed_scenario_names[self.scenario]} doesn't exist.")
 
 def add_avg_trips_last_4_weeks(features: pd.DataFrame) -> pd.DataFrame:
     """
