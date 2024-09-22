@@ -264,7 +264,7 @@ def run_mixed_indexer(scenario: str, data: pd.DataFrame, delete_leftover_rows: b
     )
 
     is_an_unproblematic_row = np.isin(
-        elements=data_with_replaced_ids_and_names.index, test_elements=leftover_row_indices, invert=True
+        element=data_with_replaced_ids_and_names.index, test_elements=leftover_row_indices, invert=True
     )
 
     unproblematic_data = data_with_replaced_ids_and_names.loc[is_an_unproblematic_row, :]
@@ -288,9 +288,9 @@ def run_mixed_indexer(scenario: str, data: pd.DataFrame, delete_leftover_rows: b
             decimal_places=6
         )
 
-        rounded_coordinates = data_with_rounded_coordinates[f"rounded_{scenario}_coordinates"].values
-        geocoder = ReverseGeocoder(scenario=scenario, coordinates=rounded_coordinates)
-        
+        geocoder = ReverseGeocoder(scenario=scenario, data=data_with_rounded_coordinates)
+        data_with_new_names = geocoder.reverse_geocode_rounded_coordinates()
+
 
         # TO DO: COMPLETE THIS PROCEDURE
   

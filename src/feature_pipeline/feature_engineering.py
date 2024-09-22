@@ -9,6 +9,7 @@ from warnings import simplefilter
 from geopy.geocoders import Nominatim, Photon
 
 from src.setup.config import config
+from src.setup.paths import MIXED_INDEXER
                       
 
 class Geocoder:
@@ -80,7 +81,7 @@ class ReverseGeocoder:
     It allows us to reverse geocode these coordinates in order to provide new names for these locations, and then
     produce IDs for them. This data can then be incorporated into any existing geodata.
     """
-    def __init__(self, scenario: str, coordinates: list[tuple[float, float]]) -> None:
+    def __init__(self, scenario: str, data: pd.DataFrame) -> None:
         """
         Args:
             scenario (str): "start" or "end"
@@ -90,9 +91,9 @@ class ReverseGeocoder:
             None
         """
         self.scenario = scenario
-        self.coordinates = coordinates
+        self.data = data
 
-    def reverse_geocode(self) -> list[dict[str, list[float] | str]]:
+    def reverse_geocode_rounded_coordinates(self) -> list[dict[str, list[float] | str]]:
         """
         Perform reverse geocoding of each coordinate in the dataframe (avoiding duplicates), and make and return a
         dictionary of coordinates and their station addresses.
@@ -100,34 +101,42 @@ class ReverseGeocoder:
         Returns:
             list[dict[str, str | list[float]]: a list of pairings of coordinates and obtained addresses.
         """
-        encountered_coordinates = []
-        new_geodata: list[dict[str, str | list[float]]] = []
+        rounded_coordinates = self.data[f"rounded_{self.scenario}_coordinates"]
+
+        new_station_names_and_coordinates = {}
         primary_geocoder = Nominatim(user_agent=config.email)
         secondary_geocoder = Photon(user_agent=config.email)
 
-        for coordinate in tqdm(iterable=self.coordinates, desc="Reverse geocoding the coordinates"):
-            if coordinate not in encountered_coordinates:
+        for coordinate in tqdm(iterable=rounded_coordinates, desc="Reverse geocoding the coordinates"):
+            if coordinate not in new_station_names_and_coordinates.values():
                 try:
                     obtained_address = str(primary_geocoder.reverse(query=coordinate, timeout=120))
+                    new_station_names_and_coordinates[obtained_address] = coordinate
                 except Exception as error:
                     logger.error(error)
                     logger.warning("Reverse geocoding using Nominatim failed. Trying again with Photon...")
                     try:
                         obtained_address = str(secondary_geocoder.reverse(query=coordinate, timeout=120))
+                        new_station_names_and_coordinates[obtained_address] = coordinate
                     except Exception as error:
                         logger.error(error)
-                        logger.warning("Could not reverse geocode with Photon either. This coordinate will be ignored")
-                        continue
+                        logger.warning(
+                            "Could not reverse geocode with Photon either. A missing value marker will be \
+                            used in place of the station names that could not be found."
+                        )
+                        new_station_names_and_coordinates[pd.NA] = coordinate
 
-                encountered_coordinates.append(coordinate)
-                new_geodata.append(
-                    {
-                        "station_name": obtained_address,
-                        "coordinate": coordinate
-                    }
-                )
+        with open(MIXED_INDEXER/f"{self.scenario}_reverse_geocoding.json", mode="w") as file:
+            json.dump(new_station_names_and_coordinates, file)
 
-        return new_geodata
+        coordinates_and_new_station_names = {
+            coordinate: name for name, coordinate in new_station_names_and_coordinates.items()
+        }
+
+        self.data[f"{self.scenario}_station_name"] = \
+            self.data[f"{self.scenario}_station_name"].fillna(rounded_coordinates.map(coordinates_and_new_station_names))
+        
+        return self.data
 
     @staticmethod
     def give_ids_to_the_new_names(
