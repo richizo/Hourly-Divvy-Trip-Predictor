@@ -8,7 +8,7 @@ import pandas as pd
 
 from src.setup.paths import MIXED_INDEXER, CLEANED_DATA
 from src.feature_pipeline.feature_engineering import ReverseGeocoder
-from src.feature_pipeline.rounding_indexer import add_column_of_rounded_coordinates_to_dataframe
+from src.feature_pipeline.rounding_indexer import add_column_of_rounded_coordinates
 
 
 def find_rows_with_either_missing_ids_or_names(scenario: str, data: pd.DataFrame) -> bool:
@@ -61,7 +61,7 @@ def find_rows_with_missing_ids_and_names(
     mask_of_problem_rows = missing_station_ids & missing_station_names
     problem_data = data.loc[mask_of_problem_rows, :]
 
-    logger.warning(f"{len(problem_data)} rows{"" if first_time else " still"} have missing station names and IDS.")
+    logger.warning(f"{len(problem_data)} rows{"" if first_time else " still"} have missing station names and IDs.")
     return problem_data.index if return_indices else problem_data
 
 
@@ -114,7 +114,7 @@ def match_names_and_ids_by_station_proximity(scenario: str, data: pd.DataFrame) 
     assert not find_rows_with_either_missing_ids_or_names(scenario=scenario, data=data), 'There is now a row which \
     contains a missing station ID or a station name (not both). This will have occurred due to a change in the data'
 
-    logger.info("Starting the matching process...")
+    logger.warning("Starting the matching process...")
     problem_row_indices = find_rows_with_missing_ids_and_names(
         data=data, 
         scenario=scenario, 
@@ -160,7 +160,7 @@ def match_names_and_ids_by_station_proximity(scenario: str, data: pd.DataFrame) 
     }
 
     rows_and_new_names = {
-        int(row): new_name for row, (new_id, new_name) in problem_row_indices.items()
+        int(row): new_name for row, (new_id, new_name) in problem_rows_and_their_discovered_names_and_ids.items()
     }
 
     index = pd.Series(data.index)
@@ -290,25 +290,39 @@ def run_mixed_indexer(scenario: str, data: pd.DataFrame, delete_leftover_rows: b
             first_time=False
         )
 
-        problem_data_with_rounded_coordinates: pd.DataFrame = add_column_of_rounded_coordinates_to_dataframe(
+        problem_data_with_rounded_coordinates: pd.DataFrame = add_column_of_rounded_coordinates(
             scenario=scenario,
             data=remaining_problem_data,
+            drop_original_coordinates=False,
             decimal_places=6  # No rounding. 
         )
 
-        geocoder = ReverseGeocoder(scenario=scenario, data=data_with_rounded_coordinates)
-        problem_data_with_new_names = geocoder.reverse_geocode_rounded_coordinates()
+        geocoder = ReverseGeocoder(scenario=scenario, data=problem_data_with_rounded_coordinates)
+        problem_data_with_new_names = geocoder.reverse_geocode_rounded_coordinates(using_mixed_indexer=True)
 
         all_data = pd.concat(
             [unproblematic_data, problem_data_with_new_names], axis=0
         )
         
-    
+        station_names_and_new_ids = {
+            station_name: new_id for new_id, station_name in enumerate(all_data[f"{scenario}_station_name"].unique())
+        }
 
-        # TO DO: COMPLETE THIS PROCEDURE
-  
+        all_data[f"{scenario}_station_id"] = all_data[f"{scenario}_station_name"].map(station_names_and_new_ids)
 
+        save_geodata(data=all_data, scenario=scenario, for_plotting=False)
+        save_geodata(data=all_data, scenario=scenario, for_plotting=True)
+        
+        all_data = all_data.drop(
+            [f"{scenario}_lat", f"{scenario}_lng", f"{scenario}_station_name"], axis=1
+        )
 
+        breakpoint()
+
+        if save:
+            all_data.to_parquet(path=CLEANED_DATA / f"fully_cleaned_and_indexed_{scenario}_data.parquet")
+
+        return all_data
 
 def check_for_duplicates(scenario: str):
     with open(MIXED_INDEXER / f"{scenario}_geodata.json", mode="r") as file:

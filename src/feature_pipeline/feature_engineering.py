@@ -106,8 +106,8 @@ class ReverseGeocoder:
         Returns:
             None
         """
-        self.scenario = scenario
         self.data = data
+        self.scenario = scenario
 
     def reverse_geocode_rounded_coordinates(self, using_mixed_indexer: bool) -> list[dict[str, list[float] | str]]:
         """
@@ -118,41 +118,48 @@ class ReverseGeocoder:
             list[dict[str, str | list[float]]: a list of pairings of coordinates and obtained addresses.
         """
         save_directory = MIXED_INDEXER if using_mixed_indexer else ROUNDING_INDEXER
-        save_path = save_directory/f"{self.scenario}_reverse_geojson"
+        save_path = save_directory/f"{self.scenario}_reverse_geocoding.json"
         
-        if Path(save_path).is_file():
-            logger.success(
-                "Found data from a previous reverse geocoding operation. Checking for extra coordinates that need work"
-            )
-            with open(save_path, mode="r") as file:
-                new_station_names_and_coordinates = json.load(save_path)
-        else:
+        if not Path(save_path).is_file():
             new_station_names_and_coordinates = {}
-    
+        else:
+            logger.success("Found data from previous reverse geocoding work. Checking for coordinates that need work")
+            with open(save_path, mode="r") as file:
+                new_station_names_and_coordinates = json.load(file)        
+
         primary_geocoder = Nominatim(user_agent=config.email)
         secondary_geocoder = Photon(user_agent=config.email)
-        rounded_coordinates = self.data[f"rounded_{self.scenario}_coordinates"]
+        column_of_rounded_coordinates = self.data[f"rounded_{self.scenario}_coordinates"]
+        rounded_coordinates = column_of_rounded_coordinates.to_list()
 
-        for coordinate in tqdm(iterable=rounded_coordinates, desc="Reverse geocoding coordinates"):
-            if coordinate not in new_station_names_and_coordinates.values():
+        bool_coordinates_not_already_downloaded = np.isin(
+            element=rounded_coordinates, 
+            test_elements=new_station_names_and_coordinates.values(),
+            invert=True
+        )
+        breakpoint()
+        coordinates_not_already_downloaded = rounded_coordinates[np.where(bool_coordinates_not_already_downloaded)[0]]
+
+
+        for coordinate in tqdm(iterable=coordinates_not_already_downloaded, desc="Reverse geocoding coordinates"):
+            try:
+                obtained_address = str(primary_geocoder.reverse(query=coordinate, timeout=120))
+                new_station_names_and_coordinates[obtained_address] = coordinate
+            except Exception as error:
+                logger.error(error)
+                logger.warning("Reverse geocoding using Nominatim failed. Trying again with Photon...")
                 try:
-                    obtained_address = str(primary_geocoder.reverse(query=coordinate, timeout=120))
+                    obtained_address = str(secondary_geocoder.reverse(query=coordinate, timeout=120))
                     new_station_names_and_coordinates[obtained_address] = coordinate
                 except Exception as error:
                     logger.error(error)
-                    logger.warning("Reverse geocoding using Nominatim failed. Trying again with Photon...")
-                    try:
-                        obtained_address = str(secondary_geocoder.reverse(query=coordinate, timeout=120))
-                        new_station_names_and_coordinates[obtained_address] = coordinate
-                    except Exception as error:
-                        logger.error(error)
-                        logger.warning(
-                            "Could not reverse geocode with Photon either. A missing value marker will be \
-                            used in place of the station names that could not be found."
-                        )
+                    logger.warning(
+                        "Could not reverse geocode with Photon either. A missing value marker will be \
+                        used in place of the station names that could not be found."
+                    )
 
-                        # Interestingly, np.nan values can be used as keys, while pd.NA values cannot.
-                        new_station_names_and_coordinates[np.nan] = coordinate  
+                    # Interestingly, np.nan values can be used as keys, while pd.NA values cannot.
+                    new_station_names_and_coordinates[np.nan] = coordinate  
 
         with open(MIXED_INDEXER/f"{self.scenario}_reverse_geocoding.json", mode="w") as file:
             json.dump(new_station_names_and_coordinates, file)
