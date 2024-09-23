@@ -29,7 +29,7 @@ class DataProcessor:
             self.data = None  # Because the data will have been fetched from the feature store instead.
         else:
             loaded_raw_data = list(load_raw_data(year=year))
-            self.data = pd.concat(loaded_raw_data) 
+            self.data = pd.concat(loaded_raw_data, axis=0) 
 
     def use_custom_station_indexing(self, scenarios: list[str], data: pd.DataFrame) -> bool:
         """

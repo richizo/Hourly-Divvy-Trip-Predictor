@@ -9,7 +9,7 @@ from warnings import simplefilter
 from geopy.geocoders import Nominatim, Photon
 
 from src.setup.config import config
-from src.setup.paths import MIXED_INDEXER
+from src.setup.paths import MIXED_INDEXER, ROUNDING_INDEXER
                       
 
 class Geocoder:
@@ -74,6 +74,22 @@ class Geocoder:
         final_places_and_points = _trigger_geocoder(geocoder=Photon(), place_names=places_missed_by_nominatim)
         return final_places_and_points
 
+    def add_latitudes_and_longitudes(self) -> pd.DataFrame:
+        """
+        After forming the dictionary of places and coordinates, this function isolates
+        the latitudes, and longitudes and places them in appropriately named columns of
+        a target dataframe.
+        """
+        places_and_points = self.geocode()
+
+        for place in self.place_names:
+            if place in places_and_points.keys():
+                geodata.latitudes.append(places_and_points[place][0])
+                geodata.longitudes.append(places_and_points[place][0])
+
+        self.data[f"{self.scenario}_latitude"] = pd.Series(geodata.latitudes)
+        self.data[f"{self.scenario}_longitude"] = pd.Series(geodata.longitudes) 
+        return features
 
 class ReverseGeocoder:
     """
@@ -93,7 +109,7 @@ class ReverseGeocoder:
         self.scenario = scenario
         self.data = data
 
-    def reverse_geocode_rounded_coordinates(self) -> list[dict[str, list[float] | str]]:
+    def reverse_geocode_rounded_coordinates(self, using_mixed_indexer: bool) -> list[dict[str, list[float] | str]]:
         """
         Perform reverse geocoding of each coordinate in the dataframe (avoiding duplicates), and make and return a
         dictionary of coordinates and their station addresses.
@@ -101,13 +117,23 @@ class ReverseGeocoder:
         Returns:
             list[dict[str, str | list[float]]: a list of pairings of coordinates and obtained addresses.
         """
-        rounded_coordinates = self.data[f"rounded_{self.scenario}_coordinates"]
-
-        new_station_names_and_coordinates = {}
+        save_directory = MIXED_INDEXER if using_mixed_indexer else ROUNDING_INDEXER
+        save_path = save_directory/f"{self.scenario}_reverse_geojson"
+        
+        if Path(save_path).is_file():
+            logger.success(
+                "Found data from a previous reverse geocoding operation. Checking for extra coordinates that need work"
+            )
+            with open(save_path, mode="r") as file:
+                new_station_names_and_coordinates = json.load(save_path)
+        else:
+            new_station_names_and_coordinates = {}
+    
         primary_geocoder = Nominatim(user_agent=config.email)
         secondary_geocoder = Photon(user_agent=config.email)
+        rounded_coordinates = self.data[f"rounded_{self.scenario}_coordinates"]
 
-        for coordinate in tqdm(iterable=rounded_coordinates, desc="Reverse geocoding the coordinates"):
+        for coordinate in tqdm(iterable=rounded_coordinates, desc="Reverse geocoding coordinates"):
             if coordinate not in new_station_names_and_coordinates.values():
                 try:
                     obtained_address = str(primary_geocoder.reverse(query=coordinate, timeout=120))
@@ -124,13 +150,16 @@ class ReverseGeocoder:
                             "Could not reverse geocode with Photon either. A missing value marker will be \
                             used in place of the station names that could not be found."
                         )
-                        new_station_names_and_coordinates[pd.NA] = coordinate
+
+                        # Interestingly, np.nan values can be used as keys, while pd.NA values cannot.
+                        new_station_names_and_coordinates[np.nan] = coordinate  
 
         with open(MIXED_INDEXER/f"{self.scenario}_reverse_geocoding.json", mode="w") as file:
             json.dump(new_station_names_and_coordinates, file)
 
+        # We don't want the full geographical address, so we'll extract everything before the word Chicago
         coordinates_and_new_station_names = {
-            coordinate: name for name, coordinate in new_station_names_and_coordinates.items()
+            coordinate: name.split(", Chicago")[0] for name, coordinate in new_station_names_and_coordinates.items()
         }
 
         self.data[f"{self.scenario}_station_name"] = \
@@ -240,26 +269,6 @@ def add_hours_and_days(features: pd.DataFrame, scenario: str) -> pd.DataFrame:
     return features.drop(f"{scenario}_hour", axis=1)
 
 
-def add_coordinates_to_dataframe(features: pd.DataFrame, scenario: str) -> pd.DataFrame:
-    """
-    After forming the dictionary of places and coordinates, this function isolates
-    the latitudes, and longitudes and places them in appropriately named columns of
-    a target dataframe.
-    """
-    geodata = Geocoder(data=features, scenario=scenario)
-    places_and_points = geodata.geocode()
-
-    for place in geodata.place_names:
-        if place in places_and_points.keys():
-            geodata.latitudes.append(places_and_points[place][0])
-            geodata.longitudes.append(places_and_points[place][0])
-
-    features[f"{scenario}_latitude"] = pd.Series(geodata.latitudes)
-    features[f"{scenario}_longitude"] = pd.Series(geodata.longitudes)
-
-    return features
-
-
 def finish_feature_engineering(features: pd.DataFrame, scenario: str, geocode: bool) -> pd.DataFrame:
     """
     Initiate a chain of events that results in the accomplishment of the above feature
@@ -268,7 +277,8 @@ def finish_feature_engineering(features: pd.DataFrame, scenario: str, geocode: b
     Args:
         features: the features of our dataset
         scenario: whether we are looking at the starts or the ends of trips (enter "start" or "end")
-        geocode: whether we want to initiate the geocoding procedures.
+        geocode: whether we want to initiate the geocoding procedures. This is only necessary if the
+                 latitudes and longitudes have not already been provided.
 
     Returns:
         pd.DataFrame: a dataframe containing the pre-existing features as well as the new ones.
@@ -282,5 +292,6 @@ def finish_feature_engineering(features: pd.DataFrame, scenario: str, geocode: b
            final_features["average_trips_last_4_weeks"].isna().sum() == 0
 
     if geocode:
-        final_features = add_coordinates_to_dataframe(features=features, scenario=scenario)
+        geocoder = Geocoder(data=final_features, scenario=scenario)
+        final_features = geocoder.add_latitudes_and_longitudes()
     return final_features

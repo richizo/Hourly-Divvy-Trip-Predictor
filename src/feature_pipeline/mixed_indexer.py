@@ -105,9 +105,11 @@ def match_names_and_ids_by_station_proximity(scenario: str, data: pd.DataFrame) 
     it can't be one or the other), then the row of the target coordinate will be associated with the ID and station
     name of the coordinate we found.
 
+    Following this, we take the indices of the rows whose associated IDs and names were just discovered, and fill
+    the missing station names and IDs in these rows with their new values.
+
     Returns:
-        dict[int, tuple[str|int, str]]: key, value pairs of row indices and their newly discovered station IDs
-                                        and names
+        pd.DataFrame: the dataset after filling of the empty IDs and names with those that were discovered.
     """
     assert not find_rows_with_either_missing_ids_or_names(scenario=scenario, data=data), 'There is now a row which \
     contains a missing station ID or a station name (not both). This will have occurred due to a change in the data'
@@ -152,31 +154,13 @@ def match_names_and_ids_by_station_proximity(scenario: str, data: pd.DataFrame) 
     }
 
     logger.success(f"Found new names and IDs for {len(problem_rows_and_their_discovered_names_and_ids)} rows.")
-    return problem_rows_and_their_discovered_names_and_ids
-
-
-def replace_missing_station_names_and_ids(scenario: str, data: pd.DataFrame) -> pd.DataFrame:
-    """
-    Take the row indices, as well as the associated IDs and names that were discovered using the matching 
-    procedure. Then replace the missing station names and IDs in these rows of the dataframe with those 
-    that were discovered.
-
-    Args:
-        scenario (str): "start" or "end"
-        data (pd.DataFrame): the data to search
-
-    Returns:
-        pd.DataFrame: the dataset following the replacement of the empty IDs and names with those that 
-                      were discovered.
-    """
-    rows_with_new_names_and_ids = match_names_and_ids_by_station_proximity(scenario=scenario, data=data)
 
     rows_and_new_ids = {
-        int(row): new_id for row, (new_id, new_name) in rows_with_new_names_and_ids.items()
+        int(row): new_id for row, (new_id, new_name) in problem_rows_and_their_discovered_names_and_ids.items()
     }
 
     rows_and_new_names = {
-        int(row): new_name for row, (new_id, new_name) in rows_with_new_names_and_ids.items()
+        int(row): new_name for row, (new_id, new_name) in problem_row_indices.items()
     }
 
     index = pd.Series(data.index)
@@ -185,7 +169,6 @@ def replace_missing_station_names_and_ids(scenario: str, data: pd.DataFrame) -> 
     data[f"{scenario}_station_name"] = data[f"{scenario}_station_name"].fillna(index.map(rows_and_new_names))
 
     return data
-
 
 def save_geodata(data: pd.DataFrame, scenario: str, for_plotting: bool) -> None:
     """
@@ -254,7 +237,7 @@ def run_mixed_indexer(scenario: str, data: pd.DataFrame, delete_leftover_rows: b
         pd.DataFrame: the data, but with all the station IDs re-indexed
     """
     logger.info("Initiating reindexing procedure for the station IDs...")
-    data_with_replaced_ids_and_names = replace_missing_station_names_and_ids(scenario=scenario, data=data) 
+    data_with_replaced_ids_and_names = match_names_and_ids_by_station_proximity(scenario=scenario, data=data)
 
     leftover_row_indices: list[int] = find_rows_with_missing_ids_and_names(
         scenario=scenario,
@@ -271,6 +254,31 @@ def run_mixed_indexer(scenario: str, data: pd.DataFrame, delete_leftover_rows: b
 
     if delete_leftover_rows:
         logger.warning(f"Discarding the {len(leftover_row_indices)} rows that still have no station IDs and names.")
+        logger.info("Providing new indices to each station in the rest of the data")
+
+        station_id_index = unproblematic_data.columns.get_loc(f"{scenario}_station_id")
+        station_ids = unproblematic_data.iloc[:, station_id_index]
+        unique_old_ids = station_ids.unique()
+        
+        # Use the indices of this enumeration as the new station IDs
+        old_and_new_ids = {old_id: index for index, old_id in enumerate(unique_old_ids)}
+        data.iloc[:, station_id_index] = station_ids.map(old_and_new_ids)
+        unproblematic_data = data.reset_index(drop=True)
+
+        for column in unproblematic_data.select_dtypes(include=["datetime64[ns]"]):
+            unproblematic_data[column] = unproblematic_data[column].astype(str)
+
+        save_geodata(data=unproblematic_data, scenario=scenario, for_plotting=False)
+        save_geodata(data=unproblematic_data, scenario=scenario, for_plotting=True)
+
+        unproblematic_data = unproblematic_data.drop(
+            columns=[f"{scenario}_lat", f"{scenario}_lng", f"{scenario}_station_name"]
+        )
+
+        if save:
+            unproblematic_data.to_parquet(path=CLEANED_DATA / f"fully_cleaned_and_indexed_{scenario}_data.parquet")
+
+        return unproblematic_data
 
     else:
         logger.warning("Initiating a reverse geocoding procedure to save the leftover rows from deletion")
@@ -282,41 +290,24 @@ def run_mixed_indexer(scenario: str, data: pd.DataFrame, delete_leftover_rows: b
             first_time=False
         )
 
-        data_with_rounded_coordinates: pd.DataFrame = add_column_of_rounded_coordinates_to_dataframe(
+        problem_data_with_rounded_coordinates: pd.DataFrame = add_column_of_rounded_coordinates_to_dataframe(
             scenario=scenario,
             data=remaining_problem_data,
-            decimal_places=6
+            decimal_places=6  # No rounding. 
         )
 
         geocoder = ReverseGeocoder(scenario=scenario, data=data_with_rounded_coordinates)
-        data_with_new_names = geocoder.reverse_geocode_rounded_coordinates()
+        problem_data_with_new_names = geocoder.reverse_geocode_rounded_coordinates()
 
+        all_data = pd.concat(
+            [unproblematic_data, problem_data_with_new_names], axis=0
+        )
+        
+    
 
         # TO DO: COMPLETE THIS PROCEDURE
   
-    station_id_index = unproblematic_data.columns.get_loc(f"{scenario}_station_id")
-    station_ids = unproblematic_data.iloc[:, station_id_index]
-    unique_old_ids = station_ids.unique()
-    
-    # Use the indices of this enumeration as the new station IDs
-    old_and_new_ids = {old_id: index for index, old_id in enumerate(unique_old_ids)}
-    data.iloc[:, station_id_index] = station_ids.map(old_and_new_ids)
-    unproblematic_data = data.reset_index(drop=True)
 
-    for column in unproblematic_data.select_dtypes(include=["datetime64[ns]"]):
-        unproblematic_data[column] = unproblematic_data[column].astype(str)
-
-    save_geodata(data=unproblematic_data, scenario=scenario, for_plotting=False)
-    save_geodata(data=unproblematic_data, scenario=scenario, for_plotting=True)
-
-    unproblematic_data = unproblematic_data.drop(
-        columns=[f"{scenario}_lat", f"{scenario}_lng", f"{scenario}_station_name"]
-    )
-
-    if save:
-        unproblematic_data.to_parquet(path=CLEANED_DATA / f"fully_cleaned_and_indexed_{scenario}_data.parquet")
-
-    return unproblematic_data
 
 
 def check_for_duplicates(scenario: str):

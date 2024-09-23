@@ -117,7 +117,7 @@ def get_dataframe_from_folder(file_name: str) -> pd.DataFrame:
     """
     data = pd.DataFrame()
     data_one_month = pd.read_csv(RAW_DATA_DIR/f"{file_name}/{file_name}.csv")
-    data = pd.concat([data, data_one_month])
+    data = pd.concat([data, data_one_month], axis=0)
     return data
 
 

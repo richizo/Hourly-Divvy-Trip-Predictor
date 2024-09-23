@@ -14,24 +14,25 @@ from loguru import logger
 from src.setup.paths import ROUNDING_INDEXER
 
 
-def add_column_of_rounded_coordinates_to_dataframe(
+def add_column_of_rounded_coordinates(
     scenario: str,
     data: pd.DataFrame,
-    decimal_places: int | None
+    decimal_places: int | None,
+    drop_original_coordinates: bool
 ) -> pd.DataFrame:
     """
-    This function takes the latitude and longitude columns of a dataframe, rounds them down to a 
-    specified number of decimal places, and makes a column which consists of points containing the 
-    rounded latitudes and longitudes.
+    This function takes the latitude and longitude columns of a dataframe, rounds them down to a specified 
+    number of decimal places, and makes a column which consists of points containing the rounded latitudes 
+    and longitudes.
 
     Args:
-    decimal_places (int): the number of decimal places to which we will round the coordinates.
-                        The original coordinates are written in 6 decimal places. For each
-                        decimal place that is lost, the accuracy of the coordinates degrades
-                        by a factor of 10 meters
+    decimal_places (int): the number of decimal places to which we will round the coordinates. The original 
+                        coordinates are written in 6 decimal places. For each decimal place that is lost, 
+                        the accuracy of the coordinates degrades by a factor of 10 meters.
+                        
 
     scenario (str): whether we are looking at departures ("start") or arrivals ("end").
-
+    drop_original_coordinates (bool): whether to delete the columns that contain the original coordinates
     """
     logger.info(f"Approximating the coordinates of the location where each trip {scenario}s...")
     rounded_latitudes = np.round(data[f"{scenario}_lat"], decimals=decimal_places)
@@ -45,10 +46,10 @@ def add_column_of_rounded_coordinates_to_dataframe(
         allow_duplicates=False
     )
 
-    # Remove the original latitudes and longitudes
-    data = data.drop(
-        columns=[f"{scenario}_lat", f"{scenario}_lng"]
-    )
+    if drop_original_coordinates:
+        data = data.drop(
+            columns=[f"{scenario}_lat", f"{scenario}_lng"]
+        )
     
     return data
 
@@ -90,7 +91,13 @@ def run_rounding_indexer(scenario: str, data: pd.DataFrame, decimal_places: int)
     relevant dataframe (in a manner that matches each point with its ID row-wise).
     """
     data = data.drop(f"{scenario}_station_id", axis=1)
-    data = add_column_of_rounded_coordinates_to_dataframe(data=data, scenario=scenario, decimal_places=decimal_places)
+    data = add_column_of_rounded_coordinates(   
+        data=data, 
+        scenario=scenario, 
+        decimal_places=decimal_places, 
+        drop_original_coordinates=True
+    )
+
     points_and_ids = make_station_ids_from_unique_coordinates(scenario=scenario, data=data)
 
     new_station_ids = [
