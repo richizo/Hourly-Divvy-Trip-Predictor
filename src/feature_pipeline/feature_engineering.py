@@ -149,18 +149,22 @@ class ReverseGeocoder:
         )
 
         if True in is_coordinate_already_present:
-            for coordinate in tqdm(iterable=column_of_rounded_coordinates.loc[is_coordinate_already_present], desc="Reverse geocoding"):
-                    try:
-                        nominatim_try = str(nominatim.reverse(query=coordinate, timeout=120))
-                        if nominatim_try == "None":
-                            logger.warning(f"Nominatim was unable to process {coordinate}. Trying with Photon")
-                            photon_try = str(photon.reverse(query=coordinate, timeout=120))
-                            new_station_names_and_coordinates[photon_try] = coordinate
-                        else:                
-                            new_station_names_and_coordinates[nominatim_try] = coordinate
-                    except GeocoderUnavailable as error:
-                        logger.error(error)
-                        break
+            logger.success("")
+            for coordinate in tqdm(
+                iterable=column_of_rounded_coordinates.loc[is_coordinate_already_present], 
+                desc="Reverse geocoding..."
+            ):
+                try:
+                    nominatim_try = str(nominatim.reverse(query=coordinate, timeout=120))
+                    if nominatim_try == "None":
+                        logger.warning(f"Nominatim was unable to process {coordinate}. Trying with Photon")
+                        photon_try = str(photon.reverse(query=coordinate, timeout=120))
+                        new_station_names_and_coordinates[photon_try] = coordinate
+                    else:                
+                        new_station_names_and_coordinates[nominatim_try] = coordinate
+                except GeocoderUnavailable as error:
+                    logger.error(error)
+                    break
 
             if len(new_station_names_and_coordinates) > initial_number_of_new_names_and_coordinates:
                 with open(MIXED_INDEXER/f"{self.scenario}_reverse_geocoding.json", mode="w") as file:
@@ -178,8 +182,13 @@ class ReverseGeocoder:
         # For as yet unknown reasons, some coordinates may remain unnamed
         last_coordinates_with_unknown_names = {}
         data_associated_with_unknown_names = self.data[self.data[f"{self.scenario}_station_name"].isna()]
-        
-        if len(data_associated_with_unknown_names) != 0:
+        number_of_unknown_names = len(data_associated_with_unknown_names)
+
+        if number_of_unknown_names != 0:
+            logger.warning(
+                f"There are still {number_of_unknown_names} coordinates whose addresses haven't been found. Trying again with Nominatim"
+            )
+
             for coordinate in set(
                 data_associated_with_unknown_names[f"rounded_{self.scenario}_coordinates"].to_list()
             ): 
@@ -188,6 +197,12 @@ class ReverseGeocoder:
             self.data[f"{self.scenario}_station_name"] = self.data[f"{self.scenario}_station_name"].fillna(
                 column_of_rounded_coordinates.map(last_coordinates_with_unknown_names)
             )
+
+            number_of_coordinates_still_missing = self.data[f"{self.scenario}_station_name"].isna().sum()
+
+            if number_of_coordinates_still_missing != 0:
+                logger.warning(f"There are still {number_of_coordinates_still_missing} unnamed coordinates. The rows that contain them will be discarded")
+                self.data = self.data.dropna(axis=0)
 
         return self.data
 
