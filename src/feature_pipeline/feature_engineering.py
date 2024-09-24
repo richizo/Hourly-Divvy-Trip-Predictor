@@ -1,3 +1,9 @@
+"""
+Contains a number of functions that perform a number of feature engineering tasks. This includes
+geocoding and reverse geocoding functionalities, as well as the inclusion of average values
+and new temporal features.
+"""
+
 import json
 import numpy as np
 import pandas as pd
@@ -41,12 +47,10 @@ class Geocoder:
         many of these locations. Those that are unsuccessfully geocoded will again
         have (0,0) as their corresponding coordinates.
 
-
         Returns:
             dict: a dictionary which contains key value pairs of place names and
                   coordinates
         """
-
         def _trigger_geocoder(geocoder: Nominatim | Photon, place_names: list) -> dict:
             """
 
@@ -111,7 +115,7 @@ class ReverseGeocoder:
         self.scenario = scenario
 
     @staticmethod
-    def shorten_place_name(name: str) -> str:
+    def _shorten_place_name(name: str) -> str:
         if "Lake County" in name:
             return name.split(", Lake County")[0]
         elif "Cook County" in name:
@@ -137,21 +141,20 @@ class ReverseGeocoder:
             with open(save_path, mode="r") as file:
                 new_station_names_and_coordinates = json.load(file)        
 
-        nominatim = Nominatim(user_agent=config.email)
         photon = Photon(user_agent=config.email)
+        nominatim = Nominatim(user_agent=config.email)
         column_of_rounded_coordinates = self.data[f"rounded_{self.scenario}_coordinates"]
         initial_number_of_new_names_and_coordinates = len(new_station_names_and_coordinates)
 
-        is_coordinate_already_present = np.isin(
+        coordinate_is_already_present = np.isin(
             element=self.data[f"rounded_{self.scenario}_coordinates"].to_list(),
             test_elements=[tuple(point) for point in new_station_names_and_coordinates.values()],
             invert=True
         )
-
-        if True in is_coordinate_already_present:
-            logger.success("")
+        
+        if True in coordinate_is_already_present:
             for coordinate in tqdm(
-                iterable=column_of_rounded_coordinates.loc[is_coordinate_already_present], 
+                iterable=column_of_rounded_coordinates.loc[coordinate_is_already_present], 
                 desc="Reverse geocoding..."
             ):
                 try:
@@ -164,14 +167,9 @@ class ReverseGeocoder:
                         new_station_names_and_coordinates[nominatim_try] = coordinate
                 except GeocoderUnavailable as error:
                     logger.error(error)
-                    break
-
-            if len(new_station_names_and_coordinates) > initial_number_of_new_names_and_coordinates:
-                with open(MIXED_INDEXER/f"{self.scenario}_reverse_geocoding.json", mode="w") as file:
-                    json.dump(new_station_names_and_coordinates, file)
 
         coordinates_and_new_station_names = {
-            tuple(coordinate): self.shorten_place_name(name=name) for name, coordinate in 
+            tuple(coordinate): self._shorten_place_name(name=name) for name, coordinate in 
             new_station_names_and_coordinates.items()
         }
 
@@ -180,29 +178,36 @@ class ReverseGeocoder:
         )
 
         # For as yet unknown reasons, some coordinates may remain unnamed
-        last_coordinates_with_unknown_names = {}
-        data_associated_with_unknown_names = self.data[self.data[f"{self.scenario}_station_name"].isna()]
-        number_of_unknown_names = len(data_associated_with_unknown_names)
+        last_coordinates_and_their_new_names = {}
+        data_associated_with_unknown_names: pd.DataFrame = self.data[self.data[f"{self.scenario}_station_name"].isna()]
+        unique_rounded_coordinates_left = data_associated_with_unknown_names[f"rounded_{self.scenario}_coordinates"].unique()
+        number_of_unknown_names = len(unique_rounded_coordinates_left)
 
         if number_of_unknown_names != 0:
-            logger.warning(
-                f"There are still {number_of_unknown_names} coordinates whose addresses haven't been found. Trying again with Nominatim"
-            )
-
-            for coordinate in set(
-                data_associated_with_unknown_names[f"rounded_{self.scenario}_coordinates"].to_list()
-            ): 
-                last_coordinates_with_unknown_names[tuple(coordinate)] = str(nominatim.reverse(query=coordinate, timeout=120))
-
+            logger.warning(f"{number_of_unknown_names} address{"es" if number_of_unknown_names > 1 else ""} still not found.")
+            for coordinate in tqdm(iterable=unique_rounded_coordinates_left, desc="Trying again with Nominatim"): 
+                last_coordinates_and_their_new_names[tuple(coordinate)] = str(nominatim.reverse(query=coordinate, timeout=120))
+            
+            # Fill the missing station names using the names that were just collected 
             self.data[f"{self.scenario}_station_name"] = self.data[f"{self.scenario}_station_name"].fillna(
-                column_of_rounded_coordinates.map(last_coordinates_with_unknown_names)
+                column_of_rounded_coordinates.map(last_coordinates_and_their_new_names)
             )
+            
+            # Find out how many names we still needed to get
+            number_of_names_still_missing = self.data[f"{self.scenario}_station_name"].isna().sum()
 
-            number_of_coordinates_still_missing = self.data[f"{self.scenario}_station_name"].isna().sum()
-
-            if number_of_coordinates_still_missing != 0:
-                logger.warning(f"There are still {number_of_coordinates_still_missing} unnamed coordinates. The rows that contain them will be discarded")
+            if number_of_names_still_missing != 0:
+                logger.warning(f"Deleting the {number_of_names_still_missing} rows that still contain missing names.")
                 self.data = self.data.dropna(axis=0)
+
+        # Update the main dictionary that contains our coordinates and their names with what we just gathered.``
+        new_station_names_and_coordinates.update(
+            {name: coordinate for coordinate, name in last_coordinates_and_their_new_names.items()}
+        )
+
+        if len(new_station_names_and_coordinates) > initial_number_of_new_names_and_coordinates:
+            with open(MIXED_INDEXER/f"{self.scenario}_reverse_geocoding.json", mode="w") as file:
+                json.dump(new_station_names_and_coordinates, file)
 
         return self.data
 

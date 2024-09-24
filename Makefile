@@ -1,18 +1,19 @@
 process:
 	poetry run python src/feature_pipeline/preprocessing.py 
 
+
 # Model Training
-train-start-untuned:
+train-starts-untuned:
 	poetry run python src/training_pipeline/training.py --scenario start --models lasso lightgbm xgboost
 
-train-start-tuned:
+train-starts-tuned:
 	poetry run python src/training_pipeline/training.py --scenario start --models lasso lightgbm xgboost \
 	--tune_hyperparameters --hyperparameter_trials 5
 
-train-end-untuned:
+train-ends-untuned:
 	poetry run python src/training_pipeline/training.py --scenario end --models lasso lightgbm xgboost
 
-train-end-tuned:
+train-ends-tuned:
 	poetry run python src/training_pipeline/training.py --scenario end --models xgboost lasso lightgbm \
  	--tune_hyperparameters --hyperparameter_trials 5
 

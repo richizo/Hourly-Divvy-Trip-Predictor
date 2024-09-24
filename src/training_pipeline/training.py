@@ -57,9 +57,9 @@ class Trainer:
         
         if Path(data_path).is_file():
             training_data = pd.read_parquet(path=data_path)
-            logger.success("Fetched saved training data.")
+            logger.success(f"Fetched saved training data for {config.displayed_scenario_names[self.scenario].lower()}")
         else:
-            logger.warning("No training data is stored. Creating the dataset will take a long time...")
+            logger.warning("No training data is stored. Creating the dataset will take a while. Watch some One Piece.")
 
             processor = DataProcessor(year=config.year, for_inference=False)
             training_sets = processor.make_training_data(geocode=False)
