@@ -136,12 +136,11 @@ class ExternalShapeFile:
 
 def rerun_feature_pipeline():
     """
-    This is a decorator that will be applied to a couple of functions that will benefit from its functionality.
-    It provides logic that allows the wrapped function to be run if a certain exception is not raised, and
-    the full feature pipeline if the exception is raised. Generally, the functions that will use this will
-    depend on the loading of some file that was generated during the preprocessing phase of the feature pipeline.
-    Running the feature pipeline will allow for the file in question to be generated if isn't present, and then
-    run the wrapped function afterwards.
+    This is a decorator that provides logic which allows the wrapped function to be run if a certain exception 
+    is not raised, and the full feature pipeline if the exception is raised. Generally, the functions that will 
+    use this will depend on the loading of some file that was generated during the preprocessing phase of the 
+    feature pipeline. Running the feature pipeline will allow for the file in question to be generated if isn't 
+    present, and then run the wrapped function afterwards.
     """
     def decorator(fn: callable):
         def wrapper(*args, **kwargs):

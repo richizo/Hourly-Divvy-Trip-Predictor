@@ -7,6 +7,7 @@ from tqdm import tqdm
 from loguru import logger
 from warnings import simplefilter
 from geopy.geocoders import Nominatim, Photon
+from geopy.exc import GeocoderUnavailable
 
 from src.setup.config import config
 from src.setup.paths import MIXED_INDEXER, ROUNDING_INDEXER
@@ -109,6 +110,15 @@ class ReverseGeocoder:
         self.data = data
         self.scenario = scenario
 
+    @staticmethod
+    def shorten_place_name(name: str) -> str:
+        if "Lake County" in name:
+            return name.split(", Lake County")[0]
+        elif "Cook County" in name:
+            return name.split(", Cook County")[0]
+        else:
+            return name
+
     def reverse_geocode_rounded_coordinates(self, using_mixed_indexer: bool) -> list[dict[str, list[float] | str]]:
         """
         Perform reverse geocoding of each coordinate in the dataframe (avoiding duplicates), and make and return a
@@ -127,51 +137,57 @@ class ReverseGeocoder:
             with open(save_path, mode="r") as file:
                 new_station_names_and_coordinates = json.load(file)        
 
-        primary_geocoder = Nominatim(user_agent=config.email)
-        secondary_geocoder = Photon(user_agent=config.email)
+        nominatim = Nominatim(user_agent=config.email)
+        photon = Photon(user_agent=config.email)
         column_of_rounded_coordinates = self.data[f"rounded_{self.scenario}_coordinates"]
-        rounded_coordinates = column_of_rounded_coordinates.to_list()
+        initial_number_of_new_names_and_coordinates = len(new_station_names_and_coordinates)
 
-        bool_coordinates_not_already_downloaded = np.isin(
-            element=rounded_coordinates, 
-            test_elements=new_station_names_and_coordinates.values(),
+        is_coordinate_already_present = np.isin(
+            element=self.data[f"rounded_{self.scenario}_coordinates"].to_list(),
+            test_elements=[tuple(point) for point in new_station_names_and_coordinates.values()],
             invert=True
         )
-        breakpoint()
-        coordinates_not_already_downloaded = rounded_coordinates[np.where(bool_coordinates_not_already_downloaded)[0]]
 
-
-        for coordinate in tqdm(iterable=coordinates_not_already_downloaded, desc="Reverse geocoding coordinates"):
-            try:
-                obtained_address = str(primary_geocoder.reverse(query=coordinate, timeout=120))
-                new_station_names_and_coordinates[obtained_address] = coordinate
-            except Exception as error:
-                logger.error(error)
-                logger.warning("Reverse geocoding using Nominatim failed. Trying again with Photon...")
+        for coordinate in tqdm(iterable=column_of_rounded_coordinates.loc[is_coordinate_already_present], desc="Reverse geocoding"):
                 try:
-                    obtained_address = str(secondary_geocoder.reverse(query=coordinate, timeout=120))
-                    new_station_names_and_coordinates[obtained_address] = coordinate
-                except Exception as error:
+                    nominatim_try = str(nominatim.reverse(query=coordinate, timeout=120))
+                    if nominatim_try == "None":
+                        logger.warning(f"Nominatim was unable to process {coordinate}. Trying with Photon")
+                        photon_try = str(photon.reverse(query=coordinate, timeout=120))
+                        new_station_names_and_coordinates[photon_try] = coordinate
+                    else:                
+                        new_station_names_and_coordinates[nominatim_try] = coordinate
+                except GeocoderUnavailable as error:
                     logger.error(error)
-                    logger.warning(
-                        "Could not reverse geocode with Photon either. A missing value marker will be \
-                        used in place of the station names that could not be found."
-                    )
+                    break
 
-                    # Interestingly, np.nan values can be used as keys, while pd.NA values cannot.
-                    new_station_names_and_coordinates[np.nan] = coordinate  
+        if len(new_station_names_and_coordinates) > initial_number_of_new_names_and_coordinates:
+            with open(MIXED_INDEXER/f"{self.scenario}_reverse_geocoding.json", mode="w") as file:
+                json.dump(new_station_names_and_coordinates, file)
 
-        with open(MIXED_INDEXER/f"{self.scenario}_reverse_geocoding.json", mode="w") as file:
-            json.dump(new_station_names_and_coordinates, file)
-
-        # We don't want the full geographical address, so we'll extract everything before the word Chicago
         coordinates_and_new_station_names = {
-            coordinate: name.split(", Chicago")[0] for name, coordinate in new_station_names_and_coordinates.items()
+            tuple(coordinate): self.shorten_place_name(name=name) for name, coordinate in 
+            new_station_names_and_coordinates.items()
         }
 
-        self.data[f"{self.scenario}_station_name"] = \
-            self.data[f"{self.scenario}_station_name"].fillna(rounded_coordinates.map(coordinates_and_new_station_names))
+        self.data[f"{self.scenario}_station_name"] = self.data[f"{self.scenario}_station_name"].fillna(
+            column_of_rounded_coordinates.map(coordinates_and_new_station_names)
+        )
+
+        # For as yet unknown reasons, some coordinates may remain unnamed
+        last_coordinates_with_unknown_names = {}
+        data_associated_with_unknown_names = self.data[self.data[f"{self.scenario}_station_name"].isna()]
         
+        if len(data_associated_with_unknown_names) != 0:
+            for coordinate in set(
+                data_associated_with_unknown_names[f"rounded_{self.scenario}_coordinates"].to_list()
+            ): 
+                last_coordinates_with_unknown_names[tuple(coordinate)] = str(nominatim.reverse(query=coordinate, timeout=120))
+
+            self.data[f"{self.scenario}_station_name"] = self.data[f"{self.scenario}_station_name"].fillna(
+                column_of_rounded_coordinates.map(last_coordinates_with_unknown_names)
+            )
+
         return self.data
 
     @staticmethod

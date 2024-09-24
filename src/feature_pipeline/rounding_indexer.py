@@ -37,7 +37,7 @@ def add_column_of_rounded_coordinates(
     logger.info(f"Approximating the coordinates of the location where each trip {scenario}s...")
     rounded_latitudes = np.round(data[f"{scenario}_lat"], decimals=decimal_places)
     rounded_longitudes = np.round(data[f"{scenario}_lng"], decimals=decimal_places)
-    rounded_coordinates = [list(coordinate) for coordinate in zip(rounded_latitudes, rounded_longitudes)]
+    rounded_coordinates = [coordinate for coordinate in zip(rounded_latitudes, rounded_longitudes)]
     
     data.insert(
         loc=data.shape[1],
