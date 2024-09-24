@@ -129,7 +129,7 @@ class ReverseGeocoder:
         """
         save_directory = MIXED_INDEXER if using_mixed_indexer else ROUNDING_INDEXER
         save_path = save_directory/f"{self.scenario}_reverse_geocoding.json"
-        
+
         if not Path(save_path).is_file():
             new_station_names_and_coordinates = {}
         else:
@@ -148,22 +148,23 @@ class ReverseGeocoder:
             invert=True
         )
 
-        for coordinate in tqdm(iterable=column_of_rounded_coordinates.loc[is_coordinate_already_present], desc="Reverse geocoding"):
-                try:
-                    nominatim_try = str(nominatim.reverse(query=coordinate, timeout=120))
-                    if nominatim_try == "None":
-                        logger.warning(f"Nominatim was unable to process {coordinate}. Trying with Photon")
-                        photon_try = str(photon.reverse(query=coordinate, timeout=120))
-                        new_station_names_and_coordinates[photon_try] = coordinate
-                    else:                
-                        new_station_names_and_coordinates[nominatim_try] = coordinate
-                except GeocoderUnavailable as error:
-                    logger.error(error)
-                    break
+        if True in is_coordinate_already_present:
+            for coordinate in tqdm(iterable=column_of_rounded_coordinates.loc[is_coordinate_already_present], desc="Reverse geocoding"):
+                    try:
+                        nominatim_try = str(nominatim.reverse(query=coordinate, timeout=120))
+                        if nominatim_try == "None":
+                            logger.warning(f"Nominatim was unable to process {coordinate}. Trying with Photon")
+                            photon_try = str(photon.reverse(query=coordinate, timeout=120))
+                            new_station_names_and_coordinates[photon_try] = coordinate
+                        else:                
+                            new_station_names_and_coordinates[nominatim_try] = coordinate
+                    except GeocoderUnavailable as error:
+                        logger.error(error)
+                        break
 
-        if len(new_station_names_and_coordinates) > initial_number_of_new_names_and_coordinates:
-            with open(MIXED_INDEXER/f"{self.scenario}_reverse_geocoding.json", mode="w") as file:
-                json.dump(new_station_names_and_coordinates, file)
+            if len(new_station_names_and_coordinates) > initial_number_of_new_names_and_coordinates:
+                with open(MIXED_INDEXER/f"{self.scenario}_reverse_geocoding.json", mode="w") as file:
+                    json.dump(new_station_names_and_coordinates, file)
 
         coordinates_and_new_station_names = {
             tuple(coordinate): self.shorten_place_name(name=name) for name, coordinate in 

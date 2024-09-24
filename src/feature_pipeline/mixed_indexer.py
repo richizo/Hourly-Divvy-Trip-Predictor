@@ -175,7 +175,7 @@ def save_geodata(data: pd.DataFrame, scenario: str, for_plotting: bool) -> None:
     Saves the station ID, mame, and coordinates for use in the frontend
     """
     station_names = data[f"{scenario}_station_name"].values
-    station_ids = data[f"{scenario}_station_id"].values
+    station_ids = [int(id_number) for id_number in data[f"{scenario}_station_id"].values]
     longitudes = data[f"{scenario}_lng"].values
     latitudes = data[f"{scenario}_lat"].values
 
@@ -297,11 +297,18 @@ def run_mixed_indexer(scenario: str, data: pd.DataFrame, delete_leftover_rows: b
             decimal_places=6  # No rounding. 
         )
 
+        unproblematic_data = add_column_of_rounded_coordinates(
+            scenario=scenario,
+            data=unproblematic_data,
+            drop_original_coordinates=False,
+            decimal_places=6
+        )
+
         geocoder = ReverseGeocoder(scenario=scenario, data=problem_data_with_rounded_coordinates)
-        problem_data_with_new_names = geocoder.reverse_geocode_rounded_coordinates(using_mixed_indexer=True)
+        data_with_new_names = geocoder.reverse_geocode_rounded_coordinates(using_mixed_indexer=True)
 
         all_data = pd.concat(
-            [unproblematic_data, problem_data_with_new_names], axis=0
+            [unproblematic_data, data_with_new_names], axis=0
         )
         
         station_names_and_new_ids = {
@@ -316,8 +323,6 @@ def run_mixed_indexer(scenario: str, data: pd.DataFrame, delete_leftover_rows: b
         all_data = all_data.drop(
             [f"{scenario}_lat", f"{scenario}_lng", f"{scenario}_station_name"], axis=1
         )
-
-        breakpoint()
 
         if save:
             all_data.to_parquet(path=CLEANED_DATA / f"fully_cleaned_and_indexed_{scenario}_data.parquet")
