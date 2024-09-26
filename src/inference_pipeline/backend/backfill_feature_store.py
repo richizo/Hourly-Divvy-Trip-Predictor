@@ -2,22 +2,17 @@
 This module contains the code that is used to backfill feature and prediction 
 data.
 """
-import json 
 import pandas as pd
-from pathlib import Path
 from datetime import datetime
 from argparse import ArgumentParser
 
 from loguru import logger
-from hsfs.feature_group import FeatureGroup
-from hsfs.feature_view import FeatureView
 
 from src.setup.config import config
 from src.feature_pipeline.preprocessing import DataProcessor
-from src.inference_pipeline.feature_store_api import FeatureStoreAPI
-from src.inference_pipeline.model_registry_api import ModelRegistry
-from src.inference_pipeline.inference import InferenceModule
-from src.setup.paths import TIME_SERIES_DATA, PARENT_DIR, INFERENCE_DATA
+from src.inference_pipeline.backend.feature_store_api import FeatureStoreAPI
+from src.inference_pipeline.backend.model_registry_api import ModelRegistry
+from src.inference_pipeline.backend.inference import InferenceModule
 
 
 class BackFiller:
@@ -52,7 +47,7 @@ class BackFiller:
 
         processor = DataProcessor(year=config.year, for_inference=False)
         ts_data = processor.make_time_series()[0] if self.scenario == "start" else processor.make_time_series()[1]
-        
+
         ts_data["timestamp"] = pd.to_datetime(ts_data[f"{scenario}_hour"]).astype(int) // 10 ** 6  # Express in ms
 
         logger.info(

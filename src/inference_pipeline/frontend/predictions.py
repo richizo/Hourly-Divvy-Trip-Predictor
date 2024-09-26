@@ -3,29 +3,28 @@ Contains code responsible for fetching predictions from the feature store
 and displaying it in the streamlit interface. 
 """
 import pandas as pd
-from tqdm import tqdm
 import streamlit as st
+from tqdm import tqdm
 from loguru import logger
 from datetime import datetime, timedelta
-from streamlit_extras.colored_header import colored_header
 
 from src.setup.config import config
-from src.inference_pipeline.inference import InferenceModule
 from src.inference_pipeline.frontend.main import ProgressTracker
+from src.inference_pipeline.backend.inference import InferenceModule
 from src.inference_pipeline.frontend.data import load_raw_local_geodata, get_ids_and_names
 
 
 @st.cache_data
 def get_all_predictions(
-        model_name="xgboost",
-        from_hour=config.current_hour - timedelta(hours=1),
-        to_hour=config.current_hour
+    model_name="xgboost",
+    from_hour=config.current_hour - timedelta(hours=1),
+    to_hour=config.current_hour
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Download all the predictions for all the stations from one hour to another
 
     Args:
-        model_name: the name of the model which was trained to produce the predictions we now seek.
+        model_name: the name of the model which was trained to produce the predictions we want. Defaults to xgboost.
         from_hour (datetime, optional): From which hour we want to fetch predictions. Defaults to the previous hour.
         to_hour (datetime, optional): the hour we want predictions for. Defaults to the current hour.
 
@@ -48,8 +47,6 @@ def get_all_predictions(
         prediction_dataframes.append(predictions)
 
     predicted_departures, predicted_arrivals = prediction_dataframes[0], prediction_dataframes[1] 
-    
-    breakpoint()
     return predicted_departures, predicted_arrivals
 
 
@@ -62,9 +59,9 @@ def extract_predictions_for_this_hour(
         include_station_names: bool = True
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Initialise an inference object, and load a dataframe of predictions from its dedicated feature group
-    on the offline feature store. We then fetch the most recent prediction if it is available, or the second
-    most recent (the one from an hour before)
+    Initialise an inference object, and load the dataframes of predictions which we already fetched from their 
+    dedicated feature groups. We then fetch the most recent prediction if it is available, or the second most
+    recent (the one from an hour before).
 
     Args:
         predicted_starts (pd.DataFrame): the dataframe of of all predicted departures for all stations and hours.

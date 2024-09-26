@@ -1,8 +1,8 @@
 """
 This experimental module contains code that:
+ - displays the locations of the various stations on an interactive map. It has been challenging to create an 
+   implementation of this that produces a good experience.
  - loads geospatial data using shapefiles and makes it available for mapping
- - displays the locations of the various stations on an interactive map. It has been challenging to create an
- implementation of this that produces a good experience.
 """
 import numpy as np
 import pandas as pd
@@ -13,33 +13,43 @@ import geopandas as gpd
 from loguru import logger
 
 from src.inference_pipeline.frontend.main import ProgressTracker
+
 from src.inference_pipeline.frontend.data import (
-load_local_geojson, prepare_df_of_local_geodata, make_geodataframes, reconcile_geodata
+    load_local_geojson, prepare_df_of_local_geodata, make_geodataframes, reconcile_geodata
 )
 
 from src.inference_pipeline.frontend.predictions import (
     extract_predictions_for_this_hour, get_all_predictions, get_predictions_per_station
 )
 
-def remove_stations_with_no_predictions(
+
+def restrict_geodataframe_to_stations_with_predictions(
     scenario: str,
-    geo_dataframe: gpd.GeoDataFrame,
-    predictions: pd.DataFrame
+    predictions: pd.DataFrame,
+    geo_dataframe: gpd.GeoDataFrame
 ) -> pd.DataFrame:
+    """
+    
+    Args:
+        scenario (str): _description_
+        geo_dataframe (gpd.GeoDataFrame): _description_
+        predictions (pd.DataFrame): _description_
+
+    Returns:
+        pd.DataFrame: _description_
+    """
 
     stations_we_have_predictions_for = predictions[f"{scenario}_station_names"].unique()
-    external_data_rows_with_predictions = np.isin(
+
+    predictions_are_present = np.isin(
         element=geo_dataframe["station_name"],
         test_elements=stations_we_have_predictions_for
     )
 
-    num_unmapped_stations = len(geo_dataframe) - len(external_data_rows_with_predictions)
     logger.warning(
-        f"{num_unmapped_stations} stations won't be plotted because we currently have no predictions for them"
+        f"{len(geo_dataframe) - len(predictions_are_present)} stations won't be plotted due to a lack of predictions"
     )
-
-    # For plotting reasons, there's no need to keep shapefile data for stations that we don't have predictions for
-    return geo_dataframe.loc[external_data_rows_with_predictions, :]
+    return geo_dataframe.loc[predictions_are_present, :]
 
 
 def pseudocolour(
@@ -71,7 +81,7 @@ def pseudocolour(
 
 def perform_colour_scaling(
     scenario: str,
-    external_geodata: gpd.GeoDataFrame,
+    geo_dataframe: gpd.GeoDataFrame,
     predictions: pd.DataFrame
 ) -> pd.DataFrame:
     """
@@ -80,14 +90,14 @@ def perform_colour_scaling(
 
     Args:
         scenario: "start" or "end"
-        external_geodata: geographical data obtained from the shapefile.
+        geo_dataframe: geographical data obtained from the shapefile.
         predictions: the dataframe of predictions obtained from the feature store.
 
     Returns:
         pd.DataFrame: data consisting of the merged external geodata (from the shapefile) and the predictions from the
                       feature store.
     """
-    merged_data = pd.merge(left=external_geodata, right=predictions, right_on=f"{scenario}_station_name")
+    merged_data = pd.merge(left=geo_dataframe, right=predictions, right_on=f"{scenario}_station_name")
 
     black, green = (0, 0, 0), (0, 255, 0)
     merged_data["colour_scaling"] = merged_data[f"predicted {scenario}s"]
@@ -140,23 +150,52 @@ def draw_map(geodata_and_predictions: pd.DataFrame):
             pickable=True
         )
 
-        tooltip = {"html": "<b>Zone:</b> [{station_name} <br /> <b>Predicted arrivals:</b> {predicted_ends}"}
+        tooltip = {
+            "html": "<b>Zone:</b> [{station_name} <br /> <b>Predicted departures:</b> {predicted_starts} \
+                <b>Predicted arrivals:</b> {predicted_ends}"
+        }
+
+        map = pdk.Deck(
+            layers=[geojson_layer],
+            initial_view_state=initial_view_state,
+            tooltip=tooltip
+        )
+
+        st.pydeck_chart(pydeck_obj=map)
+        
 
 if __name__ != "__main__":
-    #st.set_page_config(layout="wide")
-    tracker = ProgressTracker(n_steps=6)
+    st.set_page_config(layout="wide")
+    tracker = ProgressTracker(n_steps=4)
 
-    with st.spinner(text=f"Fetching predicted arrivals and departures from feature store"):
+    with st.spinner(text="Collecting station information"):
+        start_geodataframe, end_geodataframe = make_geodataframes()
+        tracker.next()
+
+    with st.spinner(text="Fetching predicted arrivals and departures from feature store"):
         predicted_starts, predicted_ends = get_all_predictions()
 
+        predicted_starts = restrict_geodataframe_to_stations_with_predictions(
+            scenario="start", 
+            predictions=predicted_starts,
+            geo_dataframe=start_geodataframe 
+        )
 
+        predicted_ends = restrict_geodataframe_to_stations_with_predictions(
+            scenario="end", 
+            predictions=predicted_ends,
+            geo_dataframe=end_geodataframe
+        )
 
-    geojson = load_local_geojson(scenario="start")
-    tracker.next()  # Keeping the progress bar code outside the execution of these cached functions
+        tracker.next()
+    
+    with st.spinner("Setting up ingredients for the map"):
+        geographical_features_and_predictions = perform_colour_scaling()
+        tracker.next()
 
-    geodata = prepare_df_of_local_geodata(scenario="start", geojson=geojson)
-    tracker.next()
-
+    with st.spinner(text="Generating map of the Chicago area"):
+        draw_map()
+        tracker.next()
 
     st.sidebar.write("✅ Map Drawn")
     tracker.next()

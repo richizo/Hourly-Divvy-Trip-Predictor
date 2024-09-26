@@ -4,30 +4,35 @@ that will be used to deliver the predictions to the streamlit interface.
 """
 import os
 import json
-
-import numpy as np
 import requests
+import numpy as np
 import pandas as pd
 import streamlit as st
-import geopandas as gpd
 
-from pathlib import Path
 from tqdm import tqdm
+from pathlib import Path
+from shapely import Point
 from loguru import logger
 from zipfile import ZipFile
-from datetime import datetime, UTC
-from shapely import Point
+from datetime import datetime
+from geopandas import GeoDataFrame
 
 from src.setup.config import config
 from src.setup.paths import ROUNDING_INDEXER, MIXED_INDEXER, GEOGRAPHICAL_DATA
 
-from src.inference_pipeline.inference import InferenceModule
 from src.feature_pipeline.preprocessing import DataProcessor
+from src.inference_pipeline.backend.inference import InferenceModule
 from src.feature_pipeline.feature_engineering import ReverseGeocoder
 
 
-def make_geodataframes() -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+def make_geodataframes() -> tuple[GeoDataFrame, GeoDataFrame]:
+    """
+    Create dataframes containing the geographical details of each station using both
+    arrival and departure data, and return them
 
+    Returns:
+        tuple[GeoDataFrame, GeoDataFrame]: geodataframes for arrivals and departures
+    """
     geo_dataframes = []
     for scenario in config.displayed_scenario_names.keys():
         points = []
@@ -38,7 +43,7 @@ def make_geodataframes() -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
             points.append(detail["coordinates"])
             station_names.append(detail["station_name"])
 
-        geodata = gpd.GeoDataFrame(
+        raw_geodata = GeoDataFrame(
             geometry=[Point(coordinate) for coordinate in points],
             data={
                 "station_name": station_names,
@@ -46,30 +51,30 @@ def make_geodataframes() -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
             }
         )
 
-        geodata = geodata.set_crs(epsg=4326)
-        geo_dataframes.append(geodata)
+        raw_geodata = raw_geodata.set_crs(epsg=4326)
+        geo_dataframes.append(raw_geodata)
 
-    start_geodata, end_geodata = geo_dataframes[0], geo_dataframes[1]
-    return start_geodata, end_geodata
+    start_geodataframe, end_geodataframe = geo_dataframes[0], geo_dataframes[1]
+    return start_geodataframe, end_geodataframe
 
 
-def reconcile_geodata() -> gpd.GeoDataFrame:
+def reconcile_geodata(start_geodataframe: GeoDataFrame, end_geodataframe: GeoDataFrame) -> GeoDataFrame:
     """
-    Because a single map is to be drawn, I can only use stations that are common to both arrival and departure
-    datasets
+    To avoid redundancy, and provide a consistent experience, we will render a single map. Consequently, I can 
+    only use stations that are common to both arrival and departure datasets. This function finds the stations 
+    common to the
 
     Returns:
 
     """
-    start_geodata, end_geodata = make_geodataframes()
-    larger_data = start_geodata if len(start_geodata) >= len(end_geodata) else end_geodata
-    smaller_data = end_geodata if len(start_geodata) >= len(end_geodata) else start_geodata
+    larger_dataframe = start_geodataframe if len(start_geodataframe) >= len(end_geodataframe) else end_geodataframe
+    smaller_dataframe = end_geodataframe if len(start_geodataframe) >= len(end_geodataframe) else start_geodataframe
 
-    shared_stations_bool = np.isin(element=larger_data["station_name"], test_elements=smaller_data["station_name"])
-    common_data = larger_data.loc[shared_stations_bool, :]
+    shared_stations_bool = np.isin(element=larger_dataframe["station_name"], test_elements=smaller_dataframe["station_name"])
+    common_data = larger_dataframe.loc[shared_stations_bool, :]
 
     logger.warning(
-        f"{len(larger_data) - len(common_data)} stations were discarded because they were not common to both datasets"
+        f"{len(larger_dataframe) - len(common_data)} stations were discarded because they were not common to both datasets"
     )
 
     return common_data
@@ -115,13 +120,13 @@ class ExternalShapeFile:
         else:
             raise Exception(f"The URL for {self.map_type}s is not available")
 
-    def load_data_from_shapefile(self) -> gpd.GeoDataFrame:
+    def load_data_from_shapefile(self) -> GeoDataFrame:
         """
         Extract the contents of the downloaded archive to access the shapefile within, and then deliver it as a
         geo-dataframe.
 
         Returns:
-            gpd.GeoDataFrame: the contents of the shapefile, rendered as a geo-dataframe.
+            GeoDataFrame: the contents of the shapefile, rendered as a geo-dataframe.
         """
         if Path(self.zipfile_path).is_file():
             logger.success(f"The shapefile for {self.map_type}s is already saved to disk.")
@@ -182,17 +187,19 @@ def load_raw_local_geodata(scenario: str) -> list[dict]:
     elif len(os.listdir(MIXED_INDEXER)) != 0:
         geodata_path = MIXED_INDEXER / f"{scenario}_geodata.json"
     else:
-        raise FileNotFoundError("No geodata has been made. Running the feature pipeline...")
+        raise FileNotFoundError("No geographical data has been made. Running the feature pipeline...")
 
     with open(geodata_path, mode="r") as file:
-        geodata = json.load(file)
-    return geodata 
+        raw_geodata = json.load(file)
+        
+    return raw_geodata 
 
 
 @st.cache_data
 def get_ids_and_names(local_geodata: list[dict]) -> dict[int, str]:
     """
-    Extract the station IDs and names from the dictionary of station details.
+    Extract the station IDs and names from the dictionary of station details obtained by loading the 
+    local geodata.
 
     Args:
         local_geodata (list[dict]): list of dictionaries containing the geographical details of each station
@@ -201,9 +208,11 @@ def get_ids_and_names(local_geodata: list[dict]) -> dict[int, str]:
         dict[int, str]: station IDs as keys and station names as values
     """
     with st.spinner(text="Accumulating station details..."):
+
         ids_and_names = [
             (station_details["station_id"], station_details["station_name"]) for station_details in local_geodata
         ]
+        
         return {station_id: station_name for station_id, station_name in ids_and_names}
 
 
@@ -235,7 +244,7 @@ def load_local_geojson(scenario: str) -> dict:
                 }
             )
 
-            reverse_geocoding = ReverseGeocoder(scenario=scenario, geodata=loaded_geodata)
+            reverse_geocoding = ReverseGeocoder(scenario=scenario, raw_geodata=loaded_geodata)
             station_names_and_locations = reverse_geocoding.reverse_geocode()
 
             geodata_dict = reverse_geocoding.put_station_names_in_geodata(
@@ -288,7 +297,7 @@ def prepare_df_of_local_geodata(scenario: str, geojson: dict) -> pd.DataFrame:
             }
         )
 
-        logger.info(f"There are {geodata_df[f"{scenario}_station_id"].unique()} stations in the {scenario} geodata")
+        logger.info(f"There are {geodata_df[f"{scenario}_station_id"].unique()} stations in the {scenario} raw_geodata")
 
     return geodata_df
 

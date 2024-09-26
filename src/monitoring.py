@@ -8,7 +8,7 @@ import pandas as pd
 from datetime import datetime
 
 from src.setup.config import config
-from src.inference_pipeline.feature_store_api import FeatureStoreAPI
+from src.inference_pipeline.backend.feature_store_api import FeatureStoreAPI
 
 
 def load_predictions_and_historical_trips(

@@ -23,8 +23,8 @@ from src.setup.config import FeatureGroupConfig, config
 
 from src.feature_pipeline.preprocessing import DataProcessor
 from src.feature_pipeline.feature_engineering import finish_feature_engineering
-from src.inference_pipeline.feature_store_api import FeatureStoreAPI
-from src.inference_pipeline.model_registry_api import ModelRegistry
+from src.inference_pipeline.backend.feature_store_api import FeatureStoreAPI
+from src.inference_pipeline.backend.model_registry_api import ModelRegistry
 
 
 class InferenceModule:

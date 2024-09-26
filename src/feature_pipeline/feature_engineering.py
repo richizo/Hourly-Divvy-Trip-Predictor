@@ -1,9 +1,8 @@
 """
 Contains a number of functions that perform a number of feature engineering tasks. This includes
-geocoding and reverse geocoding functionalities, as well as the inclusion of average values
-and new temporal features.
+geocoding and reverse geocoding functionalities, as well as the inclusion of average and temporal 
+features.
 """
-
 import json
 import numpy as np
 import pandas as pd

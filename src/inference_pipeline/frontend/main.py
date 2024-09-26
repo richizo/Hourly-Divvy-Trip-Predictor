@@ -29,8 +29,9 @@ pages = st.navigation(
     pages=[
         st.Page(page="intro.py", title="Welcome", icon="🏠"), 
         st.Page(page="predictions.py", title="Predictions", icon="👁️"),
-        st.Page(page="maps.py", title="Map (Experimental)", icon="🗺️")
-        # st.Page(page="monitoring.py", title="Model Performance", icon="📈")
+        st.Page(page="maps.py", title="Map", icon="🗺️"),
+        st.Page(page="plots.py", title="Plots of Trips Over Time", icon="📈"),
+        st.Page(page="monitoring.py", title="Model Performance", icon="📈")
     ]
 )
 
