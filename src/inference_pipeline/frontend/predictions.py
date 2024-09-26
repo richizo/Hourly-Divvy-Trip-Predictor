@@ -43,24 +43,27 @@ def get_all_predictions(
 
         geodata = load_raw_local_geodata(scenario=scenario)
         ids_and_names = get_ids_and_names(local_geodata=geodata)
-        predictions["station_name"] = predictions[f"{scenario}_station_id"].map(ids_and_names)
-        prediction_dataframes.append(predictions)
+        predictions[f"{scenario}_station_name"] = predictions[f"{scenario}_station_id"].map(ids_and_names)
+
+        prediction_dataframes.append(
+            predictions.drop(f"{scenario}_station_id", axis=1)
+        )
 
     predicted_departures, predicted_arrivals = prediction_dataframes[0], prediction_dataframes[1] 
     return predicted_departures, predicted_arrivals
 
 
 @st.cache_data
-def extract_predictions_for_this_hour(
-        predicted_starts: pd.DataFrame,
-        predicted_ends: pd.DataFrame,
-        from_hour: datetime,
-        to_hour: datetime,
-        include_station_names: bool = True
+def get_predictions_for_this_hour(
+    predicted_starts: pd.DataFrame,
+    predicted_ends: pd.DataFrame,
+    from_hour: datetime,
+    to_hour: datetime,
+    include_station_names: bool = True
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Initialise an inference object, and load the dataframes of predictions which we already fetched from their 
-    dedicated feature groups. We then fetch the most recent prediction if it is available, or the second most
+    dedicated feature groups. Then fetch the most recent prediction if it is available, or the second most
     recent (the one from an hour before).
 
     Args:
@@ -72,13 +75,13 @@ def extract_predictions_for_this_hour(
 
     Raises:
         Exception: In the event that the predictions for the current hour, or the previous one cannot be obtained.
-                    This exception suggests that the feature pipeline may not be working properly.
+                   This exception suggests that the feature pipeline may not be working properly.
 
     Returns:
         tuple[pd.DataFrame, pd.DataFrame]: dataframes containing predicted arrivals and departures for this, or
                                            the previous hour.
     """
-    extracted_predictions = []
+    all_predictions_of_interest = []
     scenario_and_predictions = {"start": predicted_starts, "end": predicted_ends}
 
     for scenario in scenario_and_predictions.keys():
@@ -98,14 +101,15 @@ def extract_predictions_for_this_hour(
         if include_station_names:
             target_hour = from_hour if next_hour_ready else to_hour
             logger.info(f"Working to attach the station names to the predictions for {target_hour}")
-            raw_local_geodata = load_raw_local_geodata(scenario=scenario)
-            ids_and_names = get_ids_and_names(geodata=raw_local_geodata)
+            raw_geodata = load_raw_local_geodata(scenario=scenario)
+            ids_and_names = get_ids_and_names(geodata=raw_geodata)
 
             new_column_of_names = []
             station_ids = predictions_for_target_hour[f"{scenario}_station_id"].values
+
             for station_id in tqdm(
-                    iterable=station_ids,
-                    desc="Grabbing the names of all the stations we have predictions for"
+                iterable=station_ids,
+                desc="Grabbing the names of all the stations we have predictions for"
             ):
                 new_column_of_names.append(ids_and_names[station_id])
 
@@ -113,9 +117,10 @@ def extract_predictions_for_this_hour(
                 [predictions_for_target_hour, pd.Series(new_column_of_names)], axis=0
             )
 
-        extracted_predictions.append(predictions_for_target_hour)
-
-    return extracted_predictions[0], extracted_predictions[1]
+        all_predictions_of_interest.append(predictions_for_target_hour)
+    
+    predicted_starts, predicted_ends = all_predictions_of_interest[0], all_predictions_of_interest[1]
+    return predicted_starts, predicted_ends
 
 
 @st.cache_data
@@ -124,7 +129,7 @@ def get_predictions_per_station(scenario: str, predictions: pd.DataFrame) -> dic
     Go through the dataframe of predictions and obtain the prediction associated with each station
     ID. Then get the name of each station, and return a dictionary with names as keys and predictions
     as values.
-z
+
     Args:
         scenario (str): "start" or "end"
         predictions (pd.DataFrame): the dataframe of predictions downloaded from the feature store.

@@ -33,21 +33,25 @@ def make_geodataframes() -> tuple[GeoDataFrame, GeoDataFrame]:
     Returns:
         tuple[GeoDataFrame, GeoDataFrame]: geodataframes for arrivals and departures
     """
-    geo_dataframes = []
+    geo_dataframes: list[GeoDataFrame] = []
     for scenario in config.displayed_scenario_names.keys():
         points = []
         station_names = []
         station_details: list[dict] = load_raw_local_geodata(scenario=scenario)
 
-        for detail in tqdm(iterable=station_details, desc="Collecting station details"):
+        for detail in tqdm(
+            iterable=station_details, 
+            desc=f"Collecting station details for {config.displayed_scenario_names[scenario].lower()}"
+        ):
             points.append(detail["coordinates"])
             station_names.append(detail["station_name"])
+            station_ids.append(detail["station_id"])
 
         raw_geodata = GeoDataFrame(
             geometry=[Point(coordinate) for coordinate in points],
             data={
-                "station_name": station_names,
-                "coordinates": points
+                f"{scenario}_station_name": station_names, 
+                f"{scenario}_coordinates": points
             }
         )
 
@@ -198,8 +202,7 @@ def load_raw_local_geodata(scenario: str) -> list[dict]:
 @st.cache_data
 def get_ids_and_names(local_geodata: list[dict]) -> dict[int, str]:
     """
-    Extract the station IDs and names from the dictionary of station details obtained by loading the 
-    local geodata.
+    Extract the station IDs and names from the dictionary of station details (called the local geodata).
 
     Args:
         local_geodata (list[dict]): list of dictionaries containing the geographical details of each station

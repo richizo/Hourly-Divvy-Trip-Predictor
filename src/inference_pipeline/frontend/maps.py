@@ -8,9 +8,9 @@ import numpy as np
 import pandas as pd
 import pydeck as pdk
 import streamlit as st
-import geopandas as gpd
 
 from loguru import logger
+from geopandas import GeoDataFrame
 
 from src.inference_pipeline.frontend.main import ProgressTracker
 
@@ -80,40 +80,51 @@ def pseudocolour(
 
 
 def perform_colour_scaling(
-    scenario: str,
-    geo_dataframe: gpd.GeoDataFrame,
-    predictions: pd.DataFrame
-) -> pd.DataFrame:
+    geo_dataframes: list[GeoDataFrame],
+    predicted_starts: pd.DataFrame,
+    predicted_ends: pd.DataFrame
+) -> list[GeoDataFrame]:
     """
     Feed each of the predicted arrivals and departures into the pseudocolour function in order to produce the colour
     scaling effect.
 
     Args:
-        scenario: "start" or "end"
-        geo_dataframe: geographical data obtained from the shapefile.
+        geo_dataframes: a list of which will contain the geodataframes for arrivals and departures.
         predictions: the dataframe of predictions obtained from the feature store.
 
     Returns:
-        pd.DataFrame: data consisting of the merged external geodata (from the shapefile) and the predictions from the
-                      feature store.
+        list[GeoDataFrame]: a list of dataframes consisting of the merged external geodata (from the shapefile) and 
+                            the predictions from the feature store.
     """
-    merged_data = pd.merge(left=geo_dataframe, right=predictions, right_on=f"{scenario}_station_name")
-
     black, green = (0, 0, 0), (0, 255, 0)
-    merged_data["colour_scaling"] = merged_data[f"predicted {scenario}s"]
-    max_prediction, min_prediction = merged_data["colour_scaling"].max(), merged_data["colour_scaling"].min()
+    geo_dataframes_merged_with_predictions = []
 
-    merged_data["fill_colour"] = merged_data["colour_scaling"].apply(
-        lambda x: pseudocolour(
-            value=x,
-            min_value=min_prediction,
-            max_value=max_prediction,
-            start_colour=black,
-            stop_colour=green
+    for geo_dataframe in geo_dataframes:
+
+        if "start_station_name" in geo_dataframe.columns:
+            scenario = "start"
+            predictions = predicted_starts
+        elif "end_station_name" in geo_dataframe.columns:
+            scenario = "end"
+            predictions = predicted_ends
+
+        merged_data = pd.merge(left=geo_dataframe, right=predictions, right_on=f"{scenario}_station_name")
+        merged_data["colour_scaling"] = merged_data[f"predicted {scenario}s"]
+        max_prediction, min_prediction = merged_data["colour_scaling"].max(), merged_data["colour_scaling"].min()
+    
+        merged_data["fill_colour"] = merged_data["colour_scaling"].apply(
+            lambda x: pseudocolour(
+                value=x,
+                min_value=min_prediction,
+                max_value=max_prediction,
+                start_colour=black,
+                stop_colour=green
+            )
         )
-    )
 
-    return merged_data
+        geo_dataframes_merged_with_predictions.append(merged_data)
+
+    return geo_dataframes_merged_with_predictions
 
 
 @st.cache_data
@@ -188,9 +199,13 @@ if __name__ != "__main__":
         )
 
         tracker.next()
-    
+     
     with st.spinner("Setting up ingredients for the map"):
-        geographical_features_and_predictions = perform_colour_scaling()
+        geographical_features_and_predictions = perform_colour_scaling(
+            geo_dataframes=[start_geodataframe, end_geodataframe],
+            predicted_starts=predicted_starts,
+            predicted_ends=predicted_ends
+        )
         tracker.next()
 
     with st.spinner(text="Generating map of the Chicago area"):
