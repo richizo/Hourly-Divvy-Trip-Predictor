@@ -44,10 +44,7 @@ def get_all_predictions(
         geodata = load_raw_local_geodata(scenario=scenario)
         ids_and_names = get_ids_and_names(local_geodata=geodata)
         predictions[f"{scenario}_station_name"] = predictions[f"{scenario}_station_id"].map(ids_and_names)
-
-        prediction_dataframes.append(
-            predictions.drop(f"{scenario}_station_id", axis=1)
-        )
+        prediction_dataframes.append(predictions)
 
     predicted_departures, predicted_arrivals = prediction_dataframes[0], prediction_dataframes[1] 
     return predicted_departures, predicted_arrivals

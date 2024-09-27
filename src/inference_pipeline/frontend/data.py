@@ -45,13 +45,12 @@ def make_geodataframes() -> tuple[GeoDataFrame, GeoDataFrame]:
         ):
             points.append(detail["coordinates"])
             station_names.append(detail["station_name"])
-            station_ids.append(detail["station_id"])
 
         raw_geodata = GeoDataFrame(
             geometry=[Point(coordinate) for coordinate in points],
             data={
                 f"{scenario}_station_name": station_names, 
-                f"{scenario}_coordinates": points
+                "coordinates": points
             }
         )
 
