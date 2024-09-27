@@ -25,6 +25,7 @@ from src.inference_pipeline.backend.inference import InferenceModule
 from src.feature_pipeline.feature_engineering import ReverseGeocoder
 
 
+@st.cache_data
 def make_geodataframes() -> tuple[GeoDataFrame, GeoDataFrame]:
     """
     Create dataframes containing the geographical details of each station using both
@@ -50,7 +51,7 @@ def make_geodataframes() -> tuple[GeoDataFrame, GeoDataFrame]:
             geometry=[Point(coordinate) for coordinate in points],
             data={
                 f"{scenario}_station_name": station_names, 
-                "coordinates": points
+                f"{scenario}_coordinates": points
             }
         )
 

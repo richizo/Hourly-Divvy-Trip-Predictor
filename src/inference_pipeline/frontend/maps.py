@@ -10,6 +10,7 @@ import pydeck as pdk
 import streamlit as st
 
 from loguru import logger
+from datetime import timedelta
 from geopandas import GeoDataFrame
 
 from src.setup.config import config 
@@ -24,7 +25,6 @@ from src.inference_pipeline.frontend.predictions import (
 )
 
 
-@st.cache_data
 def restrict_geodataframe_to_stations_with_predictions(
     scenario: str,
     predictions: pd.DataFrame,
@@ -48,9 +48,12 @@ def restrict_geodataframe_to_stations_with_predictions(
         test_elements=stations_we_have_predictions_for
     )
 
+    number_present = [boolean for boolean in predictions_are_present if boolean == True]
+
     logger.warning(
-        f"{len(geo_dataframe) - len(predictions_are_present)} stations won't be plotted due to a lack of predictions"
+        f"{len(geo_dataframe) - len(number_present)} stations won't be plotted due to a lack of predictions"
     )
+
     return geo_dataframe.loc[predictions_are_present, :]
 
 
@@ -80,7 +83,7 @@ def pseudocolour(
         relative_value*(b-a) + a for (a,b) in zip(start_colour, stop_colour)
     )
 
-@st.cache_data
+
 def perform_colour_scaling(
     geo_dataframes: list[GeoDataFrame],
     predicted_starts: pd.DataFrame,
@@ -101,8 +104,11 @@ def perform_colour_scaling(
     black, green = (0, 0, 0), (0, 255, 0)
     geo_dataframes_merged_with_predictions = []
 
+    from src.setup.paths import DATA_DIR
+    
     for geo_dataframe in geo_dataframes:
         scenario = "start" if "start_station_name" in geo_dataframe.columns else "end"
+        
         predictions = predicted_starts if scenario == "start" else predicted_ends
         geo_dataframe = geo_dataframe.rename(columns={f"{scenario}_station_name": "station_name"})
         predictions = predictions.rename(columns={f"{scenario}_station_name": "station_name"})
@@ -113,7 +119,7 @@ def perform_colour_scaling(
         merged_data[f"{scenario}_colour_scaling"] = merged_data[f"predicted_{scenario}s"]
         max_prediction, min_prediction = merged_data[f"{scenario}_colour_scaling"].max(), merged_data[f"{scenario}_colour_scaling"].min()
     
-        merged_data["fill_colour"] = merged_data[f"{scenario}_colour_scaling"].apply(
+        merged_data[f"{scenario}_fill_colour"] = merged_data[f"{scenario}_colour_scaling"].apply(
             lambda x: pseudocolour(
                 value=x,
                 min_value=min_prediction,
@@ -122,6 +128,9 @@ def perform_colour_scaling(
                 stop_colour=green
             )
         )
+
+        print(merged_data)
+        breakpoint()
 
         geo_dataframes_merged_with_predictions.append(merged_data)
     
@@ -134,7 +143,7 @@ def perform_colour_scaling(
 
     return complete_merger
 
-
+@st.cache_data
 @st.cache_resource
 def draw_map(_geodata_and_predictions: pd.DataFrame):
 
@@ -144,6 +153,10 @@ def draw_map(_geodata_and_predictions: pd.DataFrame):
     Args:
         geodata_and_predictions (pd. DataFrame): _description_
     """
+    #print(_geodata_and_predictions.head())
+    #breakpoint()
+
+
     with st.spinner("Building map..."):
 
         initial_view_state = pdk.ViewState(
@@ -193,19 +206,26 @@ if __name__ != "__main__":
         start_geodataframe, end_geodataframe = make_geodataframes()
         tracker.next()
 
-    with st.spinner(text="Fetching predicted arrivals and departures from feature store"):
-        predicted_starts, predicted_ends = get_all_predictions()
+    with st.spinner(text="Fetching all predicted arrivals and departures from feature store"):
+        all_predicted_starts, all_predicted_ends = get_all_predictions()
+
+        predicted_starts_this_hour, predicted_ends_this_hour = get_predictions_for_this_hour(
+            predicted_starts=all_predicted_starts,
+            predicted_ends=all_predicted_ends,
+            from_hour=config.current_hour-timedelta(hours=1),
+            to_hour=config.current_hour
+        )
 
     with st.spinner(text="Looking up the stations that we have predictions for"):
         start_geodataframe = restrict_geodataframe_to_stations_with_predictions(
             scenario="start", 
-            predictions=predicted_starts,
+            predictions=predicted_starts_this_hour,
             geo_dataframe=start_geodataframe 
         )
 
         end_geodataframe = restrict_geodataframe_to_stations_with_predictions(
             scenario="end", 
-            predictions=predicted_ends,
+            predictions=predicted_ends_this_hour,
             geo_dataframe=end_geodataframe
         )
 
@@ -214,13 +234,13 @@ if __name__ != "__main__":
     with st.spinner("Setting up ingredients for the map"):
         geographical_features_and_predictions = perform_colour_scaling(
             geo_dataframes=[start_geodataframe, end_geodataframe],
-            predicted_starts=predicted_starts,
-            predicted_ends=predicted_ends
+            predicted_starts=predicted_starts_this_hour,
+            predicted_ends=predicted_ends_this_hour
         )
         tracker.next()
 
     with st.spinner(text="Generating map of the Chicago area"):
-        draw_map(geodata_and_predictions=geographical_features_and_predictions)
+        draw_map(_geodata_and_predictions=geographical_features_and_predictions)
         tracker.next()
 
     st.sidebar.write("✅ Map Drawn")

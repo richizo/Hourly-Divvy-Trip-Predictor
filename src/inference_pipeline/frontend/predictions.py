@@ -38,7 +38,7 @@ def get_all_predictions(
         predictions: pd.DataFrame = infer.load_predictions_from_store(
             model_name=model_name, 
             from_hour=from_hour, 
-            to_hour=to_hour
+            to_hour=to_hour 
         )
 
         geodata = load_raw_local_geodata(scenario=scenario)
@@ -46,8 +46,8 @@ def get_all_predictions(
         predictions[f"{scenario}_station_name"] = predictions[f"{scenario}_station_id"].map(ids_and_names)
         prediction_dataframes.append(predictions)
 
-    predicted_departures, predicted_arrivals = prediction_dataframes[0], prediction_dataframes[1] 
-    return predicted_departures, predicted_arrivals
+    predicted_starts, predicted_ends = prediction_dataframes[0], prediction_dataframes[1] 
+    return predicted_starts, predicted_ends
 
 
 @st.cache_data
@@ -99,7 +99,7 @@ def get_predictions_for_this_hour(
             target_hour = from_hour if next_hour_ready else to_hour
             logger.info(f"Working to attach the station names to the predictions for {target_hour}")
             raw_geodata = load_raw_local_geodata(scenario=scenario)
-            ids_and_names = get_ids_and_names(geodata=raw_geodata)
+            ids_and_names = get_ids_and_names(local_geodata=raw_geodata)
 
             new_column_of_names = []
             station_ids = predictions_for_target_hour[f"{scenario}_station_id"].values
