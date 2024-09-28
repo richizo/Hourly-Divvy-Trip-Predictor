@@ -129,17 +129,14 @@ def perform_colour_scaling(
             )
         )
 
+        merged_data = merged_data.drop(0, axis=1)  # A empty column called 0 was created at some point
+
         print(merged_data)
         breakpoint()
 
         geo_dataframes_merged_with_predictions.append(merged_data)
     
-    complete_merger = pd.merge(
-        left=geo_dataframes_merged_with_predictions[0], 
-        right=geo_dataframes_merged_with_predictions[1],
-        left_on="station_name",
-        right_on="station_name"
-    )
+    complete_merger = pd.merge(left=geo_dataframes_merged_with_predictions[0],  right=geo_dataframes_merged_with_predictions[1], left_on="station_name", right_on="station_name")
 
     return complete_merger
 

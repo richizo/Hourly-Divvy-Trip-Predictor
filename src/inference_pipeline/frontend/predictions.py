@@ -106,7 +106,7 @@ def get_predictions_for_this_hour(
 
             for station_id in tqdm(
                 iterable=station_ids,
-                desc="Grabbing the names of all the stations we have predictions for"
+                desc=f"Grabbing the stations we can predict {config.displayed_scenario_names[scenario].lower()} for"
             ):
                 new_column_of_names.append(ids_and_names[station_id])
 
