@@ -70,9 +70,9 @@ class InferenceModule:
             geocode: whether to implement geocoding during feature engineering
 
         Returns:
-            pd.DataFrame:
+            pd.DataFrame: time series data 
         """ 
-        fetch_from = target_date - timedelta(days=90)
+        fetch_from = target_date - timedelta(days=40)
 
         feature_view: FeatureView = self.api.get_or_create_feature_view(
             name=f"{self.scenario}_feature_view",
@@ -112,7 +112,7 @@ class InferenceModule:
             ts_data: the time series data that is store on the feature store.
 
         Returns:
-            pd.DataFrame: the dataframe consisting of the features
+            pd.DataFrame: time series data
         """
         processor = DataProcessor(year=config.year, for_inference=True)
 

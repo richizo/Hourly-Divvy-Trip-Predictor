@@ -136,17 +136,21 @@ def perform_colour_scaling(
 
         geo_dataframes_merged_with_predictions.append(merged_data)
     
-    complete_merger = pd.merge(left=geo_dataframes_merged_with_predictions[0],  right=geo_dataframes_merged_with_predictions[1], left_on="station_name", right_on="station_name")
+    complete_merger = pd.merge(
+        left=geo_dataframes_merged_with_predictions[0], 
+        right=geo_dataframes_merged_with_predictions[1], 
+        left_on="station_name", 
+        right_on="station_name"
+    )
 
     return complete_merger
+
 
 @st.cache_data
 @st.cache_resource
 def draw_map(_geodata_and_predictions: pd.DataFrame):
-
-
     """
--
+
     Args:
         geodata_and_predictions (pd. DataFrame): _description_
     """
@@ -212,6 +216,8 @@ if __name__ != "__main__":
             from_hour=config.current_hour-timedelta(hours=1),
             to_hour=config.current_hour
         )
+
+        breakpoint()
 
     with st.spinner(text="Looking up the stations that we have predictions for"):
         start_geodataframe = restrict_geodataframe_to_stations_with_predictions(

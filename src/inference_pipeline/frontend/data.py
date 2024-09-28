@@ -36,27 +36,32 @@ def make_geodataframes() -> tuple[GeoDataFrame, GeoDataFrame]:
     """
     geo_dataframes: list[GeoDataFrame] = []
     for scenario in config.displayed_scenario_names.keys():
-        points = []
+        coordinates = []
         station_names = []
         station_details: list[dict] = load_raw_local_geodata(scenario=scenario)
 
         for detail in tqdm(
             iterable=station_details, 
             desc=f"Collecting station details for {config.displayed_scenario_names[scenario].lower()}"
-        ):
-            points.append(detail["coordinates"])
-            station_names.append(detail["station_name"])
+        ):  
+            coordinate = detail["coordinates"]
+            station_name = detail["station_name"]
 
-        raw_geodata = GeoDataFrame(
-            geometry=[Point(coordinate) for coordinate in points],
+            # ALERT: To prevent duplication of coordinates and names in the geodataframe
+            if coordinate not in coordinates and station_name not in station_names:
+                coordinates.append(coordinate)
+                station_names.append(station_name)
+
+        geo_dataframe = GeoDataFrame(
+            geometry=[Point(coordinate) for coordinate in coordinates],
             data={
                 f"{scenario}_station_name": station_names, 
-                f"{scenario}_coordinates": points
+                f"{scenario}_coordinates": coordinates
             }
         )
 
-        raw_geodata = raw_geodata.set_crs(epsg=4326)
-        geo_dataframes.append(raw_geodata)
+        geo_dataframe = geo_dataframe.set_crs(epsg=4326)
+        geo_dataframes.append(geo_dataframe)
 
     start_geodataframe, end_geodataframe = geo_dataframes[0], geo_dataframes[1]
     return start_geodataframe, end_geodataframe
@@ -194,9 +199,9 @@ def load_raw_local_geodata(scenario: str) -> list[dict]:
         raise FileNotFoundError("No geographical data has been made. Running the feature pipeline...")
 
     with open(geodata_path, mode="r") as file:
-        raw_geodata = json.load(file)
+        geo_dataframe = json.load(file)
         
-    return raw_geodata 
+    return geo_dataframe 
 
 
 @st.cache_data
@@ -223,7 +228,7 @@ def get_ids_and_names(local_geodata: list[dict]) -> dict[int, str]:
 def load_local_geojson(scenario: str) -> dict:
     """
     Load the geojson file that was generated during the feature pipeline. It will be used to 
-    generate the points on the map.
+    generate the coordinates on the map.
 
     Args:
         scenario (str): "start" or "end"
@@ -247,7 +252,7 @@ def load_local_geojson(scenario: str) -> dict:
                 }
             )
 
-            reverse_geocoding = ReverseGeocoder(scenario=scenario, raw_geodata=loaded_geodata)
+            reverse_geocoding = ReverseGeocoder(scenario=scenario, geo_dataframe=loaded_geodata)
             station_names_and_locations = reverse_geocoding.reverse_geocode()
 
             geodata_dict = reverse_geocoding.put_station_names_in_geodata(
@@ -300,7 +305,7 @@ def prepare_df_of_local_geodata(scenario: str, geojson: dict) -> pd.DataFrame:
             }
         )
 
-        logger.info(f"There are {geodata_df[f"{scenario}_station_id"].unique()} stations in the {scenario} raw_geodata")
+        logger.info(f"There are {geodata_df[f"{scenario}_station_id"].unique()} stations in the {scenario} geo_dataframe")
 
     return geodata_df
 

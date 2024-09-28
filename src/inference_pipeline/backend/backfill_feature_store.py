@@ -3,10 +3,9 @@ This module contains the code that is used to backfill feature and prediction
 data.
 """
 import pandas as pd
+from loguru import logger
 from datetime import datetime
 from argparse import ArgumentParser
-
-from loguru import logger
 
 from src.setup.config import config
 from src.feature_pipeline.preprocessing import DataProcessor
@@ -54,7 +53,7 @@ class BackFiller:
             f"There are {len(ts_data[f"{self.scenario}_station_id"].unique())} stations in the time series data for \
             {config.displayed_scenario_names[self.scenario].lower()}"
         )
-        
+        breakpoint()
         #  ts_data = ts_data.drop(f"{scenario}_hour", axis=1)
         feature_group = self.api.setup_feature_group(
             description=f"Hourly time series data for {config.displayed_scenario_names[self.scenario].lower()}",
@@ -100,6 +99,7 @@ class BackFiller:
             logger.error(error)    
 
         predictions_df: pd.DataFrame = inferrer.get_model_predictions(model=model, features=features)
+        predictions_df = predictions_df.drop_duplicates().reset_index(drop=True)
 
         logger.info(
             f"There are {len(predictions_df[f"{self.scenario}_station_id"].unique())} stations in the predictions \
