@@ -103,12 +103,9 @@ def perform_colour_scaling(
     """
     black, green = (0, 0, 0), (0, 255, 0)
     geo_dataframes_merged_with_predictions = []
-
-    from src.setup.paths import DATA_DIR
     
     for geo_dataframe in geo_dataframes:
         scenario = "start" if "start_station_name" in geo_dataframe.columns else "end"
-        
         predictions = predicted_starts if scenario == "start" else predicted_ends
         geo_dataframe = geo_dataframe.rename(columns={f"{scenario}_station_name": "station_name"})
         predictions = predictions.rename(columns={f"{scenario}_station_name": "station_name"})
@@ -129,11 +126,6 @@ def perform_colour_scaling(
             )
         )
 
-        merged_data = merged_data.drop(0, axis=1)  # A empty column called 0 was created at some point
-
-        print(merged_data)
-        breakpoint()
-
         geo_dataframes_merged_with_predictions.append(merged_data)
     
     complete_merger = pd.merge(
@@ -143,6 +135,15 @@ def perform_colour_scaling(
         right_on="station_name"
     )
 
+    complete_merger = complete_merger.drop(
+        ["0_x", "0_y", "geometry_y", "end_coordinates", "start_colour_scaling", "end_colour_scaling"], axis=1
+    )
+
+    complete_merger = complete_merger.rename(
+        columns={"start_coordinates": "coordinates", "geometry_x": "geometry"}
+    )
+
+    complete_merger["coordinates"] = complete_merger["coordinates"].apply(tuple)
     return complete_merger
 
 
@@ -154,10 +155,6 @@ def draw_map(_geodata_and_predictions: pd.DataFrame):
     Args:
         geodata_and_predictions (pd. DataFrame): _description_
     """
-    #print(_geodata_and_predictions.head())
-    #breakpoint()
-
-
     with st.spinner("Building map..."):
 
         initial_view_state = pdk.ViewState(
@@ -170,7 +167,7 @@ def draw_map(_geodata_and_predictions: pd.DataFrame):
         )
 
         geojson_layer = pdk.Layer(
-            data=_geodata_and_predictions,
+            data=_geodata_and_predictions["coordinates"],
             type="GeoJsonLayer",
             opacity=0.25,
             stroked=False,
@@ -196,7 +193,7 @@ def draw_map(_geodata_and_predictions: pd.DataFrame):
             tooltip=tooltip
         )
 
-        st.pydeck_chart(pydeck_obj=map)
+        st.pydeck_chart(map)
         
 
 if __name__ != "__main__":
@@ -217,8 +214,6 @@ if __name__ != "__main__":
             to_hour=config.current_hour
         )
 
-        breakpoint()
-
     with st.spinner(text="Looking up the stations that we have predictions for"):
         start_geodataframe = restrict_geodataframe_to_stations_with_predictions(
             scenario="start", 
@@ -235,15 +230,17 @@ if __name__ != "__main__":
         tracker.next()
      
     with st.spinner("Setting up ingredients for the map"):
-        geographical_features_and_predictions = perform_colour_scaling(
+        data_and_predictions = perform_colour_scaling(
             geo_dataframes=[start_geodataframe, end_geodataframe],
             predicted_starts=predicted_starts_this_hour,
             predicted_ends=predicted_ends_this_hour
         )
+
         tracker.next()
+        breakpoint()
 
     with st.spinner(text="Generating map of the Chicago area"):
-        draw_map(_geodata_and_predictions=geographical_features_and_predictions)
+        draw_map(_geodata_and_predictions=data_and_predictions)
         tracker.next()
 
     st.sidebar.write("✅ Map Drawn")

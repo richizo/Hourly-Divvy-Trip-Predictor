@@ -114,9 +114,7 @@ def get_predictions_for_this_hour(
                 [predictions_for_target_hour, pd.Series(new_column_of_names)], axis=0
             )
 
-            # A column called 0 and a bunch of missing values were introduced which need to be removed. 
-            predictions_for_target_hour = predictions_for_target_hour.loc[predictions_for_target_hour[0].isnull(), :].drop(0, axis=1)
-            # predictions_for_target_hour = predictions_for_target_hour.drop_duplicates()
+            predictions_for_target_hour = predictions_for_target_hour.reset_index(drop=True)
 
         all_predictions_of_interest.append(predictions_for_target_hour)
     
@@ -166,8 +164,6 @@ def deliver_predictions(options_and_colours: dict, user_choice: str):
         scenario = options_and_scenarios[user_choice]
         tracker = ProgressTracker(n_steps=2)
         predictions_df = get_all_predictions(scenario=scenario)
-
-        breakpoint()
 
         if not predictions_df.empty:
             st.sidebar.write(f"✅ Predicted {user_choice} received")

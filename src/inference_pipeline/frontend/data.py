@@ -26,7 +26,7 @@ from src.feature_pipeline.feature_engineering import ReverseGeocoder
 
 
 @st.cache_data
-def make_geodataframes() -> tuple[GeoDataFrame, GeoDataFrame]:
+def     make_geodataframes() -> tuple[GeoDataFrame, GeoDataFrame]:
     """
     Create dataframes containing the geographical details of each station using both
     arrival and departure data, and return them
@@ -47,12 +47,12 @@ def make_geodataframes() -> tuple[GeoDataFrame, GeoDataFrame]:
             coordinate = detail["coordinates"]
             station_name = detail["station_name"]
 
-            # ALERT: To prevent duplication of coordinates and names in the geodataframe
+            # To prevent duplication of coordinates and names in the geodataframe
             if coordinate not in coordinates and station_name not in station_names:
                 coordinates.append(coordinate)
                 station_names.append(station_name)
 
-        geo_dataframe = GeoDataFrame(
+        raw_geodata = GeoDataFrame(
             geometry=[Point(coordinate) for coordinate in coordinates],
             data={
                 f"{scenario}_station_name": station_names, 
@@ -60,8 +60,8 @@ def make_geodataframes() -> tuple[GeoDataFrame, GeoDataFrame]:
             }
         )
 
-        geo_dataframe = geo_dataframe.set_crs(epsg=4326)
-        geo_dataframes.append(geo_dataframe)
+        raw_geodata = raw_geodata.set_crs(epsg=4326)
+        geo_dataframes.append(raw_geodata)
 
     start_geodataframe, end_geodataframe = geo_dataframes[0], geo_dataframes[1]
     return start_geodataframe, end_geodataframe
@@ -199,9 +199,11 @@ def load_raw_local_geodata(scenario: str) -> list[dict]:
         raise FileNotFoundError("No geographical data has been made. Running the feature pipeline...")
 
     with open(geodata_path, mode="r") as file:
-        geo_dataframe = json.load(file)
+        raw_geodata = json.load(file)
+
+    
         
-    return geo_dataframe 
+    return raw_geodata 
 
 
 @st.cache_data
@@ -252,7 +254,7 @@ def load_local_geojson(scenario: str) -> dict:
                 }
             )
 
-            reverse_geocoding = ReverseGeocoder(scenario=scenario, geo_dataframe=loaded_geodata)
+            reverse_geocoding = ReverseGeocoder(scenario=scenario, raw_geodata=loaded_geodata)
             station_names_and_locations = reverse_geocoding.reverse_geocode()
 
             geodata_dict = reverse_geocoding.put_station_names_in_geodata(
@@ -305,7 +307,7 @@ def prepare_df_of_local_geodata(scenario: str, geojson: dict) -> pd.DataFrame:
             }
         )
 
-        logger.info(f"There are {geodata_df[f"{scenario}_station_id"].unique()} stations in the {scenario} geo_dataframe")
+        logger.info(f"There are {geodata_df[f"{scenario}_station_id"].unique()} stations in the {scenario} raw_geodata")
 
     return geodata_df
 

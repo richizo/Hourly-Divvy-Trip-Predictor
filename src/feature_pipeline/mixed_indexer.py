@@ -250,35 +250,35 @@ def run_mixed_indexer(scenario: str, data: pd.DataFrame, delete_leftover_rows: b
         element=data_with_replaced_ids_and_names.index, test_elements=leftover_row_indices, invert=True
     )
 
-    unproblematic_data = data_with_replaced_ids_and_names.loc[is_an_unproblematic_row, :]
+    unproblematic_data_with_rounded_coordinates = data_with_replaced_ids_and_names.loc[is_an_unproblematic_row, :]
 
     if delete_leftover_rows:
         logger.warning(f"Discarding the {len(leftover_row_indices)} rows that still have no station IDs and names.")
         logger.info("Providing new indices to each station in the rest of the data")
 
-        station_id_index = unproblematic_data.columns.get_loc(f"{scenario}_station_id")
-        station_ids = unproblematic_data.iloc[:, station_id_index]
+        station_id_index = unproblematic_data_with_rounded_coordinates.columns.get_loc(f"{scenario}_station_id")
+        station_ids = unproblematic_data_with_rounded_coordinates.iloc[:, station_id_index]
         unique_old_ids = station_ids.unique()
         
         # Use the indices of this enumeration as the new station IDs
         old_and_new_ids = {old_id: index for index, old_id in enumerate(unique_old_ids)}
         data.iloc[:, station_id_index] = station_ids.map(old_and_new_ids)
-        unproblematic_data = data.reset_index(drop=True)
+        unproblematic_data_with_rounded_coordinates = data.reset_index(drop=True)
 
-        for column in unproblematic_data.select_dtypes(include=["datetime64[ns]"]):
-            unproblematic_data[column] = unproblematic_data[column].astype(str)
+        for column in unproblematic_data_with_rounded_coordinates.select_dtypes(include=["datetime64[ns]"]):
+            unproblematic_data_with_rounded_coordinates[column] = unproblematic_data_with_rounded_coordinates[column].astype(str)
 
-        save_geodata(data=unproblematic_data, scenario=scenario, for_plotting=False)
-        save_geodata(data=unproblematic_data, scenario=scenario, for_plotting=True)
+        save_geodata(data=unproblematic_data_with_rounded_coordinates, scenario=scenario, for_plotting=False)
+        save_geodata(data=unproblematic_data_with_rounded_coordinates, scenario=scenario, for_plotting=True)
 
-        unproblematic_data = unproblematic_data.drop(
+        unproblematic_data_with_rounded_coordinates = unproblematic_data_with_rounded_coordinates.drop(
             columns=[f"{scenario}_lat", f"{scenario}_lng", f"{scenario}_station_name"]
         )
 
         if save:
-            unproblematic_data.to_parquet(path=CLEANED_DATA / f"fully_cleaned_and_indexed_{scenario}_data.parquet")
+            unproblematic_data_with_rounded_coordinates.to_parquet(path=CLEANED_DATA / f"fully_cleaned_and_indexed_{scenario}_data.parquet")
 
-        return unproblematic_data
+        return unproblematic_data_with_rounded_coordinates
 
     else:
         logger.warning("Initiating a reverse geocoding procedure to save the leftover rows from deletion")
@@ -297,9 +297,9 @@ def run_mixed_indexer(scenario: str, data: pd.DataFrame, delete_leftover_rows: b
             decimal_places=6  # No rounding. 
         )
 
-        unproblematic_data = add_column_of_rounded_coordinates(
+        unproblematic_data_with_rounded_coordinates = add_column_of_rounded_coordinates(
             scenario=scenario,
-            data=unproblematic_data,
+            data=unproblematic_data_with_rounded_coordinates,
             drop_original_coordinates=False,
             decimal_places=6
         )
@@ -308,7 +308,7 @@ def run_mixed_indexer(scenario: str, data: pd.DataFrame, delete_leftover_rows: b
         data_with_new_names = geocoder.reverse_geocode_rounded_coordinates(using_mixed_indexer=True)
 
         all_data = pd.concat(
-            [unproblematic_data, data_with_new_names], axis=0
+            [unproblematic_data_with_rounded_coordinates, data_with_new_names], axis=0
         )
         
         station_names_and_new_ids = {
@@ -328,6 +328,7 @@ def run_mixed_indexer(scenario: str, data: pd.DataFrame, delete_leftover_rows: b
             all_data.to_parquet(path=CLEANED_DATA / f"fully_cleaned_and_indexed_{scenario}_data.parquet")
 
         return all_data
+
 
 def check_for_duplicates(scenario: str):
     with open(MIXED_INDEXER / f"{scenario}_geodata.json", mode="r") as file:
