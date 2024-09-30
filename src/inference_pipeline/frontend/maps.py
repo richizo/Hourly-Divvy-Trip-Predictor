@@ -21,13 +21,13 @@ from src.inference_pipeline.frontend.predictions import retrieve_predictions, re
 def restrict_geodataframe_to_stations_with_predictions(
     scenario: str,
     predictions: pd.DataFrame,
-    geo_dataframe: GeoDataFrame
+    geo_dataframe: pd.DataFrame
 ) -> pd.DataFrame:
     """
     
     Args:
         scenario (str): _description_
-        geo_dataframe (GeoDataFrame): _description_
+        geo_dataframe (pd.DataFrame): _description_
         predictions (pd.DataFrame): _description_
 
     Returns:
@@ -78,10 +78,11 @@ def pseudocolour(
 
 
 def perform_colour_scaling(
-    geo_dataframes: list[GeoDataFrame], 
+    start_geodataframe: pd.DataFrame,
+    end_geodataframe: pd.DataFrame,
     predicted_starts: pd.DataFrame, 
     predicted_ends: pd.DataFrame
-) -> GeoDataFrame:
+) -> pd.DataFrame:
     """
     Feed each of the predictions arrivals and departures into the pseudocolour function in order to produce the colour
     scaling effect.
@@ -91,18 +92,19 @@ def perform_colour_scaling(
         predictions: the dataframe of predictions obtained from the feature store.
 
     Returns:
-        list[GeoDataFrame]: a list of dataframes consisting of the merged external geodata (from the shapefile) and 
+        list[pd.DataFrame]: a list of dataframes consisting of the merged external geodata (from the shapefile) and 
                             the predictions from the feature store.
     """
     black, green = (0, 0, 0), (0, 255, 0)
     geographical_features_and_predictions = []
+    scenarios_and_geodataframes = {"start": start_geodataframe, "end": end_geodataframe}
+    scenarios_and_predictions = {"start": predicted_starts, "end": predicted_ends}
 
-    for geo_dataframe in geo_dataframes:
-        scenario = "start" if "start_station_name" in geo_dataframe.columns else "end"
-        predictions = predicted_starts if scenario == "start" else predicted_ends
+    for scenario in config.displayed_scenario_names.keys():
+        predictions = scenarios_and_predictions[scenario]
         predictions = predictions.rename(columns={f"{scenario}_station_name": "station_name"})
 
-        geo_dataframe = geo_dataframe.rename(columns={f"{scenario}_station_name": "station_name"})
+        geo_dataframe = scenarios_and_geodataframes[scenario]
         logger.info("Merging geographical details and predictions for ", config.displayed_scenario_names[scenario].lower())
 
         merged_data = pd.merge(left=geo_dataframe, right=predictions, left_on="station_name", right_on="station_name")
@@ -119,6 +121,10 @@ def perform_colour_scaling(
         )
 
         merged_data[f"coordinates"] = merged_data[f"coordinates"].apply(tuple)
+
+        from src.setup.paths import DATA_DIR
+        merged_data.to_parquet(DATA_DIR/f"merge_{scenario}.parquet")
+
         geographical_features_and_predictions.append(merged_data)
 
     complete_merger = pd.merge(
@@ -126,6 +132,15 @@ def perform_colour_scaling(
         right=geographical_features_and_predictions[1], 
         left_on="station_name", 
         right_on="station_name"
+    )
+
+    complete_merger["fill_colour"] = complete_merger.apply(
+        func=lambda row: tuple((a+b) / 2 for a, b in zip(row["start_fill_colour"], row["end_fill_colour"])), 
+        axis=1
+    )
+
+    complete_merger = complete_merger.drop(
+        ["start_fill_colour", "end_fill_colour", "start_station_id", "end_station_id"], axis=1
     )
         
     return complete_merger
@@ -210,10 +225,13 @@ if __name__ != "__main__":
     with st.spinner(text="Setting up ingredients for the map"):
         
         geographical_features_and_predictions = perform_colour_scaling(
-            geo_dataframes=[start_geodataframe, end_geodataframe],
+            start_geodataframe=start_geodataframe,
+            end_geodataframe=end_geodataframe,
             predicted_starts=predicted_starts,
             predicted_ends=predicted_ends
         )
+
+        breakpoint()
         
         from src.setup.paths import DATA_DIR
         geographical_features_and_predictions.to_parquet(DATA_DIR/"merge.parquet")

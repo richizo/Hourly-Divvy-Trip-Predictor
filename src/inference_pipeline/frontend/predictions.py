@@ -91,6 +91,7 @@ def retrieve_predictions_for_this_hour(
         else:
             raise Exception("Cannot get predictions for either hour. The feature pipeline may not be working")
 
+        # Now to include the names of stations
         target_hour = from_hour if next_hour_ready else to_hour 
         logger.info(f"Working to attach the station names to the predictions for {target_hour}")
         raw_geodata = load_raw_local_geodata(scenario=scenario)
@@ -108,7 +109,10 @@ def retrieve_predictions_for_this_hour(
         #predictions_for_target_hour = predictions_for_target_hour[predictions_for_target_hour.notnull()]
 
         predictions_for_target_hour = predictions_for_target_hour.drop(0, axis=1).dropna().reset_index(drop=True)
-        all_predictions_this_hour.append(predictions_for_target_hour)
+        predictions_for_target_hour  = predictions_for_target_hour.drop(f"{scenario}_station_id", axis = 1)
+
+        breakpoint()
+        all_predictions_this_hour.append()
 
     start_predictions, end_predictions = all_predictions_this_hour[0], all_predictions_this_hour[1]
     return start_predictions, end_predictions
