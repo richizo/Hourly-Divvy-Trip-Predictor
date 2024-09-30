@@ -11,7 +11,6 @@ import streamlit as st
 
 from tqdm import tqdm
 from pathlib import Path
-from shapely import Point
 from loguru import logger
 from zipfile import ZipFile
 from datetime import datetime
@@ -26,7 +25,7 @@ from src.feature_pipeline.feature_engineering import ReverseGeocoder
 
 
 @st.cache_data
-def make_geodataframe(scenario: str) -> GeoDataFrame:
+def make_geodataframes() -> GeoDataFrame:
     """
     Create a dataframe containing the geographical details of each station using both
     arrival and departure data, and return them
@@ -35,32 +34,37 @@ def make_geodataframe(scenario: str) -> GeoDataFrame:
         scenario (str)
         tuple[GeoDataFrame, GeoDataFrame]: geodataframes for arrivals and departures
     """
-    coordinates = []
-    station_names = []
-    station_details: list[dict] = load_raw_local_geodata(scenario=scenario)
+    geo_dataframes = []
+    for scenario in config.displayed_scenario_names.keys():
 
-    for detail in tqdm(
-        iterable=station_details, 
-        desc=f"Collecting station details for {config.displayed_scenario_names[scenario].lower()}"
-    ):  
-        coordinate = detail["coordinates"][::-1]  # Reverse the order of the coordinates per pydeck's requirements
-        station_name = detail["station_name"]
+        coordinates = []
+        station_names = []
+        station_details: list[dict] = load_raw_local_geodata(scenario=scenario)
 
-        # ALERT: To prevent duplication of coordinates and names in the geodataframe
-        if coordinate not in coordinates and station_name not in station_names:
-            coordinates.append(coordinate)
-            station_names.append(station_name)
+        for detail in tqdm(
+            iterable=station_details, 
+            desc=f"Collecting station details for {config.displayed_scenario_names[scenario].lower()}"
+        ):  
+            coordinate = detail["coordinates"][::-1]  # Reverse the order of the coordinates per pydeck's requirements
+            station_name = detail["station_name"]
 
-    geo_dataframe = GeoDataFrame(
-        geometry=[Point(coordinate) for coordinate in coordinates],
-        data={
-            f"{scenario}_station_name": station_names, 
-            f"{scenario}_coordinates": coordinates
-        }
-    )
+            # ALERT: To prevent duplication of coordinates and names in the geodataframe
+            if coordinate not in coordinates and station_name not in station_names:
+                coordinates.append(coordinate)
+                station_names.append(station_name)
 
-    geo_dataframe = geo_dataframe.set_crs(epsg=4326)
-    return geo_dataframe
+        geo_dataframe = pd.DataFrame(
+            data={
+                f"station_name": station_names, 
+                f"coordinates": coordinates
+            }
+        )
+
+        #geo_dataframe = geo_dataframe.set_crs(epsg=4326)
+        geo_dataframes.append(geo_dataframe)
+    
+    start_geodataframe, end_geodataframe = geo_dataframes[0], geo_dataframes[1]  # For readability
+    return start_geodataframe, end_geodataframe
 
 
 def reconcile_geodata(start_geodataframe: GeoDataFrame, end_geodataframe: GeoDataFrame) -> GeoDataFrame:
@@ -263,47 +267,6 @@ def load_local_geojson(scenario: str) -> dict:
 
     st.sidebar.write("✅ Retrieved Station Names, IDs & Coordinates")
     return geodata_dict
-
-
-@st.cache_data
-def prepare_df_of_local_geodata(scenario: str, geojson: dict) -> pd.DataFrame:
-    """
-    Make a dataframe of geographical information out of the geojson file.
-
-    Args:
-        scenario (str): "start" or "end"
-        geojson (dict): the geojson file containing stations and their geographical details.
-
-    Returns:
-        pd.DataFrame: the created dataframe.
-    """
-    with st.spinner(text="Preparing a dataframe of station details for plotting..."):
-
-        coordinates = []
-        station_ids = []
-        station_names = []
-
-        for detail_index in range(len(geojson["features"])):
-            detail: dict = geojson["features"][detail_index]
-            coordinates.append(detail["geometry"]["coordinate"])
-            station_ids.append(detail["properties"]["station_id"])
-            station_names.append(detail["properties"]["station_name"])
-
-        latitudes = [point[1] for point in coordinates]
-        longitudes = [point[0] for point in coordinates]
-
-        geodata_df = pd.DataFrame(
-            data={
-                f"{scenario}_station_name": station_names,
-                f"{scenario}_station_id": station_ids,
-                "latitudes": latitudes,
-                "longitudes": longitudes
-            }
-        )
-
-        logger.info(f"There are {geodata_df[f"{scenario}_station_id"].unique()} stations in the {scenario} geo_dataframe")
-
-    return geodata_df
 
 
 @st.cache_data

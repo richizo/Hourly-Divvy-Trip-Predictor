@@ -16,7 +16,6 @@ from src.inference_pipeline.frontend.data import load_raw_local_geodata, get_ids
 
 @st.cache_data
 def retrieve_predictions(
-    scenario: str,
     model_name="xgboost",
     from_hour=config.current_hour - timedelta(hours=1),
     to_hour=config.current_hour
@@ -32,24 +31,29 @@ def retrieve_predictions(
     Returns:
         tuple[pd.DataFrame, pd.DataFrame]: a list of dataframes of predictions for both arrivals and departures
     """
-    infer = InferenceModule(scenario=scenario)
-    predictions: pd.DataFrame = infer.load_predictions_from_store(
-        model_name=model_name, 
-        from_hour=from_hour, 
-        to_hour=to_hour 
-    )
+    prediction_dataframes =[]
+    for scenario in config.displayed_scenario_names.keys():
+        infer = InferenceModule(scenario=scenario)
+        predictions: pd.DataFrame = infer.load_predictions_from_store(
+            model_name=model_name, 
+            from_hour=from_hour, 
+            to_hour=to_hour 
+        )
 
-    geodata = load_raw_local_geodata(scenario=scenario)
-    ids_and_names = get_ids_and_names(local_geodata=geodata)
-    predictions[f"{scenario}_station_name"] = predictions[f"{scenario}_station_id"].map(ids_and_names)
-    
-    return predictions
+        geodata = load_raw_local_geodata(scenario=scenario)
+        ids_and_names = get_ids_and_names(local_geodata=geodata)
+        predictions[f"{scenario}_station_name"] = predictions[f"{scenario}_station_id"].map(ids_and_names)
+
+        prediction_dataframes.append(predictions)
+
+    start_predictions, end_predictions = prediction_dataframes[0], prediction_dataframes[1]
+    return start_predictions, end_predictions
 
 
 @st.cache_data
 def retrieve_predictions_for_this_hour(
-    scenario: str,
-    predictions: pd.DataFrame,
+    predicted_starts: pd.DataFrame,
+    predicted_ends: pd.DataFrame,
     from_hour: datetime,
     to_hour: datetime
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -71,33 +75,43 @@ def retrieve_predictions_for_this_hour(
     Returns:
         pd.DataFrame: dataframes containing predicted arrivals and departures for this, or the previous hour.
     """
-    next_hour_ready = False if predictions[predictions[f"{scenario}_hour"] == to_hour].empty else True
-    previous_hour_ready = False if predictions[predictions[f"{scenario}_hour"] == from_hour].empty else True
+    all_predictions_this_hour = []
+    scenario_and_predictions = {"start": predicted_starts, "end": predicted_ends}   
 
-    if next_hour_ready:
-        predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == to_hour]
-    elif previous_hour_ready:
-        st.write("⚠️ Predictions for the current hour are unavailable. Using those from an hour ago.")
-        predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == from_hour]
-    else:
-        raise Exception("Cannot get predictions for either hour. The feature pipeline may not be working")
+    for scenario in scenario_and_predictions.keys():
+        predictions = scenario_and_predictions[scenario]
+        next_hour_ready = False if predictions[predictions[f"{scenario}_hour"] == to_hour].empty else True
+        previous_hour_ready = False if predictions[predictions[f"{scenario}_hour"] == from_hour].empty else True
 
-    target_hour = from_hour if next_hour_ready else to_hour
-    logger.info(f"Working to attach the station names to the predictions for {target_hour}")
-    raw_geodata = load_raw_local_geodata(scenario=scenario)
-    ids_and_names = get_ids_and_names(local_geodata=raw_geodata)
+        if next_hour_ready:
+            predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == to_hour]
+        elif previous_hour_ready:
+            st.write("⚠️ Predictions for the current hour are unavailable. Using those from an hour ago.")
+            predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == from_hour]
+        else:
+            raise Exception("Cannot get predictions for either hour. The feature pipeline may not be working")
 
-    new_column_of_names = []
-    station_ids = predictions_for_target_hour[f"{scenario}_station_id"].values
-    new_column_of_names = [ids_and_names[station_id] for station_id in station_ids]
+        target_hour = from_hour if next_hour_ready else to_hour 
+        logger.info(f"Working to attach the station names to the predictions for {target_hour}")
+        raw_geodata = load_raw_local_geodata(scenario=scenario)
+        ids_and_names = get_ids_and_names(local_geodata=raw_geodata)
 
-    predictions_for_target_hour = pd.concat(
-        [predictions_for_target_hour, pd.Series(new_column_of_names)], axis=0
-    )
+        new_column_of_names = []
+        station_ids = predictions_for_target_hour[f"{scenario}_station_id"].values
+        new_column_of_names = [ids_and_names[station_id] for station_id in station_ids]
 
-    # A column called 0 was introduced along with a bunch of missing values
-    predictions_for_target_hour = predictions_for_target_hour[predictions_for_target_hour.notnull()]
-    return predictions_for_target_hour.drop(0, axis=1).dropna().reset_index(drop=True)
+        predictions_for_target_hour = pd.concat(
+            [predictions_for_target_hour, pd.Series(new_column_of_names)], axis=0
+        )
+
+        # A column called 0 was introduced along with a bunch of missing values
+        #predictions_for_target_hour = predictions_for_target_hour[predictions_for_target_hour.notnull()]
+
+        predictions_for_target_hour = predictions_for_target_hour.drop(0, axis=1).dropna().reset_index(drop=True)
+        all_predictions_this_hour.append(predictions_for_target_hour)
+
+    start_predictions, end_predictions = all_predictions_this_hour[0], all_predictions_this_hour[1]
+    return start_predictions, end_predictions
 
 
 @st.cache_data
