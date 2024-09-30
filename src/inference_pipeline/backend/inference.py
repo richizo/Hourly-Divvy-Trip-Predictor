@@ -5,6 +5,8 @@ This module contains code that:
 - loads model predictions from the Hopsworks feature store.
 - performs inference on features
 """
+import os
+import json
 import numpy as np
 import pandas as pd
 
@@ -20,6 +22,7 @@ from hsfs.feature_view import FeatureView
 from sklearn.pipeline import Pipeline
 
 from src.setup.config import FeatureGroupConfig, config
+from src.setup.paths import ROUNDING_INDEXER, MIXED_INDEXER
 
 from src.feature_pipeline.preprocessing import DataProcessor
 from src.feature_pipeline.feature_engineering import finish_feature_engineering
@@ -72,7 +75,7 @@ class InferenceModule:
         Returns:
             pd.DataFrame: time series data 
         """ 
-        fetch_from = target_date - timedelta(days=40)
+        fetch_from = target_date - timedelta(days=60)
 
         feature_view: FeatureView = self.api.get_or_create_feature_view(
             name=f"{self.scenario}_feature_view",
@@ -92,7 +95,7 @@ class InferenceModule:
         )
 
         station_ids = ts_data[f"{self.scenario}_station_id"].unique()
-        features = self.make_features(station_ids=station_ids, ts_data=ts_data, geocode=False)
+        features = self.make_features(station_ids=station_ids, ts_data=ts_data, geocode=geocode)
 
         # Include the {self.scenario}_hour column and the IDs
         features[f"{self.scenario}_hour"] = target_date
@@ -172,7 +175,10 @@ class InferenceModule:
             version=1
         )
 
-        logger.info(f'Fetching predictions between {from_hour} and {to_hour}')
+        logger.info(
+            f"Fetching predicted {config.displayed_scenario_names[self.scenario].lower()} between {from_hour.hour}:00 and {to_hour.hour}:00"
+        )
+
         predictions_df = predictions_feature_view.get_batch_data(
             start_time=from_hour - timedelta(days=1), 
             end_time=to_hour + timedelta(days=1)
@@ -203,3 +209,58 @@ class InferenceModule:
         prediction_per_station[f"predicted_{self.scenario}s"] = predictions.round(decimals=0)
         
         return prediction_per_station
+
+
+def rerun_feature_pipeline():
+    """
+    This is a decorator that provides logic which allows the wrapped function to be run if a certain exception 
+    is not raised, and the full feature pipeline if the exception is raised. Generally, the functions that will 
+    use this will depend on the loading of some file that was generated during the preprocessing phase of the 
+    feature pipeline. Running the feature pipeline will allow for the file in question to be generated if isn't 
+    present, and then run the wrapped function afterwards.
+    """
+    def decorator(fn: callable):
+        def wrapper(*args, **kwargs):
+            try:
+                return fn(*args, **kwargs)
+            except FileNotFoundError as error:
+                logger.error(error)
+                message = "The JSON file containing station details is missing. Running feature pipeline again..."
+                logger.warning(message)
+                st.spinner(message)
+
+                processor = DataProcessor(year=config.year, for_inference=False)
+                processor.make_training_data(geocode=False)
+                return fn(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+@rerun_feature_pipeline()
+def load_raw_local_geodata(scenario: str) -> list[dict]:
+    """
+    Load the json file that contains the geographical information for 
+    each station.
+
+    Args:
+        scenario (str): "start" or "end" 
+
+    Raises:
+        FileNotFoundError: raised when said json file cannot be found. In that case, 
+        the feature pipeline will be re-run. As part of this, the file will be created,
+        and the function will then load the generated data.
+
+    Returns:
+        list[dict]: the loaded json file as a dictionary
+    """
+    if len(os.listdir(ROUNDING_INDEXER)) != 0:
+        geodata_path = ROUNDING_INDEXER / f"{scenario}_geodata.json"
+    elif len(os.listdir(MIXED_INDEXER)) != 0:
+        geodata_path = MIXED_INDEXER / f"{scenario}_geodata.json"
+    else:
+        raise FileNotFoundError("No geographical data has been made. Running the feature pipeline...")
+
+    with open(geodata_path, mode="r") as file:
+        raw_geodata = json.load(file)
+        
+    return raw_geodata 

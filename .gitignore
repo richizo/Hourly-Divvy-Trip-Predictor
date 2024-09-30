@@ -7,7 +7,11 @@ keyfile
 
 # Folders
 /.idea
-/data
+/data/cleaned
+/data/raw
+/data/transformed
+/data/geographical/rounding_indexer
+
 /BACKUP
 /models
 /.cometml-runs
@@ -17,3 +21,9 @@ keyfile
 
 Files
 **.ipynb
+data/geographical/mixed_indexer/end_geodata.json
+data/geographical/mixed_indexer/start_geodata.json
+data/geographical/mixed_indexer/end_reverse_geocoding.json
+data/geographical/mixed_indexer/end_geojson.geojson
+data/geographical/mixed_indexer/start_reverse_geocoding.json
+data/geographical/mixed_indexer/start_geojson.geojson

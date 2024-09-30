@@ -6,7 +6,8 @@ from loguru import logger
 import numpy as np
 import pandas as pd
 
-from src.setup.paths import MIXED_INDEXER, CLEANED_DATA
+from src.setup.config import config
+from src.setup.paths import MIXED_INDEXER, CLEANED_DATA, ROUNDING_INDEXER
 from src.feature_pipeline.feature_engineering import ReverseGeocoder
 from src.feature_pipeline.rounding_indexer import add_column_of_rounded_coordinates
 
@@ -220,6 +221,28 @@ def save_geodata(data: pd.DataFrame, scenario: str, for_plotting: bool) -> None:
         json.dump(geodata, file)
 
 
+def make_json_of_names_and_ids(scenario: str, using_mixed_indexer: bool = True) -> None:
+    """
+    Extract the names and IDs that have been created, and save them in a new json file. This json file will later be
+    used to backfill predictions to the feature store. This function will need to be used regardless of which of the 
+    custom indexers is triggered, but I am storing it in this script because I consider the mixed indexer to be the 
+    "preferred" choice.
+
+    Args:
+        scenario (str): "start" or "end"
+        using_mixed_indexer (bool, optional): whether we will be using the mixed indexer or not. Defaults to True.
+    """
+
+    save_path = MIXED_INDEXER if using_mixed_indexer else ROUNDING_INDEXER
+
+    with open(save_path / f"{scenario}_geodata.json", mode="r") as file:
+        geodata = json.load(file)
+
+    names_and_ids = {detail["station_id"]: detail["station_name"] for detail in geodata}
+    with open(save_path / f"{scenario}_stations_and_ids.json", mode="w") as file:
+        json.dump(names_and_ids, file)
+
+
 def run_mixed_indexer(scenario: str, data: pd.DataFrame, delete_leftover_rows: bool, save: bool = True) -> pd.DataFrame:
     """
     Execute the full chain of functions in this module that culminates in the following outcomes:
@@ -319,7 +342,8 @@ def run_mixed_indexer(scenario: str, data: pd.DataFrame, delete_leftover_rows: b
 
         save_geodata(data=all_data, scenario=scenario, for_plotting=False)
         save_geodata(data=all_data, scenario=scenario, for_plotting=True)
-        
+        make_json_of_names_and_ids(scenario=scenario)
+
         all_data = all_data.drop(
             [f"{scenario}_lat", f"{scenario}_lng", f"{scenario}_station_name"], axis=1
         )
@@ -328,23 +352,3 @@ def run_mixed_indexer(scenario: str, data: pd.DataFrame, delete_leftover_rows: b
             all_data.to_parquet(path=CLEANED_DATA / f"fully_cleaned_and_indexed_{scenario}_data.parquet")
 
         return all_data
-
-
-def check_for_duplicates(scenario: str):
-    with open(MIXED_INDEXER / f"{scenario}_geodata.json", mode="r") as file:
-        geodata = json.load(file)
-
-    ids_and_names = {}
-    duplicate_ids_and_names = {}
-    for detail in tqdm(geodata):
-        station_id = detail["station_id"]
-        station_name = detail["station_name"]
-
-        if station_id not in ids_and_names.keys():
-            ids_and_names[station_id] = station_name
-        elif station_id in ids_and_names.keys() and station_name == ids_and_names[station_id]:
-            continue
-        elif station_id in ids_and_names.keys() and station_name != ids_and_names[station_id]:
-            duplicate_ids_and_names[station_id] = station_name
-
-    return ids_and_names, duplicate_ids_and_names

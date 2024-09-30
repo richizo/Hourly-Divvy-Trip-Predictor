@@ -145,15 +145,15 @@ class ReverseGeocoder:
         column_of_rounded_coordinates = self.data[f"rounded_{self.scenario}_coordinates"]
         initial_number_of_new_names_and_coordinates = len(new_station_names_and_coordinates)
 
-        coordinate_is_already_present = np.isin(
+        place_not_already_identified = np.isin(
             element=self.data[f"rounded_{self.scenario}_coordinates"].to_list(),
             test_elements=[tuple(point) for point in new_station_names_and_coordinates.values()],
             invert=True
         )
         
-        if True in coordinate_is_already_present:
+        if True in place_not_already_identified:
             for coordinate in tqdm(
-                iterable=column_of_rounded_coordinates.loc[coordinate_is_already_present], 
+                iterable=column_of_rounded_coordinates.loc[place_not_already_identified], 
                 desc="Reverse geocoding..."
             ):
                 try:
@@ -292,9 +292,7 @@ def add_hours_and_days(features: pd.DataFrame, scenario: str) -> pd.DataFrame:
     Returns:
         pd.DataFrame: the data frame with these features included
     """
-
-    # The values in this column change types when uploading to Hopsworks, so this avoids errors during
-    # feature engineering.
+    # The values in this column change types when uploading to Hopsworks, so this avoids errors.
     features[f"{scenario}_hour"] = pd.to_datetime(features[f"{scenario}_hour"], errors="coerce")
 
     times_and_entries = {
