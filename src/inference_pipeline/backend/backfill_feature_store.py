@@ -112,7 +112,7 @@ class BackFiller:
             with open(json_path / f"{scenario}_names_and_ids.json", mode="r") as file:
                 ids_and_names = json.load(file)
                 
-            ids_and_names = {int(code): name for code, name in ids_and_names}  # Make sure the IDs are integers here
+            ids_and_names = {int(code): name for code, name in ids_and_names.items()}  # Make sure the IDs are integers here
             predictions[f"{scenario}_station_name"] = predictions[f"{scenario}_station_id"].map(ids_and_names)
 
         logger.info(
