@@ -104,8 +104,8 @@ class BackFiller:
         except Exception as error:
             logger.error(error)    
 
-        predictions_df: pd.DataFrame = inferrer.get_model_predictions(model=model, features=features)
-        predictions_df = predictions_df.drop_duplicates().reset_index(drop=True)
+        predictions: pd.DataFrame = inferrer.get_model_predictions(model=model, features=features)
+        predictions = predictions.drop_duplicates().reset_index(drop=True)
 
         if include_station_names:
             json_path = MIXED_INDEXER if using_mixed_indexer else ROUNDING_INDEXER
@@ -116,7 +116,7 @@ class BackFiller:
             predictions[f"{scenario}_station_name"] = predictions[f"{scenario}_station_id"].map(ids_and_names)
 
         logger.info(
-            f"There are {len(predictions_df[f"{self.scenario}_station_id"].unique())} stations in the predictions \
+            f"There are {len(predictions[f"{self.scenario}_station_id"].unique())} stations in the predictions \
                 for {self.scenario}s"
         )
         
@@ -128,7 +128,7 @@ class BackFiller:
         )
 
         predictions_feature_group.insert(
-            predictions_df,
+            predictions,
             write_options={"wait_for_job": True}
         )
 
