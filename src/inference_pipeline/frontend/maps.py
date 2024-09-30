@@ -120,73 +120,62 @@ def perform_colour_scaling(geo_dataframe: GeoDataFrame, predictions: pd.DataFram
 
     merged_data[f"{scenario}_coordinates"] = merged_data[f"{scenario}_coordinates"].apply(tuple)
     return merged_data
-
-
-@st.cache_data
-@st.cache_resource
-def draw_map(scenario: str, _geodata_and_predictions: pd.DataFrame):
-    """
-
-    Args:
-        geodata_and_predictions (pd. DataFrame): _description_
-    """
-    #print(_geodata_and_predictions.head())
-    #breakpoint()
-
-
-    with st.spinner("Building map..."):
-
-        initial_view_state = pdk.ViewState(
-            latitude=41.872866,
-            longitude=-87.63363,
-            zoom=11,
-            max_zoom=20,
-            pitch=45,
-            bearing=0
-        )
-
-        geojson_layer = pdk.Layer(
-            data=_geodata_and_predictions,
-            type="GeoJsonLayer",
-            opacity=0.25,
-            stroked=False,
-            filled=True,
-            extruded=False,
-            wireframe=True,
-            get_elevation=10,
-            get_fill_color=f"{scenario}_fill_color",
-            get_line_color=[255, 255, 255],
-            auto_highlight=True,
-            pickable=True
-        )
-
-        if scenario == "start":
-            tooltip = {
-                "html": "<b>Stations:</b> [{station_name} <br /> <b>Predicted departures:</b> {predicted_startts}",
-                "style": {"backgroundColor": "steelblue", "color": "white"}
-            }
-
-        else:
-            tooltip = {
-                "html": "<b>Stations:</b> [{station_name} <br /> <b>Predicted arrivals:</b> {predicted_ends}",
-                "style": {"backgroundColor": "steelblue", "color": "white"}
-            }
-
-        map = pdk.Deck(
-            layers=[geojson_layer],
-            initial_view_state=initial_view_state,
-            tooltip=tooltip
-        )
-
-        st.pydeck_chart(pydeck_obj=map)
         
 
+@st.cache_resource
+def make_map(_geodataframe_and_predictions: pd.DataFrame) -> None:
+
+    initial_view_state = pdk.ViewState(
+        latitude=41.872866,
+        longitude=-87.63363,
+        zoom=12,
+        max_zoom=20,
+        pitch=45,
+        bearing=0
+    )
+
+    layer = pdk.Layer(
+        data=_geodataframe_and_predictions,
+        type="ScatterplotLayer",    
+        get_position=f"{scenario}_coordinates",
+        get_fill_color=f"{scenario}_fill_colour",
+        opacity=0.25,
+        stroked=False,
+        filled=True,
+        extruded=False,
+        get_radius=70,
+        auto_highlight=True,
+        pickable=True
+    )
+
+    if scenario == "start":
+        tooltip = {
+            "html": "<b>Station:</b> {station_name} <br /> <b>Predicted departures in the next hour:</b> {predicted_starts}",
+            "style": {"backgroundColor": "steelblue", "color": "white"}
+        }
+
+    else:
+        tooltip = {
+            "html": "<b>Station:</b> {station_name} <br /> <b>Predicted arrivals in the next hour:</b> {predicted_ends}",
+            "style": {"backgroundColor": "steelblue", "color": "white"}
+        }
+
+    map = pdk.Deck(
+        layers=layer,
+        initial_view_state=initial_view_state,
+        map_style="mapbox://styles/mapbox/navigation-day-v1",
+        tooltip=tooltip
+    )
+
+    st.pydeck_chart(pydeck_obj=map)
+
+
 if __name__ != "__main__":
-    #st.set_page_config(layout="wide")
     tracker = ProgressTracker(n_steps=4)
 
     user_choice = st.selectbox(
         label="Would you like to view predictions for arrivals or departures?",
+        placeholder="Select an option",
         options=["Arrivals", "Departures"]
     )
 
@@ -209,19 +198,19 @@ if __name__ != "__main__":
                     to_hour=config.current_hour
                 )
 
-                breakpoint()
+                tracker.next()
 
             with st.spinner(text="Setting up ingredients for the map"):
+                
                 geographical_features_and_predictions = perform_colour_scaling(
                     geo_dataframe=geo_dataframe,
                     predictions=predictions_this_hour
                 )
 
                 tracker.next()
-
+                
             with st.spinner(text="Generating map of the Chicago area"):
-                draw_map(scenario=scenario, _geodata_and_predictions=geographical_features_and_predictions)
+                make_map(_geodataframe_and_predictions=geographical_features_and_predictions)
                 tracker.next()
 
     st.sidebar.write("✅ Map Drawn")
-    tracker.next()

@@ -43,7 +43,7 @@ def make_geodataframe(scenario: str) -> GeoDataFrame:
         iterable=station_details, 
         desc=f"Collecting station details for {config.displayed_scenario_names[scenario].lower()}"
     ):  
-        coordinate = detail["coordinates"]
+        coordinate = detail["coordinates"][::-1]  # Reverse the order of the coordinates per pydeck's requirements
         station_name = detail["station_name"]
 
         # ALERT: To prevent duplication of coordinates and names in the geodataframe
