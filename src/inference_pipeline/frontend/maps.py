@@ -173,9 +173,10 @@ def make_map(_geodataframe_and_predictions: pd.DataFrame) -> None:
     )
 
     tooltip = {
-        "html": "<b>Station:</b> {station_name} <br /> <b>Predicted departures in the next hour:</b> {predicted_starts}\
-        <br /> <b>Predicted arrivals in the next hour:</b> {predicted_ends}",
-        "style": {"backgroundColor": "steelblue", "color": "white"}
+        "style": {"backgroundColor": "steelblue", "color": "white"},
+        "html": "<b>Station:</b> {station_name} <br />\
+                 <b>Predicted departures in the next hour:</b> {predicted_starts}\
+                 <br /> <b>Predicted arrivals in the next hour:</b> {predicted_ends}"
     }
 
     map = pdk.Deck(

@@ -2,16 +2,18 @@
 This module contains the code that is used to backfill feature and prediction 
 data.
 """
+import json 
 import pandas as pd
 from loguru import logger
 from datetime import datetime
 from argparse import ArgumentParser
 
 from src.setup.config import config
+from src.setup.paths import MIXED_INDEXER, ROUNDING_INDEXER
 from src.feature_pipeline.preprocessing import DataProcessor
 from src.inference_pipeline.backend.feature_store_api import FeatureStoreAPI
 from src.inference_pipeline.backend.model_registry_api import ModelRegistry
-from src.inference_pipeline.backend.inference import InferenceModule
+from src.inference_pipeline.backend.inference import InferenceModule, load_raw_local_geodata
 
 
 class BackFiller:
@@ -68,7 +70,13 @@ class BackFiller:
             write_options={"wait_for_job": True}
         )
 
-    def backfill_predictions(self, target_date: datetime, model_name: str = "xgboost") -> None:
+    def backfill_predictions(
+        self, 
+        target_date: datetime, 
+        model_name: str = "xgboost",
+        include_station_names: bool = True,
+        using_mixed_indexer: bool = True
+    ) -> None:
         """
         Fetch the registered version of the named model, and download it. Then load a batch of features
         from the relevant feature group(whether for arrival or departure data), and make predictions on those 
@@ -100,6 +108,13 @@ class BackFiller:
 
         predictions_df: pd.DataFrame = inferrer.get_model_predictions(model=model, features=features)
         predictions_df = predictions_df.drop_duplicates().reset_index(drop=True)
+
+        if include_station_names:
+            json_path = MIXED_INDEXER if using_mixed_indexer else ROUNDING_INDEXER
+            with open(MIXED_INDEXER / f"{scenario}_names_and_ids.json", mode="r") as file:
+                names_and_ids = json.load(file)
+
+            predictions[f"{scenario}_station_name"] = predictions[f"{scenario}_station_id"].map(names_and_ids)
 
         logger.info(
             f"There are {len(predictions_df[f"{self.scenario}_station_id"].unique())} stations in the predictions \

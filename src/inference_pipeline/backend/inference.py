@@ -20,6 +20,7 @@ from hsfs.feature_view import FeatureView
 from sklearn.pipeline import Pipeline
 
 from src.setup.config import FeatureGroupConfig, config
+from src.setup.paths import ROUNDING_INDEXER, MIXED_INDEXER
 
 from src.feature_pipeline.preprocessing import DataProcessor
 from src.feature_pipeline.feature_engineering import finish_feature_engineering
@@ -206,3 +207,58 @@ class InferenceModule:
         prediction_per_station[f"predicted_{self.scenario}s"] = predictions.round(decimals=0)
         
         return prediction_per_station
+
+
+def rerun_feature_pipeline():
+    """
+    This is a decorator that provides logic which allows the wrapped function to be run if a certain exception 
+    is not raised, and the full feature pipeline if the exception is raised. Generally, the functions that will 
+    use this will depend on the loading of some file that was generated during the preprocessing phase of the 
+    feature pipeline. Running the feature pipeline will allow for the file in question to be generated if isn't 
+    present, and then run the wrapped function afterwards.
+    """
+    def decorator(fn: callable):
+        def wrapper(*args, **kwargs):
+            try:
+                return fn(*args, **kwargs)
+            except FileNotFoundError as error:
+                logger.error(error)
+                message = "The JSON file containing station details is missing. Running feature pipeline again..."
+                logger.warning(message)
+                st.spinner(message)
+
+                processor = DataProcessor(year=config.year, for_inference=False)
+                processor.make_training_data(geocode=False)
+                return fn(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+@rerun_feature_pipeline()
+def load_raw_local_geodata(scenario: str) -> list[dict]:
+    """
+    Load the json file that contains the geographical information for 
+    each station.
+
+    Args:
+        scenario (str): "start" or "end" 
+
+    Raises:
+        FileNotFoundError: raised when said json file cannot be found. In that case, 
+        the feature pipeline will be re-run. As part of this, the file will be created,
+        and the function will then load the generated data.
+
+    Returns:
+        list[dict]: the loaded json file as a dictionary
+    """
+    if len(os.listdir(ROUNDING_INDEXER)) != 0:
+        geodata_path = ROUNDING_INDEXER / f"{scenario}_geodata.json"
+    elif len(os.listdir(MIXED_INDEXER)) != 0:
+        geodata_path = MIXED_INDEXER / f"{scenario}_geodata.json"
+    else:
+        raise FileNotFoundError("No geographical data has been made. Running the feature pipeline...")
+
+    with open(geodata_path, mode="r") as file:
+        raw_geodata = json.load(file)
+        
+    return raw_geodata 

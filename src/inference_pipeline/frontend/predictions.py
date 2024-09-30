@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from src.setup.config import config
 from src.inference_pipeline.frontend.main import ProgressTracker
 from src.inference_pipeline.backend.inference import InferenceModule
-from src.inference_pipeline.frontend.data import load_raw_local_geodata, get_ids_and_names
+from src.inference_pipeline.frontend.data import load_raw_local_geodata
 
 
 @st.cache_data
@@ -39,10 +39,6 @@ def retrieve_predictions(
             from_hour=from_hour, 
             to_hour=to_hour 
         )
-
-        geodata = load_raw_local_geodata(scenario=scenario)
-        ids_and_names = get_ids_and_names(local_geodata=geodata)
-        predictions[f"{scenario}_station_name"] = predictions[f"{scenario}_station_id"].map(ids_and_names)
 
         prediction_dataframes.append(predictions)
 
@@ -92,60 +88,11 @@ def retrieve_predictions_for_this_hour(
             raise Exception("Cannot get predictions for either hour. The feature pipeline may not be working")
 
         # Now to include the names of stations
-        target_hour = from_hour if next_hour_ready else to_hour 
-        logger.info(f"Working to attach the station names to the predictions for {target_hour}")
-        raw_geodata = load_raw_local_geodata(scenario=scenario)
-        ids_and_names = get_ids_and_names(local_geodata=raw_geodata)
-
-        new_column_of_names = []
-        station_ids = predictions_for_target_hour[f"{scenario}_station_id"].values
-        new_column_of_names = [ids_and_names[station_id] for station_id in station_ids]
-
-        predictions_for_target_hour = pd.concat(
-            [predictions_for_target_hour, pd.Series(new_column_of_names)], axis=0
-        )
-
-        # A column called 0 was introduced along with a bunch of missing values
-        #predictions_for_target_hour = predictions_for_target_hour[predictions_for_target_hour.notnull()]
-
-        predictions_for_target_hour = predictions_for_target_hour.drop(0, axis=1).dropna().reset_index(drop=True)
         predictions_for_target_hour  = predictions_for_target_hour.drop(f"{scenario}_station_id", axis = 1)
-
-        breakpoint()
-        all_predictions_this_hour.append()
+        all_predictions_this_hour.append(predictions_for_target_hour)
 
     start_predictions, end_predictions = all_predictions_this_hour[0], all_predictions_this_hour[1]
     return start_predictions, end_predictions
-
-
-@st.cache_data
-def get_predictions_per_station(scenario: str, predictions: pd.DataFrame) -> dict[str, float]:
-    """
-    Go through the dataframe of predictions and obtain the prediction associated with each station
-    ID. Then get the name of each station, and return a dictionary with names as keys and predictions
-    as values.
-
-    Args:
-        scenario (str): "start" or "end"
-        predictions (pd.DataFrame): the dataframe of predictions downloaded from the feature store.
-
-    Returns:
-        dict[str, float]:
-    """
-    station_ids = predictions[f"{scenario}_station_id"].values
-    predictions = predictions[f"predicted_{scenario}s"].values
-
-    logger.info(f"Predictions for {len(station_ids)} stations were fetched")
-    geodata: list[dict] = load_raw_local_geodata(scenario=scenario)
-    ids_and_names = get_ids_and_names(local_geodata=geodata)
-
-    ids_and_predictions: dict[int, float] = {
-        code: prediction for code, prediction in zip(station_ids, predictions) if prediction is not None
-    }
-
-    return {
-        ids_and_names[station_id]: ids_and_predictions[station_id] for station_id in ids_and_predictions.keys()
-    }
 
 
 def deliver_predictions(options_and_colours: dict, user_choice: str):
