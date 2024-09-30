@@ -26,45 +26,41 @@ from src.feature_pipeline.feature_engineering import ReverseGeocoder
 
 
 @st.cache_data
-def make_geodataframes() -> tuple[GeoDataFrame, GeoDataFrame]:
+def make_geodataframe(scenario: str) -> GeoDataFrame:
     """
-    Create dataframes containing the geographical details of each station using both
+    Create a dataframe containing the geographical details of each station using both
     arrival and departure data, and return them
 
     Returns:
+        scenario (str)
         tuple[GeoDataFrame, GeoDataFrame]: geodataframes for arrivals and departures
     """
-    geo_dataframes: list[GeoDataFrame] = []
-    for scenario in config.displayed_scenario_names.keys():
-        coordinates = []
-        station_names = []
-        station_details: list[dict] = load_raw_local_geodata(scenario=scenario)
+    coordinates = []
+    station_names = []
+    station_details: list[dict] = load_raw_local_geodata(scenario=scenario)
 
-        for detail in tqdm(
-            iterable=station_details, 
-            desc=f"Collecting station details for {config.displayed_scenario_names[scenario].lower()}"
-        ):  
-            coordinate = detail["coordinates"]
-            station_name = detail["station_name"]
+    for detail in tqdm(
+        iterable=station_details, 
+        desc=f"Collecting station details for {config.displayed_scenario_names[scenario].lower()}"
+    ):  
+        coordinate = detail["coordinates"]
+        station_name = detail["station_name"]
 
-            # ALERT: To prevent duplication of coordinates and names in the geodataframe
-            if coordinate not in coordinates and station_name not in station_names:
-                coordinates.append(coordinate)
-                station_names.append(station_name)
+        # ALERT: To prevent duplication of coordinates and names in the geodataframe
+        if coordinate not in coordinates and station_name not in station_names:
+            coordinates.append(coordinate)
+            station_names.append(station_name)
 
-        geo_dataframe = GeoDataFrame(
-            geometry=[Point(coordinate) for coordinate in coordinates],
-            data={
-                f"{scenario}_station_name": station_names, 
-                f"{scenario}_coordinates": coordinates
-            }
-        )
+    geo_dataframe = GeoDataFrame(
+        geometry=[Point(coordinate) for coordinate in coordinates],
+        data={
+            f"{scenario}_station_name": station_names, 
+            f"{scenario}_coordinates": coordinates
+        }
+    )
 
-        geo_dataframe = geo_dataframe.set_crs(epsg=4326)
-        geo_dataframes.append(geo_dataframe)
-
-    start_geodataframe, end_geodataframe = geo_dataframes[0], geo_dataframes[1]
-    return start_geodataframe, end_geodataframe
+    geo_dataframe = geo_dataframe.set_crs(epsg=4326)
+    return geo_dataframe
 
 
 def reconcile_geodata(start_geodataframe: GeoDataFrame, end_geodataframe: GeoDataFrame) -> GeoDataFrame:

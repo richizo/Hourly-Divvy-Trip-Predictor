@@ -17,11 +17,11 @@ from src.setup.config import config
 from src.inference_pipeline.frontend.main import ProgressTracker
 
 from src.inference_pipeline.frontend.data import (
-    load_local_geojson, prepare_df_of_local_geodata, make_geodataframes, reconcile_geodata
+    load_local_geojson, prepare_df_of_local_geodata, make_geodataframe, reconcile_geodata
 )
 
 from src.inference_pipeline.frontend.predictions import (
-    get_predictions_for_this_hour, get_all_predictions, get_predictions_per_station
+    retrieve_predictions, retrieve_predictions_for_this_hour, get_predictions_per_station
 )
 
 
@@ -84,13 +84,9 @@ def pseudocolour(
     )
 
 
-def perform_colour_scaling(
-    geo_dataframes: list[GeoDataFrame],
-    predicted_starts: pd.DataFrame,
-    predicted_ends: pd.DataFrame
-) -> list[GeoDataFrame]:
+def perform_colour_scaling(geo_dataframe: GeoDataFrame, predictions: pd.DataFrame) -> GeoDataFrame:
     """
-    Feed each of the predicted arrivals and departures into the pseudocolour function in order to produce the colour
+    Feed each of the predictions arrivals and departures into the pseudocolour function in order to produce the colour
     scaling effect.
 
     Args:
@@ -102,53 +98,33 @@ def perform_colour_scaling(
                             the predictions from the feature store.
     """
     black, green = (0, 0, 0), (0, 255, 0)
-    geo_dataframes_merged_with_predictions = []
 
-    from src.setup.paths import DATA_DIR
-    
-    for geo_dataframe in geo_dataframes:
-        scenario = "start" if "start_station_name" in geo_dataframe.columns else "end"
-        
-        predictions = predicted_starts if scenario == "start" else predicted_ends
-        geo_dataframe = geo_dataframe.rename(columns={f"{scenario}_station_name": "station_name"})
-        predictions = predictions.rename(columns={f"{scenario}_station_name": "station_name"})
+    geo_dataframe = geo_dataframe.rename(columns={f"{scenario}_station_name": "station_name"})
+    predictions = predictions.rename(columns={f"{scenario}_station_name": "station_name"})
 
-        logger.info(f"Merging geographical details and predictions for {config.displayed_scenario_names[scenario].lower()}")
+    logger.info("Merging geographical details and predictions for ", config.displayed_scenario_names[scenario].lower())
 
-        merged_data = pd.merge(left=geo_dataframe, right=predictions, left_on="station_name", right_on="station_name")
-        merged_data[f"{scenario}_colour_scaling"] = merged_data[f"predicted_{scenario}s"]
-        max_prediction, min_prediction = merged_data[f"{scenario}_colour_scaling"].max(), merged_data[f"{scenario}_colour_scaling"].min()
-    
-        merged_data[f"{scenario}_fill_colour"] = merged_data[f"{scenario}_colour_scaling"].apply(
-            lambda x: pseudocolour(
-                value=x,
-                min_value=min_prediction,
-                max_value=max_prediction,
-                start_colour=black,
-                stop_colour=green
-            )
+    merged_data = pd.merge(left=geo_dataframe, right=predictions, left_on="station_name", right_on="station_name")
+    merged_data[f"{scenario}_colour_scaling"] = merged_data[f"predicted_{scenario}s"]
+    max_prediction, min_prediction = merged_data[f"{scenario}_colour_scaling"].max(), merged_data[f"{scenario}_colour_scaling"].min()
+
+    merged_data[f"{scenario}_fill_colour"] = merged_data[f"{scenario}_colour_scaling"].apply(
+        lambda x: pseudocolour(
+            value=x,
+            min_value=min_prediction,
+            max_value=max_prediction,
+            start_colour=black,
+            stop_colour=green
         )
-
-        merged_data = merged_data.drop(0, axis=1)  # A empty column called 0 was created at some point
-
-        print(merged_data)
-        breakpoint()
-
-        geo_dataframes_merged_with_predictions.append(merged_data)
-    
-    complete_merger = pd.merge(
-        left=geo_dataframes_merged_with_predictions[0], 
-        right=geo_dataframes_merged_with_predictions[1], 
-        left_on="station_name", 
-        right_on="station_name"
     )
 
-    return complete_merger
+    merged_data[f"{scenario}_coordinates"] = merged_data[f"{scenario}_coordinates"].apply(tuple)
+    return merged_data
 
 
 @st.cache_data
 @st.cache_resource
-def draw_map(_geodata_and_predictions: pd.DataFrame):
+def draw_map(scenario: str, _geodata_and_predictions: pd.DataFrame):
     """
 
     Args:
@@ -178,17 +154,23 @@ def draw_map(_geodata_and_predictions: pd.DataFrame):
             extruded=False,
             wireframe=True,
             get_elevation=10,
-            get_fill_color="fill_color",
+            get_fill_color=f"{scenario}_fill_color",
             get_line_color=[255, 255, 255],
             auto_highlight=True,
             pickable=True
         )
 
-        tooltip = {
-            "html": "<b>Zone:</b> [{station_name} <br /> <b>Predicted departures:</b> {predicted_starts} \
-                <b>Predicted arrivals:</b> {predicted_ends}",
-            "style": {"backgroundColor": "steelblue", "color": "white"}
-        }
+        if scenario == "start":
+            tooltip = {
+                "html": "<b>Stations:</b> [{station_name} <br /> <b>Predicted departures:</b> {predicted_startts}",
+                "style": {"backgroundColor": "steelblue", "color": "white"}
+            }
+
+        else:
+            tooltip = {
+                "html": "<b>Stations:</b> [{station_name} <br /> <b>Predicted arrivals:</b> {predicted_ends}",
+                "style": {"backgroundColor": "steelblue", "color": "white"}
+            }
 
         map = pdk.Deck(
             layers=[geojson_layer],
@@ -203,48 +185,43 @@ if __name__ != "__main__":
     #st.set_page_config(layout="wide")
     tracker = ProgressTracker(n_steps=4)
 
-    with st.spinner(text="Collecting station information"):
-        start_geodataframe, end_geodataframe = make_geodataframes()
-        tracker.next()
+    user_choice = st.selectbox(
+        label="Would you like to view predictions for arrivals or departures?",
+        options=["Arrivals", "Departures"]
+    )
 
-    with st.spinner(text="Fetching all predicted arrivals and departures from feature store"):
-        all_predicted_starts, all_predicted_ends = get_all_predictions()
+    for scenario in config.displayed_scenario_names.keys():
+        if config.displayed_scenario_names[scenario] in user_choice:
 
-        predicted_starts_this_hour, predicted_ends_this_hour = get_predictions_for_this_hour(
-            predicted_starts=all_predicted_starts,
-            predicted_ends=all_predicted_ends,
-            from_hour=config.current_hour-timedelta(hours=1),
-            to_hour=config.current_hour
-        )
+            with st.spinner(text="Collecting station information"):
+                geo_dataframe = make_geodataframe(scenario=scenario)
+                tracker.next()
 
-        breakpoint()
+            with st.spinner(
+                text=f"Fetching all predicted {config.displayed_scenario_names[scenario].lower()} from feature store"
+            ):
+                predictions = retrieve_predictions(scenario=scenario)
 
-    with st.spinner(text="Looking up the stations that we have predictions for"):
-        start_geodataframe = restrict_geodataframe_to_stations_with_predictions(
-            scenario="start", 
-            predictions=predicted_starts_this_hour,
-            geo_dataframe=start_geodataframe 
-        )
+                predictions_this_hour = retrieve_predictions_for_this_hour(
+                    scenario=scenario,
+                    predictions=predictions,
+                    from_hour=config.current_hour-timedelta(hours=1),
+                    to_hour=config.current_hour
+                )
 
-        end_geodataframe = restrict_geodataframe_to_stations_with_predictions(
-            scenario="end", 
-            predictions=predicted_ends_this_hour,
-            geo_dataframe=end_geodataframe
-        )
+                breakpoint()
 
-        tracker.next()
-     
-    with st.spinner("Setting up ingredients for the map"):
-        geographical_features_and_predictions = perform_colour_scaling(
-            geo_dataframes=[start_geodataframe, end_geodataframe],
-            predicted_starts=predicted_starts_this_hour,
-            predicted_ends=predicted_ends_this_hour
-        )
-        tracker.next()
+            with st.spinner(text="Setting up ingredients for the map"):
+                geographical_features_and_predictions = perform_colour_scaling(
+                    geo_dataframe=geo_dataframe,
+                    predictions=predictions_this_hour
+                )
 
-    with st.spinner(text="Generating map of the Chicago area"):
-        draw_map(_geodata_and_predictions=geographical_features_and_predictions)
-        tracker.next()
+                tracker.next()
+
+            with st.spinner(text="Generating map of the Chicago area"):
+                draw_map(scenario=scenario, _geodata_and_predictions=geographical_features_and_predictions)
+                tracker.next()
 
     st.sidebar.write("✅ Map Drawn")
     tracker.next()
