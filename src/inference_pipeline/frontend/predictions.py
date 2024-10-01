@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from streamlit_extras.colored_header import colored_header
 
 from src.setup.config import config 
-from src.inference_pipeline.frontend.main import ProgressTracker
+from src.inference_pipeline.frontend.tracker import ProgressTracker
 from src.inference_pipeline.backend.inference import InferenceModule
 from src.inference_pipeline.frontend.data import make_geodataframes, reconcile_geodata
 
@@ -88,7 +88,8 @@ def retrieve_predictions_for_this_hour(
         if next_hour_ready:
             predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == to_hour]
         elif previous_hour_ready:
-            st.write("⚠️ Predictions for the current hour are unavailable. Using those from an hour ago.")
+            if scenario == "start":
+                st.write("⚠️ Predictions for the current hour are unavailable. You are currently viewing predictions from an hour ago.")
             predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == from_hour]
         else:
             raise Exception("Cannot get predictions for either hour. The feature pipeline may not be working")
@@ -107,16 +108,19 @@ def restrict_geodataframe_to_stations_with_predictions(
     geo_dataframe: pd.DataFrame
 ) -> pd.DataFrame:
     """
+    Depending on how many days of time series data is fetched during inference (prior to applying the model for predictions),
+    we may exclude certain stations from the dataframe of predictions (more is better in this regard). This function allows 
+    us to eliminate such stations from the geographical data that we have before feeding this data into the map. That way, we
+    don't display stations on the map if we don't have predictions for it.
     
     Args:
-        scenario (str): _description_
-        geo_dataframe (pd.DataFrame): _description_
-        predictions (pd.DataFrame): _description_
+        scenario (str): "start" or "end"
+        geo_dataframe (pd.DataFrame): the geographical data (either for arrivals or departures)
+        predictions (pd.DataFrame): the dataframe of predictions fetched from the feature store (either for arrivals or departures)
 
     Returns:
-        pd.DataFrame: _description_
+        pd.DataFrame: geographical data for only those stations that we have predictions for
     """
-
     stations_we_have_predictions_for = predictions[f"{scenario}_station_name"].unique()
 
     predictions_are_present = np.isin(
@@ -127,7 +131,7 @@ def restrict_geodataframe_to_stations_with_predictions(
     number_present = [boolean for boolean in predictions_are_present if boolean == True]
 
     logger.warning(
-        f"{len(geo_dataframe) - len(number_present)} stations won't be plotted due to a lack of predictions"
+        f"{len(geo_dataframe) - len(number_present)} stations won't be plotted due to a lack of predictied {config.displayed_scenario_names[scenario].lower()}"
     )
 
     return geo_dataframe.loc[predictions_are_present, :]
@@ -266,11 +270,11 @@ def make_map(_geodataframe_and_predictions: pd.DataFrame) -> None:
 
 
 if __name__ != "__main__":
-    
+
     tracker = ProgressTracker(n_steps=5)
 
     colored_header(
-        label=":red[Now] :orange[for the] :violet[Predictions]!",
+        label=":green[Hourly] :violet[Predictions]",
         description="",
         color_name="violet-70"
     )

@@ -75,7 +75,7 @@ class InferenceModule:
         Returns:
             pd.DataFrame: time series data 
         """ 
-        fetch_from = target_date - timedelta(days=240)
+        fetch_from = target_date - timedelta(days=270)
 
         feature_view: FeatureView = self.api.get_or_create_feature_view(
             name=f"{self.scenario}_feature_view",

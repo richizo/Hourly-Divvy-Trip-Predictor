@@ -14,7 +14,7 @@ The city of Chicago is home to nearly 3 million people, and it is currently the 
    customer behaviour.
 
 ## The Objective 
-Build a complete end-to-end machine learning system that culminates in a simple frontend that provides the desired predictions.
+Build a complete end-to-end machine learning system that culminates in a simple frontend which provides the desired predictions in an interactive manner.
 
 ## System Design
 
