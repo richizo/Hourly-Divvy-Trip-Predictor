@@ -121,17 +121,13 @@ def perform_colour_scaling(
         )
 
         merged_data[f"coordinates"] = merged_data[f"coordinates"].apply(tuple)
-
-        from src.setup.paths import DATA_DIR
-        merged_data.to_parquet(DATA_DIR/f"merge_{scenario}.parquet")
-
         geographical_features_and_predictions.append(merged_data)
 
     complete_merger = pd.merge(
         left=geographical_features_and_predictions[0], 
         right=geographical_features_and_predictions[1], 
-        left_on="station_name", 
-        right_on="station_name"
+        left_on=["station_name", "coordinates"], 
+        right_on=["station_name", "coordinates"]
     )
 
     complete_merger["fill_colour"] = complete_merger.apply(
@@ -231,11 +227,6 @@ if __name__ != "__main__":
             predicted_starts=predicted_starts,
             predicted_ends=predicted_ends
         )
-
-        breakpoint()
-        
-        from src.setup.paths import DATA_DIR
-        geographical_features_and_predictions.to_parquet(DATA_DIR/"merge.parquet")
 
         tracker.next()
         

@@ -108,8 +108,6 @@ def deliver_predictions(options_and_colours: dict, user_choice: str):
         tracker = ProgressTracker(n_steps=2)
         predictions_df = retrieve_predictions_for_this_hour(scenario=scenario)
 
-        breakpoint()
-
         if not predictions_df.empty:
             st.sidebar.write(f"✅ Predicted {user_choice} received")
             tracker.next()
