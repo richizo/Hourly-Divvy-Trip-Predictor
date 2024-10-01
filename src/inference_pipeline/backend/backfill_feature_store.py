@@ -72,7 +72,6 @@ class BackFiller:
         self, 
         target_date: datetime, 
         model_name: str = "xgboost",
-        include_station_names: bool = True,
         using_mixed_indexer: bool = True
     ) -> None:
         """
@@ -107,16 +106,16 @@ class BackFiller:
         predictions: pd.DataFrame = inferrer.get_model_predictions(model=model, features=features)
         predictions = predictions.drop_duplicates().reset_index(drop=True)
 
-        if include_station_names:
-            json_path = MIXED_INDEXER if using_mixed_indexer else ROUNDING_INDEXER
-            with open(json_path / f"{scenario}_names_and_ids.json", mode="r") as file:
-                ids_and_names = json.load(file)
-                
-            ids_and_names = {int(code): name for code, name in ids_and_names.items()}  # Make sure the IDs are integers here
-            predictions[f"{scenario}_station_name"] = predictions[f"{scenario}_station_id"].map(ids_and_names)
+        # Now to add station names to the predictions
+        json_path = MIXED_INDEXER if using_mixed_indexer else ROUNDING_INDEXER
+        with open(json_path / f"{scenario}_names_and_ids.json", mode="r") as file:
+            ids_and_names = json.load(file)
+            
+        ids_and_names = {int(code): name for code, name in ids_and_names.items()}  # Make sure the IDs are integers here
+        predictions[f"{scenario}_station_name"] = predictions[f"{scenario}_station_id"].map(ids_and_names)
 
         logger.info(
-            f"There are {len(predictions[f"{self.scenario}_station_id"].unique())} stations in the predictions \
+            f"There are {len(predictions[f"{self.scenario}_station_name"].unique())} stations in the predictions \
                 for {self.scenario}s"
         )
         
