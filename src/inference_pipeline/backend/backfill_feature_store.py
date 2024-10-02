@@ -11,6 +11,8 @@ from argparse import ArgumentParser
 from src.setup.config import config
 from src.setup.paths import MIXED_INDEXER, ROUNDING_INDEXER
 from src.feature_pipeline.preprocessing import DataProcessor
+from src.feature_pipeline.mixed_indexer import fetch_json_of_ids_and_names
+
 from src.inference_pipeline.backend.feature_store_api import FeatureStoreAPI
 from src.inference_pipeline.backend.model_registry_api import ModelRegistry
 from src.inference_pipeline.backend.inference import InferenceModule, load_raw_local_geodata
@@ -107,11 +109,7 @@ class BackFiller:
         predictions = predictions.drop_duplicates().reset_index(drop=True)
 
         # Now to add station names to the predictions
-        json_path = MIXED_INDEXER if using_mixed_indexer else ROUNDING_INDEXER
-        with open(json_path / f"{scenario}_names_and_ids.json", mode="r") as file:
-            ids_and_names = json.load(file)
-            
-        ids_and_names = {int(code): name for code, name in ids_and_names.items()}  # Make sure the IDs are integers here
+        ids_and_names = fetch_json_of_ids_and_names(scenario=scenario, using_mixed_indexer=True, invert=False)
         predictions[f"{scenario}_station_name"] = predictions[f"{scenario}_station_id"].map(ids_and_names)
 
         logger.info(

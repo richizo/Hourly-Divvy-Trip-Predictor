@@ -12,7 +12,7 @@ from sklearn.metrics import mean_absolute_error
 
 from src.setup.config import config
 from src.monitoring import load_predictions_and_historical_trips
-from src.inference_pipeline.frontend.main import ProgressTracker
+from src.inference_pipeline.frontend.tracker import ProgressTracker
 
 
 @st.cache_data
@@ -32,7 +32,7 @@ def fetch_from_monitoring_feature_view(scenario: str, model_name: str = "xgboost
         return load_predictions_and_historical_trips(
             scenario=scenario,
             model_name=model_name,
-            from_date=config.current_hour - timedelta(days=7),
+            from_date=config.current_hour - timedelta(days=40),
             to_date=config.current_hour
         )
 
@@ -106,9 +106,9 @@ def plot_error_per_hour(scenario: str, data_to_monitor: pd.DataFrame, aggregate_
 
 if __name__ != "__main__":
 
-    user_scenario_choice = st.sidebar.multiselect(
+    user_scenario_choice = st.multiselect(
         label="Do you want to monitor the performance of the model used to predict arrivals or departures?",
-        placeholder="Please select one of the two given options",
+        placeholder="Please select an option",
         options=config.displayed_scenario_names.values()
     )
 
@@ -126,7 +126,7 @@ if __name__ != "__main__":
             else:
                 st.sidebar.write("Dataframe empty")
 
-            user_plot_choice = st.sidebar.multiselect(
+            user_plot_choice = st.multiselect(
                 label="Do you want to monitor the model's error in aggregate, or for only the most active stations?",
                 placeholder="Please select one of the three given options",
                 options=["Aggregate Error", "Top Stations Only", "Both"]

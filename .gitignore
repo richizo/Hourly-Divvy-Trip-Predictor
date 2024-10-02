@@ -21,9 +21,13 @@ keyfile
 
 Files
 **.ipynb
-data/geographical/mixed_indexer/end_geodata.json
 data/geographical/mixed_indexer/start_geodata.json
-data/geographical/mixed_indexer/end_reverse_geocoding.json
-data/geographical/mixed_indexer/end_geojson.geojson
+data/geographical/mixed_indexer/end_geodata.json
+
 data/geographical/mixed_indexer/start_reverse_geocoding.json
+data/geographical/mixed_indexer/end_reverse_geocoding.json
+
 data/geographical/mixed_indexer/start_geojson.geojson
+data/geographical/mixed_indexer/end_geojson.geojson
+
+src/inference_pipeline/frontend/about.py

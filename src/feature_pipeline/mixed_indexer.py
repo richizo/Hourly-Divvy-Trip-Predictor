@@ -221,7 +221,7 @@ def save_geodata(data: pd.DataFrame, scenario: str, for_plotting: bool) -> None:
         json.dump(geodata, file)
 
 
-def make_json_of_names_and_ids(scenario: str, using_mixed_indexer: bool = True) -> None:
+def make_json_of_ids_and_names(scenario: str, using_mixed_indexer: bool = True) -> None:
     """
     Extract the names and IDs that have been created, and save them in a new json file. This json file will later be
     used to backfill predictions to the feature store. This function will need to be used regardless of which of the 
@@ -239,8 +239,33 @@ def make_json_of_names_and_ids(scenario: str, using_mixed_indexer: bool = True) 
         geodata = json.load(file)
 
     names_and_ids = {detail["station_id"]: detail["station_name"] for detail in geodata}
-    with open(save_path / f"{scenario}_stations_and_ids.json", mode="w") as file:
+    
+    with open(save_path / f"{scenario}_ids_and_names.json", mode="w") as file:
         json.dump(names_and_ids, file)
+
+
+def fetch_json_of_ids_and_names(scenario: str, using_mixed_indexer: bool, invert: bool) -> dict[int, str]:
+    """
+    Opens the json file which contains the IDs (which we created) and the names of the various stations, and returns
+    its contents as a dictionary.
+
+    Args:
+        scenario (str): _description_
+        using_mixed_indexer (bool): _description_
+        invert (bool): _description_
+
+    Returns:
+        _type_: _description_
+    """
+
+    json_path = MIXED_INDEXER if using_mixed_indexer else ROUNDING_INDEXER
+    with open(json_path / f"{scenario}_ids_and_names.json", mode="r") as file:
+        ids_and_names = json.load(file)
+    
+    if invert:
+        return {name: int(code) for code, name in ids_and_names.items()}
+    else:
+        return {int(code): name for code, name in ids_and_names.items()}  # Just to be sure the IDs are integers here
 
 
 def run_mixed_indexer(scenario: str, data: pd.DataFrame, delete_leftover_rows: bool, save: bool = True) -> pd.DataFrame:
@@ -342,7 +367,7 @@ def run_mixed_indexer(scenario: str, data: pd.DataFrame, delete_leftover_rows: b
 
         save_geodata(data=all_data, scenario=scenario, for_plotting=False)
         save_geodata(data=all_data, scenario=scenario, for_plotting=True)
-        make_json_of_names_and_ids(scenario=scenario)
+        make_json_of_ids_and_names(scenario=scenario)
 
         all_data = all_data.drop(
             [f"{scenario}_lat", f"{scenario}_lng", f"{scenario}_station_name"], axis=1

@@ -19,4 +19,3 @@ st.markdown(
     """
 )
 
-st.link_button(label="View the code here", url="http://github.com/kobinabrandon/hourly-divvy-trip-predictor")

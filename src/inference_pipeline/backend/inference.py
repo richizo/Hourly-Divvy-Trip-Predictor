@@ -71,6 +71,7 @@ class InferenceModule:
         Args:
             target_date: the date for which we seek predictions.
             geocode: whether to implement geocoding during feature engineering
+            for_plotting (bool): whether we are producing these features purely for the purpose of plotting historical data.
 
         Returns:
             pd.DataFrame: time series data 
@@ -97,12 +98,10 @@ class InferenceModule:
         station_ids = ts_data[f"{self.scenario}_station_id"].unique()
         features = self.make_features(station_ids=station_ids, ts_data=ts_data, geocode=geocode)
 
-        # Include the {self.scenario}_hour column and the IDs
         features[f"{self.scenario}_hour"] = target_date
+        features = features.sort_values(by=[f"{self.scenario}_station_id"])
 
-        return features.sort_values(
-            by=[f"{self.scenario}_station_id"]
-        )
+        return features
 
 
     def make_features(self, station_ids: list[int], ts_data: pd.DataFrame, geocode: bool) -> pd.DataFrame:

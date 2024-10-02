@@ -5,7 +5,7 @@ feature and prediction data for the purpose of monitoring model performance insi
 the streamlit frontend.
 """
 import pandas as pd 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from src.setup.config import config
 from src.inference_pipeline.backend.feature_store_api import FeatureStoreAPI
@@ -29,9 +29,13 @@ def load_predictions_and_historical_trips(
     Returns:
         pd.DataFrame: the data to be used fo
     """
-    tuned_or_not = "untuned"
+    tuned_or_not = "tuned"
     from_ts = int(from_date.timestamp() * 1000)
     to_ts = int(to_date.timestamp() * 1000)
+
+    #print(from_date)
+    #print(to_ts)
+    #breakpoint()
 
     arrivals_or_departures: str = config.displayed_scenario_names[scenario].lower()
 
@@ -50,34 +54,42 @@ def load_predictions_and_historical_trips(
         version=6
     )
 
+
     historical_fg = api.setup_feature_group(
         description=f"Hourly time series data for {arrivals_or_departures.lower()}",
         name=f"{scenario}_feature_group",
         version=config.feature_group_version,
         for_predictions=False
-    )
+    ) 
 
     query = (
         predictions_fg
         .select_all()
         .join(
             sub_query=historical_fg.select(features=[f"{scenario}_station_id", f"{scenario}_hour", "trips"]),
-            on=[f"{scenario}_station_id", f"{scenario}_hour"]
+            on=[f'{scenario}_station_id'],
+            prefix=None
         )
-        .filter(predictions_fg[f"{scenario}_hour"] >= from_ts)
-        .filter(predictions_fg[f"{scenario}_hour"] <= to_ts)
+        .filter(predictions_fg[f"{scenario}_hour"] >= str(from_ts)) 
+        .filter(predictions_fg[f"{scenario}_hour"] <= str(to_ts))
     )
 
     monitoring_feature_view = api.get_or_create_feature_view(
         feature_group=historical_fg,
-        name=f"monitoring_feature_view_for_{arrivals_or_departures.lower()}",
+        name=f"monitoring_feature_view_for_{arrivals_or_departures}",
         use_sub_query=True,
         sub_query=query,
         version=1
     )
 
-    monitoring_data = monitoring_feature_view.get_batch_data(start_time=from_date, end_time=to_date)
+    monitoring_data = monitoring_feature_view.get_batch_data(
+        start_time=from_date, 
+        end_time=to_date, 
+        read_options={"use_hive": True}
+    )
+
 
     return monitoring_data[
         monitoring_data[f"{scenario}_hour"].between(from_ts, to_ts)
     ]
+  

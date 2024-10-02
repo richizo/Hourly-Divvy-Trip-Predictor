@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from streamlit_extras.colored_header import colored_header
 
 from src.setup.config import config 
+from src.setup.paths import INFERENCE_DATA
 from src.inference_pipeline.frontend.tracker import ProgressTracker
 from src.inference_pipeline.backend.inference import InferenceModule
 from src.inference_pipeline.frontend.data import make_geodataframes, reconcile_geodata
@@ -96,6 +97,7 @@ def retrieve_predictions_for_this_hour(
 
         # Now to include the names of stations
         predictions_for_target_hour  = predictions_for_target_hour.drop(f"{scenario}_station_id", axis = 1)
+        predictions_for_target_hour = predictions_for_target_hour.reset_index(drop=True)
         all_predictions_this_hour.append(predictions_for_target_hour)
 
     start_predictions, end_predictions = all_predictions_this_hour[0], all_predictions_this_hour[1]
@@ -221,7 +223,7 @@ def perform_colour_scaling(
     )
 
     complete_merger = complete_merger.drop(
-        ["start_fill_colour", "end_fill_colour", "start_station_id", "end_station_id"], axis=1
+        ["start_fill_colour", "end_fill_colour"], axis=1
     )
         
     return complete_merger
@@ -323,14 +325,15 @@ if __name__ != "__main__":
         geographical_features_and_predictions = perform_colour_scaling(
             start_geodataframe=start_geodataframe,
             end_geodataframe=end_geodataframe,
-            predicted_starts=predicted_starts,
-            predicted_ends=predicted_ends
+            predicted_starts=predicted_starts_this_hour,
+            predicted_ends=predicted_ends_this_hour
         )
 
         tracker.next()
-        
+
     with st.spinner(text="Generating map of the Chicago area"):
         make_map(_geodataframe_and_predictions=geographical_features_and_predictions)
+        geographical_features_and_predictions.to_parquet(INFERENCE_DATA/"geographical_features_and_predictions.parquet")
         tracker.next()
 
     st.sidebar.write("✅ Map Drawn")
