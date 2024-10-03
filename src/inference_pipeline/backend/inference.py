@@ -57,7 +57,7 @@ class InferenceModule:
             for_predictions=False
         )
 
-    def fetch_time_series_and_make_features(self, target_date: datetime, geocode: bool) -> pd.DataFrame:
+    def fetch_time_series_and_make_features(self, start_date: datetime, target_date: datetime, geocode: bool) -> pd.DataFrame:
         """
         Queries the offline feature store for time series data within a certain timeframe, and creates features
         features from that data. We then apply feature engineering so that the data aligns with the features from
@@ -76,8 +76,6 @@ class InferenceModule:
         Returns:
             pd.DataFrame: time series data 
         """ 
-        fetch_from = target_date - timedelta(days=270)
-
         feature_view: FeatureView = self.api.get_or_create_feature_view(
             name=f"{self.scenario}_feature_view",
             feature_group=self.feature_group,
@@ -86,7 +84,7 @@ class InferenceModule:
 
         logger.warning("Fetching time series data from the offline feature store...")
         ts_data: pd.DataFrame = feature_view.get_batch_data(
-            start_time=fetch_from, 
+            start_time=start_date, 
             end_time=target_date,
             read_options={"use_hive": True}
         )

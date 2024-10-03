@@ -98,7 +98,11 @@ class BackFiller:
         registry = ModelRegistry(scenario=self.scenario, model_name=model_name, tuned_or_not=tuned_or_not)
         model = registry.download_latest_model(unzip=True)
 
-        features = inferrer.fetch_time_series_and_make_features(target_date=datetime.now(), geocode=False)
+        features = inferrer.fetch_time_series_and_make_features(
+            start_date=target_date - timedelta(days=270),
+            target_date=datetime.now(),
+            geocode=False
+        )
         
         try:
             features = features.drop(["trips_next_hour", f"{scenario}_hour"], axis=1)

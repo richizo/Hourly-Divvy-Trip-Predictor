@@ -36,7 +36,10 @@ def get_station_name(station_id: int) -> str:
             return station["station_name"]
 
 
+@st.cache_data
+@st.cache_resource
 def plot_for_one_station(
+    scenario: str,
     station_name: int,
     features: pd.DataFrame,
     predictions: pd.DataFrame,
@@ -56,42 +59,31 @@ def plot_for_one_station(
     station_features: pd.DataFrame = features[features[f"{scenario}_station_name"] == station_name]
     station_targets = targets[targets["station_name"] == station_name] if targets is not None else None
 
-    station_features.to_parquet(INFERENCE_DATA/f"{scenario}_station_features.parquet")
-    station_targets.to_parquet(INFERENCE_DATA/f"{scenario}_station_targets.parquet")
-    breakpoint()
-
     columns_of_past_trips = [column for column in station_features.columns if column.startswith("trips_previous_")]
-    cumulative_trips = [station_features[column] for column in columns_of_past_trips] + [station_targets]
+    cumulative_trips = [station_features[column].iloc[0] for column in columns_of_past_trips] + [station_targets[f"predicted_{scenario}s"].iloc[0]]
+    
+    trip_hour = station_features[f"{scenario}_hour"].iloc[0]
 
-    all_trip_dates = pd.date_range(
-        start=station_features[f"{scenario}_hour"] - timedelta(hours=len(columns_of_past_trips)),
-        end=station_features[f"{scenario}_hour"],
+    all_dates = pd.date_range(
+        start=trip_hour - timedelta(hours=len(columns_of_past_trips)),
+        end=trip_hour,
         freq="H" 
     )
 
-    # Surely the whole hour column can't be here
-    title = f"{config.displayed_scenario_names[scenario]} hour = {station_features[f"{scenario}_hour"]}, Station name =\
-        {station_name}" if display_title else None
-
-    figure = px.line(
-        x=all_trip_dates,
-        y=cumulative_trips,
-        template="plotly-dark",
-        markers=True,
-        title=title
-    )
+    st.subheader(f":blue[Station] Location: {station_name}" if display_title else None)
+    figure = px.line(x=all_dates, y=cumulative_trips, markers=True)
 
     if targets is not None:
 
         figure.add_scatter(
-            x=all_trip_dates[-1:], y=[station_targets], line_color="green", mode="markers", name="Actual value"
+            x=all_dates[-1:], y=[station_targets], line_color="green", mode="markers", name="Actual value"
         )
 
     if predictions is not None:
-        station_prediction = predictions[predictions[f"{scenario}_station_name"] ==  station_name]
+        station_prediction = predictions[predictions["station_name"] == station_name]  
 
         figure.add_scatter(
-            x=all_trip_dates[-1:], 
+            x=all_dates[-1:], 
             y=[station_prediction], 
             line_color="red",
             marker_symbol="x", 
@@ -102,25 +94,39 @@ def plot_for_one_station(
     return figure
 
 
+@st.cache_data
+def load_features() -> list[pd.DataFrame, pd.DataFrame]:
+
+    start_and_end_features = []
+    for scenario in config.displayed_scenario_names.keys():
+        inference = InferenceModule(scenario=scenario)
+
+        features = inference.fetch_time_series_and_make_features(
+            start_date = datetime.now() - timedelta(days=270),
+            target_date=datetime.now()-timedelta(days=200), 
+            geocode=False
+        )
+
+        # Add station names to features
+        ids_and_names = fetch_json_of_ids_and_names(scenario=scenario, using_mixed_indexer=True, invert=False)
+        features[f"{scenario}_station_name"] = features[f"{scenario}_station_id"].map(ids_and_names)
+        start_and_end_features.append(features)
+
+    
+
+    return start_and_end_features
+
+
+
 if __name__ != "__main__":
 
     colored_header(
-        label="Plots of Trips Over Time", 
+        label="Plots of :blue[Trips] Over Time", 
         description="View plots of time series data of trips from the top 10 stations"
     )
 
-    start_and_end_features = []
-    with st.spinner(text="Fetching features to be used for plotting"):
-        
-        for scenario in config.displayed_scenario_names.keys():
-            inference = InferenceModule(scenario=scenario)
-            features = inference.fetch_time_series_and_make_features(target_date=datetime.now(UTC), geocode=False)
-
-            # Add station names to features
-            ids_and_names = fetch_json_of_ids_and_names(scenario=scenario, using_mixed_indexer=True, invert=False)
-            features[f"{scenario}_station_name"] = features[f"{scenario}_station_id"].map(ids_and_names)
-            start_and_end_features.append(features)
-
+    with st.spinner(text="Fetching features to be used for plotting"):        
+        all_features = load_features()
 
     with st.spinner(text="Fetching the geographical data and the predictions for the next hour"):
 
@@ -128,14 +134,15 @@ if __name__ != "__main__":
             path=INFERENCE_DATA/"geographical_features_and_predictions.parquet"
         )
     
-    with st.spinner(text=""):
-        
-        station_name = geographical_features_and_predictions["station_name"].iloc[row_id]
+    with st.spinner(text=" Preparing to generate plots using acquired data"):
+
+        scenarios_and_features = {"start": all_features[0], "end": all_features[1]}
         
         for scenario in config.displayed_scenario_names.keys():
             row_indices = np.argsort(geographical_features_and_predictions[f"predicted_{scenario}s"].values)[::-1]
         
             for row_id in row_indices[:10]:
+                station_name = geographical_features_and_predictions["station_name"].iloc[row_id]
                 prediction = geographical_features_and_predictions[f"predicted_{scenario}s"].iloc[row_id]
 
                 st.metric(
@@ -146,9 +153,9 @@ if __name__ != "__main__":
                 fig = plot_for_one_station(
                     scenario=scenario,
                     station_name=station_name,
-                    features=features,
+                    features=scenarios_and_features[scenario],
                     targets=geographical_features_and_predictions[[f"predicted_{scenario}s", "station_name"]],
-                    predictions=pd.Series(geographical_features_and_predictions[f"predicted_{scenario}s"]),
+                    predictions=geographical_features_and_predictions[[f"predicted_{scenario}s", "station_name"]],
                     display_title=True
                 )
 
