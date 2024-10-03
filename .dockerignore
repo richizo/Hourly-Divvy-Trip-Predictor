@@ -3,8 +3,15 @@
 .gitignore
 .vscode
 
+ca_chain
+certfile
+keyfile
+
 LICENSE
 Dockerfile*
 /models
 
-maps.py
+/data/raw
+/data/cleaned
+/data/transformed/training_data
+data/transformed/time series
