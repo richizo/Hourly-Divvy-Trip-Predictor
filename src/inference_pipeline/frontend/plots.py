@@ -61,7 +61,6 @@ def plot_for_one_station(
 
     columns_of_past_trips = [column for column in station_features.columns if column.startswith("trips_previous_")]
     cumulative_trips = [station_features[column].iloc[0] for column in columns_of_past_trips] + [station_targets[f"predicted_{scenario}s"].iloc[0]]
-    
     trip_hour = station_features[f"{scenario}_hour"].iloc[0]
 
     all_dates = pd.date_range(
@@ -74,7 +73,6 @@ def plot_for_one_station(
     figure = px.line(x=all_dates, y=cumulative_trips, markers=True)
 
     if targets is not None:
-
         figure.add_scatter(
             x=all_dates[-1:], y=[station_targets], line_color="green", mode="markers", name="Actual value"
         )
@@ -95,15 +93,15 @@ def plot_for_one_station(
 
 
 @st.cache_data
-def load_features() -> list[pd.DataFrame, pd.DataFrame]:
+def load_features(start_date: datetime, target_date: datetime) -> list[pd.DataFrame, pd.DataFrame]:
 
     start_and_end_features = []
     for scenario in config.displayed_scenario_names.keys():
         inference = InferenceModule(scenario=scenario)
-
+        
         features = inference.fetch_time_series_and_make_features(
-            start_date = datetime.now() - timedelta(days=270),
-            target_date=datetime.now()-timedelta(days=200), 
+            start_date=start_date, 
+            target_date=target_date, 
             geocode=False
         )
 
@@ -111,8 +109,6 @@ def load_features() -> list[pd.DataFrame, pd.DataFrame]:
         ids_and_names = fetch_json_of_ids_and_names(scenario=scenario, using_mixed_indexer=True, invert=False)
         features[f"{scenario}_station_name"] = features[f"{scenario}_station_id"].map(ids_and_names)
         start_and_end_features.append(features)
-
-    
 
     return start_and_end_features
 
@@ -126,7 +122,7 @@ if __name__ != "__main__":
     )
 
     with st.spinner(text="Fetching features to be used for plotting"):        
-        all_features = load_features()
+        all_features = load_features(start_date = datetime.now() - timedelta(days=7), target_date=datetime.now())
 
     with st.spinner(text="Fetching the geographical data and the predictions for the next hour"):
 
@@ -139,6 +135,10 @@ if __name__ != "__main__":
         scenarios_and_features = {"start": all_features[0], "end": all_features[1]}
         
         for scenario in config.displayed_scenario_names.keys():
+            
+            print(f"{scenario}_hour" in scenarios_and_features[scenario].columns)
+            breakpoint()
+        
             row_indices = np.argsort(geographical_features_and_predictions[f"predicted_{scenario}s"].values)[::-1]
         
             for row_id in row_indices[:10]:
@@ -155,8 +155,9 @@ if __name__ != "__main__":
                     station_name=station_name,
                     features=scenarios_and_features[scenario],
                     targets=geographical_features_and_predictions[[f"predicted_{scenario}s", "station_name"]],
-                    predictions=geographical_features_and_predictions[[f"predicted_{scenario}s", "station_name"]],
-                    display_title=True
+                    predictions=geographical_features_and_predictions[[f"predicted_{scenario}s", f"{scenario}_hour", "station_name"]],
+                    display_title=False
                 )
 
                 st.plotly_chart(fig, theme="streamlit", use_container_width=True)
+                
