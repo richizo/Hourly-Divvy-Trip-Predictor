@@ -1,5 +1,5 @@
 """
-This module contains all the code that allows interaction with the model registry of CometML.
+This module contains all the code that allows interaction with CometML's model registry.
 """
 from pathlib import Path
 

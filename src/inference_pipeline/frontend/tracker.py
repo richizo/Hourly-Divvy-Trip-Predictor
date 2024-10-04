@@ -6,7 +6,6 @@ rKeeping this object in main.py (its original location) causes the widgets in
 whichever script calls the tracker to appear twice, so it needs 
 to live in a dedicated file.
 """
-
 import streamlit as st 
 
 class ProgressTracker:

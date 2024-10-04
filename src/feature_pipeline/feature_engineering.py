@@ -51,15 +51,6 @@ class Geocoder:
                   coordinates
         """
         def _trigger_geocoder(geocoder: Nominatim | Photon, place_names: list) -> dict:
-            """
-
-            Args:
-                geocoder: the geocoder to be used.
-                place_names: the names of the places that are to be geocoded.
-
-            Returns:
-                dict: 
-            """
             places_and_points = {}
             for place in place_names:
                 if place in places_and_points.keys():  # The same geocoding request will not be made twice
@@ -215,15 +206,6 @@ class ReverseGeocoder:
         new_addresses_and_coordinates: list[dict[str, list[float] | str]],
         saved_geodata:  list[dict[str, list[float] | str]]
     ):
-        """
-
-        Args:
-            new_addresses_and_coordinates (list[dict[str, list[float]  |  str]]): _description_
-            saved_geodata (list[dict[str, list[float]  |  str]]): _description_
-
-        Returns:
-            _type_: _description_
-        """
         established_ids = []
         for station_information in tqdm(iterable=saved_geodata, desc="Finding established IDs"):
             station_id = station_information["station_id"]

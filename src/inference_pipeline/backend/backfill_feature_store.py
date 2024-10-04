@@ -5,7 +5,7 @@ data.
 import json 
 import pandas as pd
 from loguru import logger
-from datetime import datetime
+from datetime import datetime, timedelta
 from argparse import ArgumentParser
 
 from src.setup.config import config
