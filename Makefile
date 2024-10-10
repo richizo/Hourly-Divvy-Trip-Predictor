@@ -25,14 +25,14 @@ backfill-features:
 	poetry run python src/inference_pipeline/backend/backfill_feature_store.py --scenarios start end --target features 
 	
 backfill-predictions:
-	poetry run python src/inference_pipeline/backend/backfill_feature_store.py --scenarios end --target predictions
+	poetry run python src/inference_pipeline/backend/backfill_feature_store.py --scenarios start end --target predictions
 	
 backfill-all: backfill-features backfill-predictions	
 
 
 # Frontend
 frontend:
-	poetry run streamlit run src/inference_pipeline/frontend/main.py --server.port 8509
+	poetry run streamlit run src/inference_pipeline/frontend/main.py --server.port 8510
 
 start-docker:
 	sudo systemctl start docker

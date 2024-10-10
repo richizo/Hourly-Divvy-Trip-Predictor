@@ -36,8 +36,8 @@ def make_geodataframes() -> pd.DataFrame:
     geo_dataframes = []
     for scenario in config.displayed_scenario_names.keys():\
 
-        coordinates, station_names = []
-        unique_coordinates, unique_station_names = set()
+        coordinates, station_names = [], []
+        unique_coordinates, unique_station_names = set(), set()
         station_details: list[dict] = load_raw_local_geodata(scenario=scenario)
 
         for detail in tqdm(
