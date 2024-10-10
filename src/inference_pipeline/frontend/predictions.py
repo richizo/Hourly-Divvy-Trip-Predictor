@@ -23,15 +23,13 @@ from src.inference_pipeline.frontend.data import make_geodataframes, reconcile_g
 
 @st.cache_data
 def retrieve_predictions(
-    model_name="xgboost",
     from_hour=config.current_hour - timedelta(hours=1),
     to_hour=config.current_hour
 ) -> pd.DataFrame:
-    """
+    """ 
     Download all the predictions for all the stations from one hour to another
 
     Args:
-        model_name: the name of the model which was trained to produce the predictions we want. Defaults to xgboost.
         from_hour (datetime, optional): From which hour we want to fetch predictions. Defaults to the previous hour.
         to_hour (datetime, optional): the hour we want predictions for. Defaults to the current hour.
 
@@ -41,6 +39,7 @@ def retrieve_predictions(
     prediction_dataframes =[]
     for scenario in config.displayed_scenario_names.keys():
         infer = InferenceModule(scenario=scenario)
+        model_name = "lightgbm" if scenario == "end" else "xgboost"
         predictions: pd.DataFrame = infer.load_predictions_from_store(
             model_name=model_name, 
             from_hour=from_hour, 
@@ -158,7 +157,7 @@ def pseudocolour(
         stop_colour:a tuple representing the RGB values of the colour on the extreme right of the colour scale
 
     Returns:
-
+        tuple[float...]: 
     """
     relative_value =  float(value-min_value)/(max_value-min_value)
     return tuple(

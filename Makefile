@@ -17,7 +17,7 @@ train-ends-tuned:
 	poetry run python src/training_pipeline/training.py --scenario end --models xgboost lasso lightgbm \
  	--tune_hyperparameters --hyperparameter_trials 5
 
-train-all: train-start-untuned train-end-untuned train-start-tuned train-end-tuned
+train-all: train-starts-untuned train-ends-untuned train-starts-tuned train-ends-tuned
 
 
 # Backfilling the Feature Store
@@ -25,14 +25,14 @@ backfill-features:
 	poetry run python src/inference_pipeline/backend/backfill_feature_store.py --scenarios start end --target features 
 	
 backfill-predictions:
-	poetry run python src/inference_pipeline/backend/backfill_feature_store.py --scenarios start end --target predictions
+	poetry run python src/inference_pipeline/backend/backfill_feature_store.py --scenarios end --target predictions
 	
 backfill-all: backfill-features backfill-predictions	
 
 
 # Frontend
 frontend:
-	poetry run streamlit run src/inference_pipeline/frontend/main.py --server.port 8501
+	poetry run streamlit run src/inference_pipeline/frontend/main.py --server.port 8509
 
 start-docker:
 	sudo systemctl start docker
