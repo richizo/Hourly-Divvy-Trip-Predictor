@@ -97,7 +97,7 @@ class BackFiller:
         model = registry.download_latest_model(unzip=True)
 
         features = inferrer.fetch_time_series_and_make_features(
-            start_date=target_date - timedelta(days=270),
+            start_date=target_date - timedelta(days=30),
             target_date=datetime.now(),
             geocode=False
         )
