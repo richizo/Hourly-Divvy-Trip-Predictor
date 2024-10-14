@@ -33,18 +33,4 @@ class GeneralConfig(BaseSettings):
     displayed_scenario_names: dict = {"start": "Departures", "end": "Arrivals"} 
 
 
-class FeatureGroupConfig(BaseSettings):
-    name: str
-    version: int
-    primary_key: list[str]
-    online_enabled: bool | None = False  # because this is a batch ML system. 
-    event_time: str
-
-
-class FeatureViewConfig(BaseSettings):
-    name: str
-    version: int
-    feature_group: FeatureGroupConfig
-
-
 config = GeneralConfig()

@@ -15,14 +15,20 @@ from datetime import datetime, timedelta
 from streamlit_extras.colored_header import colored_header
 
 from src.setup.config import config 
-from src.setup.paths import FRONTEND_DATA
+from src.setup.paths import FRONTEND_DATA, INFERENCE_DATA
 from src.inference_pipeline.frontend.tracker import ProgressTracker
-from src.inference_pipeline.backend.inference import InferenceModule
+from src.inference_pipeline.backend.inference import (
+    load_predictions_from_store,
+     
+)
+
+
 from src.inference_pipeline.frontend.data import make_geodataframes, reconcile_geodata
 
 
 @st.cache_data
 def retrieve_predictions(
+    local: bool = True, 
     from_hour=config.current_hour - timedelta(hours=1),
     to_hour=config.current_hour
 ) -> pd.DataFrame:
@@ -37,15 +43,19 @@ def retrieve_predictions(
         tuple[pd.DataFrame, pd.DataFrame]: a list of dataframes of predictions for both arrivals and departures
     """
     prediction_dataframes =[]
-    for scenario in config.displayed_scenario_names.keys():
-        infer = InferenceModule(scenario=scenario)
+    for scenario in config.displayed_scenario_names.keys():                
         model_name = "lightgbm" if scenario == "end" else "xgboost"
 
-        predictions: pd.DataFrame = infer.load_predictions_from_store(
-            model_name=model_name, 
-            from_hour=from_hour, 
-            to_hour=to_hour
-        )
+        if local:
+            predictions = pd.read_parquet(path=INFERENCE_DATA/f"{scenario}_predictions.parquet")
+            predictions = predictions[predictions[f"{scenario}_hour"].between(left=from_hour, right=to_hour)]
+        else:
+            predictions: pd.DataFrame = load_predictions_from_store(
+                scenario=scenario,
+                model_name=model_name, 
+                from_hour=from_hour, 
+                to_hour=to_hour
+            )
         
         prediction_dataframes.append(predictions)
 
