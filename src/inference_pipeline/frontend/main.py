@@ -15,7 +15,7 @@ pages = st.navigation(
         st.Page(page="predictions.py", title="Predictions", icon="🔮"),
         #st.Page(page="plots.py", title="Viewing Trips Over Time", icon="📈"),
         # st.Page(page="monitoring.py", title="Monitoring Model Performance", icon="🔬"),
-        st.Page(page="about.py", title="About the Developer", icon="🧔‍♂️")
+        st.Page(page="about.py", title="About Me", icon="🧔‍♂️")
     ]
 )
 

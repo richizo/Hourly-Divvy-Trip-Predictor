@@ -14,29 +14,19 @@ from src.feature_pipeline.preprocessing import DataProcessor
 from src.feature_pipeline.mixed_indexer import fetch_json_of_ids_and_names
 
 from src.inference_pipeline.backend.inference import (
+    make_features,
     load_raw_local_geodata, 
     fetch_predictions_group,
+    get_feature_group_for_time_series,
     fetch_time_series_and_make_features
 )
 
 from src.inference_pipeline.backend.feature_store_api import setup_feature_group
 from src.inference_pipeline.backend.model_registry_api import ModelRegistry
+from src.inference_pipeline.backend.inference import get_model_predictions
 
 
-def get_feature_group_for_time_series(scenario: str, primary_key: list[str], event_time: str):
-
-    return setup_feature_group(
-        scenario=scenario,
-        primary_key=primary_key,
-        event_time=event_time,
-        description=f"Hourly time series data for {config.displayed_scenario_names[scenario].lower()}",
-        name=f"{scenario}_feature_group",
-        version=config.feature_group_version,
-        for_predictions=False
-    )
-
-
-def backfill_features(scenario: str) -> None:
+def backfill_features(scenario: str, local: bool = False) -> None:
     """
     Run the preprocessing script and upload the time series data to the feature store.
 
@@ -52,13 +42,11 @@ def backfill_features(scenario: str) -> None:
     ts_data = processor.make_time_series()[0] if scenario == "start" else processor.make_time_series()[1]
     ts_data["timestamp"] = pd.to_datetime(ts_data[f"{scenario}_hour"]).astype(int) // 10 ** 6  # Express in ms
 
-    ts_feature_group = get_feature_group_for_time_series(scenario=scenario)
-
-    # Push time series data to the feature group
-    ts_feature_group.insert(
-        ts_data,
-        write_options={"wait_for_job": True}
-    )
+    if local:
+        ts_data.to_parquet(path=INFERENCE_DATA/f"{scenario}_ts_for_inference.parquet")
+    else:
+        ts_feature_group = get_feature_group_for_time_series(scenario=scenario, primary_key=primary_key)
+        ts_feature_group.insert(write_options={"wait_for_job": True}, features=ts_data) # Push time series data to the feature group
 
 
 def backfill_predictions(
@@ -68,9 +56,9 @@ def backfill_predictions(
     using_mixed_indexer: bool = True
     ) -> None:
     """
-    Fetch the registered version of the named model, and download it. Then load a batch of features
-    from the relevant feature group(whether for arrival or departure data), and make predictions on those 
-    features using the model. Then create or fetch a feature group for these predictions and push these  
+    Fetch the registered version of the named model, and download it. Then load a batch of ts_data
+    from the relevant feature group (whether for arrival or departure data), and make predictions on those 
+    ts_data using the model. Then create or fetch a feature group for these predictions and push these  
     predictions. 
 
     Args:
@@ -78,6 +66,8 @@ def backfill_predictions(
         
     """
     primary_key = [f"{scenario}_station_id"]
+    start_date = target_date - timedelta(days=20)
+    end_date = datetime.now()
     
     # Based on the best models for arrivals & departures at the moment
     model_name = "lightgbm" if scenario == "end" else "xgboost"
@@ -85,16 +75,30 @@ def backfill_predictions(
 
     registry = ModelRegistry(scenario=scenario, model_name=model_name, tuned_or_not=tuned_or_not)
     model = registry.download_latest_model(unzip=True)
-    ts_feature_group = get_feature_group_for_time_series(scenario=scenario, primary_key=primary_key, event_time=None)
-
-    features = fetch_time_series_and_make_features(
-        scenario=scenario,
-        feature_group=ts_feature_group,
-        start_date=target_date - timedelta(days=270),
-        target_date=datetime.now(),
-        geocode=False
-    )
     
+    if local:
+        ts_data = pd.read_parquet(path=INFERENCE_DATA/f"{scenario}_ts_for_inference.parquet")
+        ts_data = ts_data[ts_data[f"{scenario}_hour"].between(left=start_date, right=end_date)] 
+
+        features = make_features(
+            scenario=scenario, 
+            station_ids=ts_data[f"{scenario}_station_id"].unique(),
+            target_date=target_date, 
+            ts_data=ts_data, 
+            geocode=False
+        )
+
+    else:
+        ts_feature_group = get_feature_group_for_time_series(scenario=scenario, primary_key=primary_key)
+
+        features = fetch_time_series_and_make_features(
+            scenario=scenario,
+            start_date=start_date,
+            target_date=end_date,
+            feature_group=ts_feature_group,
+            geocode=False
+        )
+
     try:
         features = features.drop(["trips_next_hour", f"{scenario}_hour"], axis=1)
     except Exception as error:
@@ -112,16 +116,15 @@ def backfill_predictions(
         predictions.to_parquet(INFERENCE_DATA/f"{scenario}_predictions.parquet")
     else:    
         predictions_feature_group = setup_feature_group(
+            scenario=scenario,
+            primary_key=primary_key,
             description=f"predicting {config.displayed_scenario_names[scenario]} - {tuned_or_not} {model_name}",
             name=f"{model_name}_{scenario}_predictions_feature_group",
             for_predictions=True,
             version=6
         )
 
-        predictions_feature_group.insert(
-            predictions,
-            write_options={"wait_for_job": True}
-        )
+        predictions_feature_group.insert(write_options={"wait_for_job": True}, features=predictions)
 
 
 if __name__ == "__main__":
@@ -132,9 +135,9 @@ if __name__ == "__main__":
     args = parser.parse_args()    
     
     for scenario in args.scenarios:
-        if args.target.lower() == "features":
+        if args.target.lower() == "ts_data":
             backfill_features(scenario=scenario)
         elif args.target.lower() == "predictions":
             backfill_predictions(scenario=scenario, target_date=datetime.now())
         else:
-            raise Exception('The only acceptable targets of the command are "features" and "predictions"')
+            raise Exception('The only acceptable targets of the command are "ts_data" and "predictions"')

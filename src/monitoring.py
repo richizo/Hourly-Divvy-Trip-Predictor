@@ -8,7 +8,7 @@ import pandas as pd
 from datetime import datetime, timedelta, timezone
 
 from src.setup.config import config
-from src.inference_pipeline.backend.feature_store_api import FeatureStoreAPI
+from src.inference_pipeline.backend.feature_store_api import setup_feature_group
 
 
 def load_predictions_and_historical_trips(
@@ -39,26 +39,20 @@ def load_predictions_and_historical_trips(
 
     arrivals_or_departures: str = config.displayed_scenario_names[scenario].lower()
 
-    api = FeatureStoreAPI(
+    predictions_fg = setup_feature_group(
         scenario=scenario,
-        api_key=config.hopsworks_api_key,
-        project_name=config.hopsworks_project_name,
-        event_time=None,
-        primary_key=None
-    )
-
-    predictions_fg = api.setup_feature_group(
         description=f"predicting {arrivals_or_departures} - {tuned_or_not} {model_name}",
         name=f"{model_name}_{scenario}_predictions_feature_group",
         for_predictions=True,
+        primary_key=[f"{scenario}_station_id"],
         version=6
     )
 
-
-    historical_fg = api.setup_feature_group(
+    historical_fg = setup_feature_group(
         description=f"Hourly time series data for {arrivals_or_departures.lower()}",
-        name=f"{scenario}_feature_group",
+        primary_key=["timestamp", f"{scenario}_station_id"],
         version=config.feature_group_version,
+        name=f"{scenario}_feature_group",
         for_predictions=False
     ) 
 

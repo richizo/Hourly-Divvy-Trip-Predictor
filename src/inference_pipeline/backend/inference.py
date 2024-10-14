@@ -22,12 +22,24 @@ from hsfs.feature_view import FeatureView
 from sklearn.pipeline import Pipeline
 
 from src.setup.config import config
-from src.setup.paths import ROUNDING_INDEXER, MIXED_INDEXER
+from src.setup.paths import ROUNDING_INDEXER, MIXED_INDEXER, INFERENCE_DATA
 
 from src.feature_pipeline.preprocessing import DataProcessor
 from src.feature_pipeline.feature_engineering import finish_feature_engineering
 from src.inference_pipeline.backend.model_registry_api import ModelRegistry
 from src.inference_pipeline.backend.feature_store_api import setup_feature_group, get_or_create_feature_view
+
+
+def get_feature_group_for_time_series(scenario: str, primary_key: list[str]) -> FeatureGroup:
+
+    return setup_feature_group(
+        scenario=scenario,
+        primary_key=primary_key,
+        description=f"Hourly time series data for {config.displayed_scenario_names[scenario].lower()}",
+        name=f"{scenario}_feature_group",
+        version=config.feature_group_version,
+        for_predictions=False
+    )
 
 
 def fetch_time_series_and_make_features(
@@ -61,7 +73,7 @@ def fetch_time_series_and_make_features(
         version=1   
     )
 
-    logger.warning("Fetching time series data from the offline feature store...")
+    logger.warning("Fetching time series data from the feature store...")
     ts_data: pd.DataFrame = feature_view.get_batch_data(
         start_time=start_date, 
         end_time=target_date,
@@ -72,16 +84,22 @@ def fetch_time_series_and_make_features(
         by=[f"{scenario}_station_id", f"{scenario}_hour"]
     )
 
-    station_ids = ts_data[f"{scenario}_station_id"].unique()
-    features = make_features(station_ids=station_ids, ts_data=ts_data, geocode=geocode)
+    return make_features(
+        scenario=scenario, 
+        ts_data=ts_data, 
+        geocode=geocode,
+        target_date=target_date,
+        station_ids=ts_data[f"{scenario}_station_id"].unique()
+    )
 
-    features[f"{scenario}_hour"] = target_date
-    features = features.sort_values(by=[f"{scenario}_station_id"])
 
-    return features
-
-
-def make_features(scenario: str, station_ids: list[int], ts_data: pd.DataFrame, geocode: bool) -> pd.DataFrame:
+def make_features(
+    scenario: str, 
+    target_date: datetime, 
+    station_ids: list[int], 
+    ts_data: pd.DataFrame, 
+    geocode: bool
+    ) -> pd.DataFrame:
     """
     Restructure the time series data into features in a way that aligns with the features 
     of the original training data.
@@ -94,15 +112,19 @@ def make_features(scenario: str, station_ids: list[int], ts_data: pd.DataFrame, 
         pd.DataFrame: time series data
     """
     processor = DataProcessor(year=config.year, for_inference=True)
-
+    
     # Perform transformation of the time series data with feature engineering
-    return processor.transform_ts_into_training_data(
+    features = processor.transform_ts_into_training_data(
+        scenario=scenario, 
         ts_data=ts_data,
         geocode=geocode,
-        scenario=scenario, 
         input_seq_len=config.n_features,
         step_size=24
     )
+
+    features[f"{scenario}_hour"] = target_date
+    features = features.sort_values(by=[f"{scenario}_station_id"])
+    return features
 
 
 def fetch_predictions_group(scenario: str, model_name: str) -> FeatureGroup:

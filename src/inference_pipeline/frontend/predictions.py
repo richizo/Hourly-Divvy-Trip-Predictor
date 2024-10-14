@@ -48,7 +48,18 @@ def retrieve_predictions(
 
         if local:
             predictions = pd.read_parquet(path=INFERENCE_DATA/f"{scenario}_predictions.parquet")
-            predictions = predictions[predictions[f"{scenario}_hour"].between(left=from_hour, right=to_hour)]
+            hours_in_range = pd.date_range(start=from_hour, end=to_hour, freq="H")
+       
+            in_range = np.isin(
+                element=pd.to_datetime(predictions[f"{scenario}_hour"].values), 
+                test_elements=pd.Series(data=hours_in_range).values
+            )
+
+            breakpoint() 
+        
+            predictions = predictions.loc[in_range, :]
+            
+
         else:
             predictions: pd.DataFrame = load_predictions_from_store(
                 scenario=scenario,
@@ -300,7 +311,7 @@ if __name__ != "__main__":
         start_geodataframe, end_geodataframe = make_geodataframes()
         tracker.next()
 
-    with st.spinner(text=f"Fetching all predictions from the feature store"):
+    with st.spinner(text=f"Fetching all predictions from the offline feature store"):
         predicted_starts, predicted_ends = retrieve_predictions()
 
         predicted_starts_this_hour, predicted_ends_this_hour = retrieve_predictions_for_this_hour(

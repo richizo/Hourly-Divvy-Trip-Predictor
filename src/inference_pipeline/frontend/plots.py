@@ -15,7 +15,7 @@ from streamlit_extras.colored_header import colored_header
 from src.setup.config import config
 from src.setup.paths import MIXED_INDEXER, INFERENCE_DATA, GEOGRAPHICAL_DATA
 from src.feature_pipeline.mixed_indexer import fetch_json_of_ids_and_names
-from src.inference_pipeline.backend.inference import InferenceModule
+from src.inference_pipeline.backend.inference import fetch_time_series_and_make_features, get_feature_group_for_time_series
 
 
 def get_station_name(station_id: int) -> str:
@@ -97,9 +97,15 @@ def load_features(start_date: datetime, target_date: datetime) -> list[pd.DataFr
 
     start_and_end_features = []
     for scenario in config.displayed_scenario_names.keys():
-        inference = InferenceModule(scenario=scenario)
-        
-        features = inference.fetch_time_series_and_make_features(
+
+        feature_group = get_feature_group_for_time_series(
+            scenario=scenario, 
+            primary_key=["timestamp", f"{scenario}_station_id"],
+            event_time="timestamp"
+        )
+
+        features = fetch_time_series_and_make_features(
+            scenario=scenario,
             start_date=start_date, 
             target_date=target_date, 
             geocode=False
@@ -136,8 +142,8 @@ if __name__ != "__main__":
         
         for scenario in config.displayed_scenario_names.keys():
             
-            print(f"{scenario}_hour" in scenarios_and_features[scenario].columns)
-            breakpoint()
+            # print(f"{scenario}_hour" in scenarios_and_features[scenario].columns)
+            # breakpoint()
         
             row_indices = np.argsort(geographical_features_and_predictions[f"predicted_{scenario}s"].values)[::-1]
         
