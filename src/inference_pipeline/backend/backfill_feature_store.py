@@ -26,7 +26,7 @@ from src.inference_pipeline.backend.model_registry_api import ModelRegistry
 from src.inference_pipeline.backend.inference import get_model_predictions
 
 
-def backfill_features(scenario: str, local: bool = False) -> None:
+def backfill_features(scenario: str, local: bool = True) -> None:
     """
     Run the preprocessing script and upload the time series data to the feature store.
 
@@ -49,12 +49,7 @@ def backfill_features(scenario: str, local: bool = False) -> None:
         ts_feature_group.insert(write_options={"wait_for_job": True}, features=ts_data) # Push time series data to the feature group
 
 
-def backfill_predictions(
-    scenario: str, 
-    target_date: datetime, 
-    local: bool = True, 
-    using_mixed_indexer: bool = True
-    ) -> None:
+def backfill_predictions(scenario: str, target_date: datetime, local: bool = True, using_mixed_indexer: bool = True) -> None:
     """
     Fetch the registered version of the named model, and download it. Then load a batch of ts_data
     from the relevant feature group (whether for arrival or departure data), and make predictions on those 
@@ -66,8 +61,8 @@ def backfill_predictions(
         
     """
     primary_key = [f"{scenario}_station_id"]
-    start_date = target_date - timedelta(days=20)
-    end_date = datetime.now()
+    start_date = target_date - timedelta(days=270)
+    end_date = target_date + timedelta(days=1)
     
     # Based on the best models for arrivals & departures at the moment
     model_name = "lightgbm" if scenario == "end" else "xgboost"
@@ -112,8 +107,8 @@ def backfill_predictions(
     predictions[f"{scenario}_station_name"] = predictions[f"{scenario}_station_id"].map(ids_and_names)
 
     if local:
-        logger.warning(f"Logging predicted {config.displayed_scenario_names[scenario].lower()} locally")
         predictions.to_parquet(INFERENCE_DATA/f"{scenario}_predictions.parquet")
+        logger.success(f"Saved predicted {config.displayed_scenario_names[scenario].lower()} locally")
     else:    
         predictions_feature_group = setup_feature_group(
             scenario=scenario,
@@ -135,9 +130,9 @@ if __name__ == "__main__":
     args = parser.parse_args()    
     
     for scenario in args.scenarios:
-        if args.target.lower() == "ts_data":
+        if args.target.lower() == "features":
             backfill_features(scenario=scenario)
         elif args.target.lower() == "predictions":
             backfill_predictions(scenario=scenario, target_date=datetime.now())
         else:
-            raise Exception('The only acceptable targets of the command are "ts_data" and "predictions"')
+            raise Exception('The only acceptable targets of the command are "features" and "predictions"')

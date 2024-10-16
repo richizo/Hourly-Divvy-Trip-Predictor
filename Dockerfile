@@ -24,7 +24,7 @@ RUN mkdir -p ~/.streamlit/
 RUN echo "[general]"  > ~/.streamlit/credentials.toml
 RUN echo "email = \"\""  >> ~/.streamlit/credentials.toml
 
-RUN echo "0 * * * * make backfill-all" >> /etc/cron.d/backfill_cron_job
+RUN echo "*/5 * * * * make backfill-all >> /var/log/cron.log 2>&1" >> /etc/cron.d/backfill_cron_job
 RUN chmod 0644 /etc/cron.d/backfill_cron_job
 RUN crontab /etc/cron.d/backfill_cron_job
 

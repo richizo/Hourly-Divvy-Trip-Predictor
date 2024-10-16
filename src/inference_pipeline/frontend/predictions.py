@@ -54,11 +54,8 @@ def retrieve_predictions(
                 element=pd.to_datetime(predictions[f"{scenario}_hour"].values), 
                 test_elements=pd.Series(data=hours_in_range).values
             )
-
-            breakpoint() 
         
             predictions = predictions.loc[in_range, :]
-            
 
         else:
             predictions: pd.DataFrame = load_predictions_from_store(
@@ -104,14 +101,14 @@ def retrieve_predictions_for_this_hour(
 
     for scenario in scenario_and_predictions.keys():
         predictions = scenario_and_predictions[scenario]
+    
         next_hour_ready = False if predictions[predictions[f"{scenario}_hour"] == to_hour].empty else True
         previous_hour_ready = False if predictions[predictions[f"{scenario}_hour"] == from_hour].empty else True
 
         if next_hour_ready:
             predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == to_hour]
         elif previous_hour_ready:
-            if scenario == "start":
-                st.write("⚠️ Predictions for the current hour are unavailable. You are currently viewing predictions from an hour ago.")
+            st.write("⚠️ Predictions for the current hour are unavailable. Providing predictions from an hour ago.")
             predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == from_hour]
         else:
             raise Exception("Cannot get predictions for either hour. The feature pipeline may not be working")
@@ -348,6 +345,8 @@ if __name__ != "__main__":
         )
 
         tracker.next()
+
+        breakpoint()
 
     with st.spinner(text="Generating map of the stations in the Greater Chicago"):
         make_map(_geodataframe_and_predictions=geographical_features_and_predictions)
