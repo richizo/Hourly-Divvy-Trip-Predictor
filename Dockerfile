@@ -1,10 +1,12 @@
 FROM python:3.12.5-slim-bookworm
 
-RUN apt-get update && apt-get install -y --no-install-recommends pip gcc make python3-dev
+RUN apt-get update && apt-get install -y --no-install-recommends pip gcc make python3-dev cron supervisor
 RUN pip install poetry
 
 WORKDIR /app
 COPY . /app/
+RUN rm -rf /app/supervisord.conf
+COPY supervisord.conf /etc/supervisord.conf
 
 RUN poetry install 
 
@@ -21,5 +23,9 @@ ENV HOPSWORKS_PROJECT_NAME=who_knows
 RUN mkdir -p ~/.streamlit/
 RUN echo "[general]"  > ~/.streamlit/credentials.toml
 RUN echo "email = \"\""  >> ~/.streamlit/credentials.toml
+
+RUN echo "0 * * * * make backfill-all" >> /etc/cron.d/backfill_cron_job
+RUN chmod 0644 /etc/cron.d/backfill_cron_job
+RUN crontab /etc/cron.d/backfill_cron_job
 
 ENTRYPOINT ["poetry", "run", "streamlit", "run", "src/inference_pipeline/frontend/main.py", "--server.port", "8501"]
