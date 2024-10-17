@@ -28,4 +28,5 @@ RUN echo "*/5 * * * * make backfill-all >> /var/log/cron.log 2>&1" >> /etc/cron.
 RUN chmod 0644 /etc/cron.d/backfill_cron_job
 RUN crontab /etc/cron.d/backfill_cron_job
 
-ENTRYPOINT ["poetry", "run", "streamlit", "run", "src/inference_pipeline/frontend/main.py", "--server.port", "8501"]
+RUN touch /var/log/cron.log /var/log/supervisord.log
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]

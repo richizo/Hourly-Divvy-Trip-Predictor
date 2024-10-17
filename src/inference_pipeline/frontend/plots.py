@@ -97,12 +97,9 @@ def load_features(start_date: datetime, target_date: datetime) -> list[pd.DataFr
 
     start_and_end_features = []
     for scenario in config.displayed_scenario_names.keys():
+        primary_key = ["timestamp", f"{scenario}_station_id"]
 
-        feature_group = get_feature_group_for_time_series(
-            scenario=scenario, 
-            primary_key=["timestamp", f"{scenario}_station_id"],
-            event_time="timestamp"
-        )
+        feature_group = get_feature_group_for_time_series(scenario=scenario, primary_key=primary_key)
 
         features = fetch_time_series_and_make_features(
             scenario=scenario,
