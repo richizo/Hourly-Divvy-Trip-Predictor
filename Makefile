@@ -32,7 +32,7 @@ backfill-all: backfill-features backfill-predictions
 
 # Frontend
 frontend:
-	poetry run streamlit run src/inference_pipeline/frontend/main.py --server.port 8529
+	poetry run streamlit run src/inference_pipeline/frontend/main.py --server.port 8531
 
 start-docker:
 	sudo systemctl start docker

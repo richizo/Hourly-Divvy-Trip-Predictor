@@ -5,6 +5,7 @@ Contains code that:
 - displays the locations of the various stations on an interactive map. It has been challenging to create an 
 implementation of this that produces a good experience.
 """
+import time 
 import numpy as np
 import pandas as pd
 import pydeck as pdk
@@ -179,7 +180,31 @@ def pseudocolour(
     )
 
 
-def perform_colour_scaling(
+def merge_geodataframe_and_predictions(scenario: str, geodataframe: pd.DataFrame, predictions: pd.DataFrame):
+
+    predictions = predictions.rename(columns={f"{scenario}_station_name": "station_name"})
+    return pd.merge(left=geo_dataframe, right=predictions, left_on="station_name", right_on="station_name")
+   
+
+def colour_by_discrepancy(merged_data: pd.DataFrame) -> pd.DataFrame:
+
+    blue, red = (0, 0, 255), (255, 0, 0)
+    merged_data["discrepancy"] = merged_data["predicted_starts"] - merged_data["predicted_ends"] 
+
+    merged_data[f"fill_colour"] = merged_data["discrepancy"].apply(
+        lambda x: pseudocolour(
+            value=x,
+            min_value=merged_data["discepancy"].min(),
+            max_value=merged_data["discepancy"].max(),
+            start_colour=blue,
+            stop_colour=red
+        )
+    )
+
+    return merged_data
+    
+
+def fully_merge_data(
     start_geodataframe: pd.DataFrame,
     end_geodataframe: pd.DataFrame,
     predicted_starts: pd.DataFrame, 
@@ -197,7 +222,6 @@ def perform_colour_scaling(
         list[pd.DataFrame]: a list of dataframes consisting of the merged external geodata (from the shapefile) and 
                             the predictions from the feature store.
     """
-    black, green = (0, 0, 0), (0, 255, 0)
     geographical_features_and_predictions = []
     scenarios_and_geodataframes = {"start": start_geodataframe, "end": end_geodataframe}
     scenarios_and_predictions = {"start": predicted_starts, "end": predicted_ends}
@@ -205,20 +229,14 @@ def perform_colour_scaling(
     for scenario in config.displayed_scenario_names.keys():
         geo_dataframe = scenarios_and_geodataframes[scenario]
         predictions = scenarios_and_predictions[scenario]
-        predictions = predictions.rename(columns={f"{scenario}_station_name": "station_name"})
-        
-        merged_data = pd.merge(left=geo_dataframe, right=predictions, left_on="station_name", right_on="station_name")
-        max_prediction, min_prediction = merged_data[f"predicted_{scenario}s"].max(), merged_data[f"predicted_{scenario}s"].min()
 
-        merged_data[f"{scenario}_fill_colour"] = merged_data[f"predicted_{scenario}s"].apply(
-            lambda x: pseudocolour(
-                value=x,
-                min_value=min_prediction,
-                max_value=max_prediction,
-                start_colour=black,
-                stop_colour=green
-            )
+        merged_data = merge_geodataframe_and_predictions(
+            scenario=scenario,
+            geodataframe=geo_dataframe, 
+            predictions=predictions
         )
+
+        merged_data = colour_by_discrepancy(merged_data=merged_data)
 
         merged_data[f"coordinates"] = merged_data[f"coordinates"].apply(tuple)
         geographical_features_and_predictions.append(merged_data)
@@ -337,7 +355,7 @@ if __name__ != "__main__":
 
     with st.spinner(text="Setting up ingredients for the map"):
         
-        geographical_features_and_predictions = perform_colour_scaling(
+        geographical_features_and_predictions = fully_merge_data(
             start_geodataframe=start_geodataframe,
             end_geodataframe=end_geodataframe,
             predicted_starts=predicted_starts_this_hour,
