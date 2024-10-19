@@ -24,9 +24,5 @@ RUN mkdir -p ~/.streamlit/
 RUN echo "[general]"  > ~/.streamlit/credentials.toml
 RUN echo "email = \"\""  >> ~/.streamlit/credentials.toml
 
-RUN echo "0 * * * * export PATH=$PATH:/usr/local/bin && cd /app/ && make backfill-predictions >> /var/log/cron.log 2>&1" >> /etc/cron.d/backfill_cron_job
-RUN chmod 0644 /etc/cron.d/backfill_cron_job
-RUN crontab /etc/cron.d/backfill_cron_job
-
 RUN touch /var/log/cron.log /var/log/supervisord.log
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
+ENTRYPOINT ["poetry", "run", "streamlit", "run", "src/inference_pipeline/frontend/main.py", "--server.port", "8501"]

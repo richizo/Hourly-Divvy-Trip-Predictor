@@ -28,11 +28,7 @@ from src.inference_pipeline.frontend.data import make_geodataframes, reconcile_g
 
 
 @st.cache_data
-def retrieve_predictions(
-    local: bool = True, 
-    from_hour=config.current_hour - timedelta(hours=1),
-    to_hour=config.current_hour
-) -> pd.DataFrame:
+def retrieve_predictions(from_hour=config.current_hour - timedelta(hours=1), to_hour=config.current_hour) -> pd.DataFrame:
     """ 
     Download all the predictions for all the stations from one hour to another
 
@@ -47,24 +43,12 @@ def retrieve_predictions(
     for scenario in config.displayed_scenario_names.keys():                
         model_name = "lightgbm" if scenario == "end" else "xgboost"
 
-        if local:
-            predictions = pd.read_parquet(path=INFERENCE_DATA/f"{scenario}_predictions.parquet")
-            hours_in_range = pd.date_range(start=from_hour, end=to_hour, freq="H")
-       
-            in_range = np.isin(
-                element=pd.to_datetime(predictions[f"{scenario}_hour"].values), 
-                test_elements=pd.Series(data=hours_in_range).values
-            )
-        
-            predictions = predictions.loc[in_range, :]
-
-        else:
-            predictions: pd.DataFrame = load_predictions_from_store(
-                scenario=scenario,
-                model_name=model_name, 
-                from_hour=from_hour, 
-                to_hour=to_hour
-            )
+        predictions: pd.DataFrame = load_predictions_from_store(
+            scenario=scenario,
+            model_name=model_name, 
+            from_hour=from_hour, 
+            to_hour=to_hour
+        )
         
         prediction_dataframes.append(predictions)
 
@@ -106,13 +90,22 @@ def retrieve_predictions_for_this_hour(
         next_hour_ready = False if predictions[predictions[f"{scenario}_hour"] == to_hour].empty else True
         previous_hour_ready = False if predictions[predictions[f"{scenario}_hour"] == from_hour].empty else True
 
-        if next_hour_ready:
-            predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == to_hour]
+        if next_hour_ready: 
+            predictions_for_target_hour: pd.DataFrame = predictions[predictions[f"{scenario}_hour"] == to_hour]
+            predictions_for_target_hour.to_parquet(path=INFERENCE_DATA/f"{scenario}_predictions.parquet")
+        
         elif previous_hour_ready:
-            st.write("⚠️ Predictions for the current hour are unavailable. Providing predictions from an hour ago.")
+            if scenario == "start":  # So this message only appears once
+                st.write("⚠️ Predictions for the current hour are unavailable. Fetching those from an hour ago.")
+
             predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == from_hour]
         else:
-            raise Exception("Cannot get predictions for either hour. The feature pipeline may not be working")
+            try:
+                predictions_for_target_hour = pd.read_parquet(INFERENCE_DATA/f"{scenario}_predictions.parquet")
+                st.write("Unable to fetch predictions for this or the previous hour. Providing predictions from a while ago.")
+            except:
+                raise Exception("")
+            
 
         # Now to include the names of stations
         predictions_for_target_hour  = predictions_for_target_hour.drop(f"{scenario}_station_id", axis = 1)
@@ -200,7 +193,7 @@ class ColourModule:
         return shade 
 
 
-def colour_by_discrepancy(merged_data: pd.DataFrame) -> pd.DataFrame:
+def colour_points_by_discrepancy(merged_data: pd.DataFrame) -> pd.DataFrame:
 
     
     merged_data["discrepancy"] = merged_data["predicted_starts"] - merged_data["predicted_ends"]
@@ -257,7 +250,7 @@ def fully_merge_data(
         right_on=["station_name", "coordinates"]
     )
     
-    return colour_by_discrepancy(merged_data=complete_merger)
+    return colour_points_by_discrepancy(merged_data=complete_merger)
 
     
 @st.cache_resource
@@ -366,7 +359,7 @@ if __name__ != "__main__":
 
     with st.spinner(text="Generating map of the stations in the Greater Chicago"):
         make_map(_geodataframe_and_predictions=geographical_features_and_predictions)
-        geographical_features_and_predictions.to_parquet(FRONTEND_DATA/"geographical_features_and_predictions.parquet")
+        geographical_features_and_predictions.  uet(FRONTEND_DATA/"geographical_features_and_predictions.parquet")
         tracker.next()
 
     st.sidebar.write("✅ Map Drawn")

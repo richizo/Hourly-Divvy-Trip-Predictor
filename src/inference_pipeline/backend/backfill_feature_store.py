@@ -26,7 +26,7 @@ from src.inference_pipeline.backend.model_registry_api import ModelRegistry
 from src.inference_pipeline.backend.inference import get_model_predictions
 
 
-def backfill_features(scenario: str, local: bool = True) -> None:
+def backfill_features(scenario: str) -> None:
     """
     Run the preprocessing script and upload the time series data to the feature store.
 
@@ -42,14 +42,11 @@ def backfill_features(scenario: str, local: bool = True) -> None:
     ts_data = processor.make_time_series()[0] if scenario == "start" else processor.make_time_series()[1]
     ts_data["timestamp"] = pd.to_datetime(ts_data[f"{scenario}_hour"]).astype(int) // 10 ** 6  # Express in ms
 
-    if local:
-        ts_data.to_parquet(path=INFERENCE_DATA/f"{scenario}_ts_for_inference.parquet")
-    else:
-        ts_feature_group = get_feature_group_for_time_series(scenario=scenario, primary_key=primary_key)
-        ts_feature_group.insert(write_options={"wait_for_job": True}, features=ts_data) # Push time series data to the feature group
+    ts_feature_group = get_feature_group_for_time_series(scenario=scenario, primary_key=primary_key)
+    ts_feature_group.insert(write_options={"wait_for_job": True}, features=ts_data) # Push time series data to the feature group
 
 
-def backfill_predictions(scenario: str, target_date: datetime, local: bool = True, using_mixed_indexer: bool = True) -> None:
+def backfill_predictions(scenario: str, target_date: datetime, using_mixed_indexer: bool = True) -> None:
     """
     Fetch the registered version of the named model, and download it. Then load a batch of ts_data
     from the relevant feature group (whether for arrival or departure data), and make predictions on those 
@@ -71,28 +68,15 @@ def backfill_predictions(scenario: str, target_date: datetime, local: bool = Tru
     registry = ModelRegistry(scenario=scenario, model_name=model_name, tuned_or_not=tuned_or_not)
     model = registry.download_latest_model(unzip=True)
     
-    if local:
-        ts_data = pd.read_parquet(path=INFERENCE_DATA/f"{scenario}_ts_for_inference.parquet")
-        ts_data = ts_data[ts_data[f"{scenario}_hour"].between(left=start_date, right=end_date)] 
+    ts_feature_group = get_feature_group_for_time_series(scenario=scenario, primary_key=primary_key)
 
-        features = make_features(
-            scenario=scenario, 
-            station_ids=ts_data[f"{scenario}_station_id"].unique(),
-            target_date=target_date, 
-            ts_data=ts_data, 
-            geocode=False
-        )
-
-    else:
-        ts_feature_group = get_feature_group_for_time_series(scenario=scenario, primary_key=primary_key)
-
-        features = fetch_time_series_and_make_features(
-            scenario=scenario,
-            start_date=start_date,
-            target_date=end_date,
-            feature_group=ts_feature_group,
-            geocode=False
-        )
+    features = fetch_time_series_and_make_features(
+        scenario=scenario,
+        start_date=start_date,
+        target_date=end_date,
+        feature_group=ts_feature_group,
+        geocode=False
+    )
 
     try:
         features = features.drop(["trips_next_hour", f"{scenario}_hour"], axis=1)
@@ -106,20 +90,16 @@ def backfill_predictions(scenario: str, target_date: datetime, local: bool = Tru
     ids_and_names = fetch_json_of_ids_and_names(scenario=scenario, using_mixed_indexer=True, invert=False)
     predictions[f"{scenario}_station_name"] = predictions[f"{scenario}_station_id"].map(ids_and_names)
 
-    if local:
-        predictions.to_parquet(INFERENCE_DATA/f"{scenario}_predictions.parquet")
-        logger.success(f"Saved predicted {config.displayed_scenario_names[scenario].lower()} locally")
-    else:    
-        predictions_feature_group = setup_feature_group(
-            scenario=scenario,
-            primary_key=primary_key,
-            description=f"predicting {config.displayed_scenario_names[scenario]} - {tuned_or_not} {model_name}",
-            name=f"{model_name}_{scenario}_predictions_feature_group",
-            for_predictions=True,
-            version=6
-        )
+    predictions_feature_group = setup_feature_group(
+        scenario=scenario,
+        primary_key=primary_key,
+        description=f"predicting {config.displayed_scenario_names[scenario]} - {tuned_or_not} {model_name}",
+        name=f"{model_name}_{scenario}_predictions_feature_group",
+        for_predictions=True,
+        version=6
+    )
 
-        predictions_feature_group.insert(write_options={"wait_for_job": True}, features=predictions)
+    predictions_feature_group.insert(write_options={"wait_for_job": True}, features=predictions)
 
 
 if __name__ == "__main__":
