@@ -153,32 +153,6 @@ def restrict_geodataframe_to_stations_with_predictions(
     return geo_dataframe.loc[predictions_are_present, :]
 
 
-def pseudocolour(
-    value: float,
-    min_value: float,
-    max_value: float,
-    start_colour: tuple[int, int, int],
-    stop_colour: tuple[int, int, int]
-) -> tuple[float, ...]:
-    """
-    Use linear interpolation to convert a given value into a tuple(representing a colour) in the range between
-    start_colour and stop_colour. Credit to https://stackoverflow.com/a/10907855
-
-    Args:
-        value: the input value to be converted into a tuple that represents a colour
-        min_value: the smallest value in the range of available input values
-        max_value: the largest value in the range of available input values
-        start_colour: a tuple representing the RGB values of the colour on the extreme left of the colour scale
-        stop_colour:a tuple representing the RGB values of the colour on the extreme right of the colour scale
-
-    Returns:
-        tuple[float...]: 
-    """
-    relative_value =  float(value-min_value)/(max_value-min_value)
-    return tuple(
-        relative_value*(b-a) + a for (a,b) in zip(start_colour, stop_colour)
-    )
-
 
 def merge_geodataframe_and_predictions_per_scenario(scenario: str, geodataframe: pd.DataFrame, predictions: pd.DataFrame):
 
@@ -186,15 +160,43 @@ def merge_geodataframe_and_predictions_per_scenario(scenario: str, geodataframe:
     return pd.merge(left=geodataframe, right=predictions, left_on="station_name", right_on="station_name")
 
 
-def choose_colour(value: int) -> tuple[int, int, int]:
-   black, green, red = (0, 0, 0), (0,0,255), (255, 0, 0)
+class ColourModule:
+    def __init__(self, value: int):
+        self.red = (255, 0, 0)
+        self.green = (0,255,0)
+        self.blue = (0, 0, 255)
+        self.value = value
 
-   if value == 0:
-    return black
-   elif value < 0:
-    return green
-   elif value > 0:
-    return red
+    def pseudocolour(
+        self,
+        min_value: float,
+        max_value: float
+    ) -> tuple[float, ...]:
+        """
+        Use linear interpolation to convert a given value into a tuple(representing a colour) in the range between
+        start_colour and stop_colour. Credit to https://stackoverflow.com/a/10907855
+
+        Args:
+            value: the input value to be converted into a tuple that represents a colour
+            min_value: the smallest value in the range of available input values
+            max_value: the largest value in the range of available input values
+            start_colour: a tuple representing the RGB values of the colour on the extreme left of the colour scale
+            stop_colour:a tuple representing the RGB values of the colour on the extreme right of the colour scale
+
+        Returns:
+            tuple[float...]: 
+        """
+        if self.value == 0:
+            start_colour, stop_colour = self.blue, self.blue
+        elif self.value > 0:
+            start_colour, stop_colour = self.blue, self.red
+        elif self.value < 0:
+            start_colour, stop_colour = self.blue, self.green
+
+        relative_value =  float(self.value-min_value)/(max_value-min_value)
+        shade = tuple(relative_value*(b-a) + a for (a,b) in zip(start_colour, stop_colour))
+        return shade 
+
 
 
 def colour_by_discrepancy(merged_data: pd.DataFrame) -> pd.DataFrame:
@@ -203,12 +205,9 @@ def colour_by_discrepancy(merged_data: pd.DataFrame) -> pd.DataFrame:
     merged_data["discrepancy"] = merged_data["predicted_starts"] - merged_data["predicted_ends"]
     
     merged_data[f"fill_colour"] = merged_data["discrepancy"].apply(
-        lambda x: pseudocolour(
-            value=x,
+        lambda x: ColourModule(value=x).pseudocolour(
             min_value=merged_data["discrepancy"].min(),
-            max_value=merged_data["discrepancy"].max(),
-            start_colour=choose_colour(value=x),
-            stop_colour=choose_colour(value=x)
+            max_value=merged_data["discrepancy"].max()
         )
     )
 
@@ -295,7 +294,7 @@ def make_map(_geodataframe_and_predictions: pd.DataFrame) -> None:
     map = pdk.Deck(
         layers=layer,
         initial_view_state=initial_view_state,
-        map_style="mapbox://styles/mapbox/navigation-day-v1",
+        map_style="mapbox://styles/mapbox/dark-v11",
         tooltip=tooltip
     )
 
