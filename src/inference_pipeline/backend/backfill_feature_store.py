@@ -58,7 +58,7 @@ def backfill_predictions(scenario: str, target_date: datetime, using_mixed_index
         
     """
     primary_key = [f"{scenario}_station_id"]
-    start_date = target_date - timedelta(days=270)
+    start_date = target_date - timedelta(days=30)
     end_date = target_date + timedelta(days=1)
     
     # The best model architectures for arrivals & departures at the moment

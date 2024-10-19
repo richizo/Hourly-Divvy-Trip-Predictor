@@ -359,7 +359,7 @@ if __name__ != "__main__":
 
     with st.spinner(text="Generating map of the stations in the Greater Chicago"):
         make_map(_geodataframe_and_predictions=geographical_features_and_predictions)
-        geographical_features_and_predictions.  uet(FRONTEND_DATA/"geographical_features_and_predictions.parquet")
+        geographical_features_and_predictions.to_parquet(FRONTEND_DATA/"geographical_features_and_predictions.parquet")
         tracker.next()
 
     st.sidebar.write("✅ Map Drawn")
