@@ -18,17 +18,12 @@ from streamlit_extras.colored_header import colored_header
 from src.setup.config import config 
 from src.setup.paths import FRONTEND_DATA, INFERENCE_DATA
 from src.inference_pipeline.frontend.tracker import ProgressTracker
-from src.inference_pipeline.backend.inference import (
-    load_predictions_from_store,
-     
-)
-
-
+from src.inference_pipeline.backend.inference import load_predictions_from_store
 from src.inference_pipeline.frontend.data import make_geodataframes, reconcile_geodata
 
 
 @st.cache_data
-def retrieve_predictions(from_hour=config.current_hour - timedelta(hours=1), to_hour=config.current_hour) -> pd.DataFrame:
+def retrieve_predictions(from_hour: datetime, to_hour: datetime) -> pd.DataFrame:
     """ 
     Download all the predictions for all the stations from one hour to another
 
@@ -95,17 +90,19 @@ def retrieve_predictions_for_this_hour(
             predictions_for_target_hour.to_parquet(path=INFERENCE_DATA/f"{scenario}_predictions.parquet")
         
         elif previous_hour_ready:
+            predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == from_hour]
+
             if scenario == "start":  # So this message only appears once
                 st.write("⚠️ Predictions for the current hour are unavailable. Fetching those from an hour ago.")
-
-            predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == from_hour]
+        
         else:
             try:
                 predictions_for_target_hour = pd.read_parquet(INFERENCE_DATA/f"{scenario}_predictions.parquet")
-                st.write("Unable to fetch predictions for this or the previous hour. Providing predictions from a while ago.")
+                if scenario == "start":
+                    st.write("Unable to fetch predictions for this or the previous hour. Providing predictions from a while ago.")
             except:
-                raise Exception("")
-            
+                raise Exception("Oh no! Neither the online nor the offline sources of predictions are available.")
+
 
         # Now to include the names of stations
         predictions_for_target_hour  = predictions_for_target_hour.drop(f"{scenario}_station_id", axis = 1)
@@ -140,11 +137,10 @@ def restrict_geodataframe_to_stations_with_predictions(
     number_present = [boolean for boolean in predictions_are_present if boolean == True]
 
     logger.warning(
-        f"{len(geo_dataframe) - len(number_present)} stations won't be plotted due to a lack of predicted {config.displayed_scenario_names[scenario].lower()}"
+        f"{len(geo_dataframe) - len(number_present)} stations won't be plotted because you only backfilled {config.backfill_days} days of predictions."
     )
 
     return geo_dataframe.loc[predictions_are_present, :]
-
 
 
 def merge_geodataframe_and_predictions_per_scenario(scenario: str, geodataframe: pd.DataFrame, predictions: pd.DataFrame):
@@ -320,7 +316,10 @@ if __name__ != "__main__":
         tracker.next()
 
     with st.spinner(text=f"Fetching all predictions from the offline feature store"):
-        predicted_starts, predicted_ends = retrieve_predictions()
+        predicted_starts, predicted_ends = retrieve_predictions(
+            from_hour=config.current_hour - timedelta(hours=1),
+            to_hour=config.current_hour
+        )
 
         predicted_starts_this_hour, predicted_ends_this_hour = retrieve_predictions_for_this_hour(
             predicted_starts=predicted_starts,

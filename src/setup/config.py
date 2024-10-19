@@ -29,7 +29,8 @@ class GeneralConfig(BaseSettings):
     feature_group_version: int = 6
     feature_view_version: int = 1
 
-    current_hour: datetime = pd.to_datetime(datetime.now(tz=None)).floor("H")
+    backfill_days: int = 30
+    current_hour: datetime = pd.to_datetime(datetime.now(tz=UTC)).floor("H")
     displayed_scenario_names: dict = {"start": "Departures", "end": "Arrivals"} 
 
 
