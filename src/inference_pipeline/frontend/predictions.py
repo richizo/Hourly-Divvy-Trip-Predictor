@@ -180,23 +180,23 @@ def pseudocolour(
     )
 
 
-def merge_geodataframe_and_predictions(scenario: str, geodataframe: pd.DataFrame, predictions: pd.DataFrame):
+def merge_geodataframe_and_predictions_per_scenario(scenario: str, geodataframe: pd.DataFrame, predictions: pd.DataFrame):
 
     predictions = predictions.rename(columns={f"{scenario}_station_name": "station_name"})
-    return pd.merge(left=geo_dataframe, right=predictions, left_on="station_name", right_on="station_name")
+    return pd.merge(left=geodataframe, right=predictions, left_on="station_name", right_on="station_name")
    
 
 def colour_by_discrepancy(merged_data: pd.DataFrame) -> pd.DataFrame:
 
-    blue, red = (0, 0, 255), (255, 0, 0)
+    black, red = (0, 0, 0), (255, 0, 0)
     merged_data["discrepancy"] = merged_data["predicted_starts"] - merged_data["predicted_ends"] 
 
     merged_data[f"fill_colour"] = merged_data["discrepancy"].apply(
         lambda x: pseudocolour(
             value=x,
-            min_value=merged_data["discepancy"].min(),
-            max_value=merged_data["discepancy"].max(),
-            start_colour=blue,
+            min_value=merged_data["discrepancy"].min(),
+            max_value=merged_data["discrepancy"].max(),
+            start_colour=black,
             stop_colour=red
         )
     )
@@ -230,13 +230,11 @@ def fully_merge_data(
         geo_dataframe = scenarios_and_geodataframes[scenario]
         predictions = scenarios_and_predictions[scenario]
 
-        merged_data = merge_geodataframe_and_predictions(
+        merged_data = merge_geodataframe_and_predictions_per_scenario(
             scenario=scenario,
             geodataframe=geo_dataframe, 
             predictions=predictions
         )
-
-        merged_data = colour_by_discrepancy(merged_data=merged_data)
 
         merged_data[f"coordinates"] = merged_data[f"coordinates"].apply(tuple)
         geographical_features_and_predictions.append(merged_data)
@@ -247,19 +245,10 @@ def fully_merge_data(
         left_on=["station_name", "coordinates"], 
         right_on=["station_name", "coordinates"]
     )
+    
+    return colour_by_discrepancy(merged_data=complete_merger)
 
-    complete_merger["fill_colour"] = complete_merger.apply(
-        func=lambda row: tuple((a+b) / 2 for a, b in zip(row["start_fill_colour"], row["end_fill_colour"])), 
-        axis=1
-    )
-
-    complete_merger = complete_merger.drop(
-        ["start_fill_colour", "end_fill_colour"], axis=1
-    )
-        
-    return complete_merger
-        
-
+    
 @st.cache_resource
 def make_map(_geodataframe_and_predictions: pd.DataFrame) -> None:
 
@@ -281,7 +270,7 @@ def make_map(_geodataframe_and_predictions: pd.DataFrame) -> None:
         stroked=False,
         filled=True,
         extruded=False,
-        get_radius=70,
+        get_radius=50,
         auto_highlight=True,
         pickable=True
     )
@@ -314,7 +303,7 @@ if __name__ != "__main__":
     
     st.markdown(
         """
-        Here you can view a map of the city centre and its environs with many :blue[Divvy stations] littered all over 
+        Here you can view a map of the city centre and its environs with many :black[Divvy stations] littered all over 
         it. If you pan over to each station, you will be able to see the station's name (or at least, its address), and
         the number of :green[arrivals] and :orange[departures] :violet[predicted] to take place there :green[in the next hour].
 
