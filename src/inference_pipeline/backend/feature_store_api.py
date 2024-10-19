@@ -31,7 +31,7 @@ def setup_feature_group(
     scenario: str, 
     name: str, 
     version: int, 
-    primary_key: list[str], 
+    primary_key: list[str] | None, 
     description: str, 
     for_predictions: bool
     ) -> FeatureGroup:

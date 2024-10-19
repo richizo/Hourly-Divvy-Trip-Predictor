@@ -163,8 +163,8 @@ def merge_geodataframe_and_predictions_per_scenario(scenario: str, geodataframe:
 class ColourModule:
     def __init__(self, value: int):
         self.red = (255, 0, 0)
-        self.green = (0,255,0)
-        self.blue = (0, 0, 255)
+        self.blue = (0,0,255)
+        self.black = (0, 0, 0)
         self.value = value
 
     def pseudocolour(
@@ -173,30 +173,31 @@ class ColourModule:
         max_value: float
     ) -> tuple[float, ...]:
         """
-        Use linear interpolation to convert a given value into a tuple(representing a colour) in the range between
-        start_colour and stop_colour. Credit to https://stackoverflow.com/a/10907855
+        Use linear interpolation to convert a given value into a tuple(representing a colour) in the range between two 
+        colours (one called the start_colour and the other called the stop_colour). The start_colour and stop_colour are 
+        RGB triples which represent the colours on the extreme left and right of a specific scale respectively. Which 
+        colour scale we are using will depend on the sign of the given value.
+
+        Credit to https://stackoverflow.com/a/10907855.
 
         Args:
             value: the input value to be converted into a tuple that represents a colour
             min_value: the smallest value in the range of available input values
             max_value: the largest value in the range of available input values
-            start_colour: a tuple representing the RGB values of the colour on the extreme left of the colour scale
-            stop_colour:a tuple representing the RGB values of the colour on the extreme right of the colour scale
 
         Returns:
             tuple[float...]: 
         """
         if self.value == 0:
-            start_colour, stop_colour = self.blue, self.blue
+            start_colour, stop_colour = self.black, self.black
         elif self.value > 0:
-            start_colour, stop_colour = self.blue, self.red
+            start_colour, stop_colour = self.black, self.red
         elif self.value < 0:
-            start_colour, stop_colour = self.blue, self.green
+            start_colour, stop_colour = self.black, self.blue
 
         relative_value =  float(self.value-min_value)/(max_value-min_value)
         shade = tuple(relative_value*(b-a) + a for (a,b) in zip(start_colour, stop_colour))
         return shade 
-
 
 
 def colour_by_discrepancy(merged_data: pd.DataFrame) -> pd.DataFrame:
@@ -294,7 +295,7 @@ def make_map(_geodataframe_and_predictions: pd.DataFrame) -> None:
     map = pdk.Deck(
         layers=layer,
         initial_view_state=initial_view_state,
-        map_style="mapbox://styles/mapbox/dark-v11",
+        map_style="mapbox://styles/mapbox/navigation-day-v1",
         tooltip=tooltip
     )
 

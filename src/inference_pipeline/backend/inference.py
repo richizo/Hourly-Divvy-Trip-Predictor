@@ -141,6 +141,8 @@ def fetch_predictions_group(scenario: str, model_name: str) -> FeatureGroup:
     tuned_or_not = "tuned" if model_name == "lightgbm" else "untuned"
        
     return setup_feature_group(
+        scenario=scenario,
+        primary_key=None,
         description=f"predictions on {scenario} data using the {tuned_or_not} {model_name}",
         name=f"{model_name}_{scenario}_predictions_feature_group",
         version=config.feature_group_version,
@@ -165,7 +167,7 @@ def load_predictions_from_store(scenario: str, from_hour: datetime, to_hour: dat
     from_hour = pd.to_datetime(from_hour, utc=True)
     to_hour = pd.to_datetime(to_hour, utc=True)
         
-    predictions_group = fetch_predictions_group(model_name=model_name)
+    predictions_group = fetch_predictions_group(scenario=scenario, model_name=model_name)
 
     predictions_feature_view: FeatureView = get_or_create_feature_view(
         name=f"{model_name}_{scenario}_predictions",

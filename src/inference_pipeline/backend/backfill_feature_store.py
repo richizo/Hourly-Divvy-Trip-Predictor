@@ -64,7 +64,7 @@ def backfill_predictions(scenario: str, target_date: datetime, local: bool = Tru
     start_date = target_date - timedelta(days=270)
     end_date = target_date + timedelta(days=1)
     
-    # Based on the best models for arrivals & departures at the moment
+    # The best model architectures for arrivals & departures at the moment
     model_name = "lightgbm" if scenario == "end" else "xgboost"
     tuned_or_not = "tuned" if scenario == "end" else "untuned"
 
