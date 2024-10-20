@@ -269,8 +269,8 @@ def make_map(_geodataframe_and_predictions: pd.DataFrame) -> None:
         opacity=0.25,
         stroked=False,
         filled=True,
-        extruded=False,
-        get_radius=50,
+        extruded=True,
+        get_radius=70,
         auto_highlight=True,
         pickable=True
     )
@@ -288,44 +288,39 @@ def make_map(_geodataframe_and_predictions: pd.DataFrame) -> None:
         tooltip=tooltip
     )
 
-    st.pydeck_chart(pydeck_obj=map)
+    st.pydeck_chart(pydeck_obj=map, width=700)
 
 
 if __name__ != "__main__":
 
     tracker = ProgressTracker(n_steps=5)
+    from_hour = config.current_hour - timedelta(hours=1)
+    to_hour = config.current_hour 
 
-    colored_header(
-        label=":green[Hourly] :violet[Predictions]",
-        description="",
-        color_name="violet-70"
-    )
-    
+    st.header(body=f":green[Hourly] :violet[Predictions] for {to_hour.hour}:00", divider=True)
     st.markdown(
         """
-        Here you can view a map of the city centre and its environs with many :black[Divvy stations] littered all over 
-        it. If you pan over to each station, you will be able to see the station's name (or at least, its address), and
-        the number of :green[arrivals] and :orange[departures] :violet[predicted] to take place there :green[in the next hour].
+        After a bit of loading, a map of the city and its environs should appear, with points littered all over it.
 
-        This process should only take about a minute.
+        Each point represents a :green[station], and if you pan over to one of them, you will see its address, 
+        as well as the number of :blue[arrivals] and :red[departures] predicted to take place there in the next hour. 
         """
-    )
-
+    ) 
+        
     with st.spinner(text="Collecting station information"):
         start_geodataframe, end_geodataframe = make_geodataframes()
         tracker.next()
 
+    st.sidebar.write("✅ Finished gathering all station details")
+
     with st.spinner(text=f"Fetching all predictions from the offline feature store"):
-        predicted_starts, predicted_ends = retrieve_predictions(
-            from_hour=config.current_hour - timedelta(hours=1),
-            to_hour=config.current_hour
-        )
+        predicted_starts, predicted_ends = retrieve_predictions(from_hour=from_hour, to_hour=to_hour)
 
         predicted_starts_this_hour, predicted_ends_this_hour = retrieve_predictions_for_this_hour(
             predicted_starts=predicted_starts,
             predicted_ends=predicted_ends,
-            from_hour=config.current_hour-timedelta(hours=1),
-            to_hour=config.current_hour
+            from_hour=from_hour,
+            to_hour=to_hour
         )
 
         tracker.next()
@@ -345,6 +340,8 @@ if __name__ != "__main__":
 
         tracker.next()
 
+    st.sidebar.write("✅ Prepared predictions")
+
     with st.spinner(text="Setting up ingredients for the map"):
         
         geographical_features_and_predictions = fully_merge_data(
@@ -356,9 +353,31 @@ if __name__ != "__main__":
 
         tracker.next()
 
+    
+    st.sidebar.write("✅ Prepared the data needed for the map")
+
     with st.spinner(text="Generating map of the stations in the Greater Chicago"):
-        make_map(_geodataframe_and_predictions=geographical_features_and_predictions)
+        make_map(_geodataframe_and_predictions=geographical_features_and_predictions)   
         geographical_features_and_predictions.to_parquet(FRONTEND_DATA/"geographical_features_and_predictions.parquet")
         tracker.next()
 
     st.sidebar.write("✅ Map Drawn")
+
+    st.subheader(body=":green[Addressing] the :blue[Business Problem]", divider=True)
+
+    st.markdown(
+        """
+        As you can see, the points on the map come in :red[red], :blue[blue], and black, and my use of coloured text so 
+        far suggests, the stations in:
+        - :red[red] have more predicted :red[departures] than :blue[arrivals].
+        - :blue[blue] have more predicted :blue[arrivals] than :red[departures].
+        - black have an equal number of predicted :red[departures] and :blue[arrivals].
+        
+        The management at Divvy Bikes may want to monitor these three classifications of stations, after which it may be 
+        decided that if the stations stay the same colour over time:
+        - the red stations will need to have more bikes available than the others, because they are more likely to have
+        more departures than arrivals.
+        - the blue stations don't necessarily need to have as many bikes because they tend to see more arrivals than 
+        departures.
+        """
+    )

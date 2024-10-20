@@ -16,28 +16,30 @@ st.markdown(
     """
     Hi there! Thanks for using the service. 
 
-    My name is Kobina, and I'm a mathematician turned Machine Learning Engineer.
+    My name is Kobina, and I'm a mathematician and Machine Learning Engineer.
     
     Making this application was quite the adventure, and  it's been a deeply rewarding experience that I've learned 
     a great deal from. I'll continue to maintain and improve the system, as Divvy continue to provide data on a monthly
     basis. 
 
-    I'm always contemplating new end-to-end ML systems to build, and looking for ways to become a better engineer. 
-    Having completed the MVP (minimal viable product) for this project, I'm now shifting my focus to: 
+    I'm always contemplating new ideas for machine learning systems to build, and looking for ways to become a better 
+    engineer. Having completed the MVP (minimal viable product) for this project, I'm now shifting my focus to: 
     
-    - completing an NLP system that uses a RAG (retrieval augmented generation) to produce models that teach 
-    the user about the life and ideas of one of my personal heroes. 
+    - completing an NLP system trained on a corpus of books to produce models that use RAG (retrieval augmented generation) to 
+    teach the user about the life and ideas of one of my personal heroes. 
 
     - completing a second NLP system that provides language translation services, using primarily pretrained 
     transformers.
+
+    - completing a system that provides hourly predictions of exchange rates from various major currencies to (and from) various 
+    African currencies.
     
     - incorporating the Rust programming language into my work, so that I can build more performant, and memory-safe 
     MLOps and LLMOps projects. 
     
     Machine learning models deliver the most value when they are integrated into end-to-end applications with high 
-    quality preprocessing, training, and inference pipelines. If you have data, and some ideas about how you a 
-    machine learning application can be built around it to solve problems and bring value to your business, consider 
-    reaching out to me.
+    quality data preprocessing, model training, and inference pipelines. If you have data, and some ideas about how a 
+    machine learning application can be built around it to bring value to your business, consider reaching out to me.
     
     You can find links to my Github & LinkedIn profiles below.
     """
