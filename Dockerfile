@@ -1,12 +1,10 @@
 FROM python:3.12.5-slim-bookworm
 
-RUN apt-get update && apt-get install -y --no-install-recommends pip gcc make python3-dev cron supervisor
+RUN apt-get update && apt-get install -y --no-install-recommends pip gcc make python3-dev 
 RUN pip install poetry
 
 WORKDIR /app
 COPY . /app/
-RUN rm -rf /app/supervisord.conf
-COPY supervisord.conf /etc/supervisord.conf
 
 RUN poetry install 
 

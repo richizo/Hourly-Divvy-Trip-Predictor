@@ -3,7 +3,7 @@ from streamlit_extras.colored_header import colored_header
 
 
 colored_header(
-    label=":red[Welcome] :orange[to the] :green[Hourly] :blue[Divvy Trip] :violet[Predictor]",
+    label=":red[Welcome] :orange[to the] :green[Hourly Divvy Trip] :violet[Predictor]",
     description="By Kobina Brandon",
     color_name="green-70"
 )
@@ -13,8 +13,8 @@ st.markdown(
     Chicago's Divvy bike-sharing system (operated by Lyft) is the largest of its kind in North America.
 
     This application provides hourly :violet[predictions] of the number of :blue[arrivals] and :red[departures] 
-    at various :blue[Divvy stations] around the city, which you can view on the :violet["Predictions"] page. It is 
-    the culmination of an open source end-to-end machine learning system trained on publicly available :blue[Divvy] 
+    at various :green[Divvy stations] around the city, which you can view on the :violet["Predictions"] page. It is 
+    the culmination of my open source end-to-end machine learning system that I trained on publicly available :green[Divvy] 
     trip data.
     """
 )
@@ -36,9 +36,8 @@ st.markdown(
 
     - :red[Long Term Operational Efficiency:] by monitoring the predictions produced by the service over time, management
     can determine bike demand at peak times. In other words, by studying trends in the predictions over time, management can
-    rebalance bikes between stations, and ensure that bikes can be moved from stations that do not need as many to those 
-    that are expected to have more departures. This rebalancing can also be done optimally, instead of being done haphazardly
-    and in the moment.
+    rebalance the supply of bikes between stations, and ensure that bikes can be moved from stations that have a surplus of 
+    bikes to those that are expected to have more departures. 
 
     - :red[Strategic Planning:] by studying trends in the predictions over time, management can gain insight into usage 
     patterns across different times, days of the week, and seasons. This would enable long-term planning for the 
@@ -50,7 +49,7 @@ st.markdown(
 
     - :red[Dynamic Pricing/Incentives:] using predictions of bike demand, and known bike availability, management could 
     dynamically introduce promotions and pricing models designed to attract customers in certain areas who are travelling 
-    to particular locations at certain times, thereby aiding bike allocation efforts without the deployment of staff, and
-    reducing costs while increasing revenues.
+    to particular locations at certain times, thereby aiding bike re-allocation efforts without the deployment of staff 
+    (and its associated costs), while increasing revenues.
     """
 )
