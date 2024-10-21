@@ -62,7 +62,6 @@ def fetch_time_series_and_make_features(
     Args:
         target_date: the date for which we seek predictions.
         geocode: whether to implement geocoding during feature engineering
-        for_plotting (bool): whether we are producing these features purely for the purpose of plotting historical data.
 
     Returns:
         pd.DataFrame: time series data 

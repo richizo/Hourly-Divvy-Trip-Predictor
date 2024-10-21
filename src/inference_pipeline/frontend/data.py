@@ -51,7 +51,7 @@ def make_geodataframes() -> pd.DataFrame:
                 coordinate = tuple(detail["coordinates"][::-1])  # Reverse the order of the coordinates per pydeck's requirements
                 station_name = detail["station_name"]
 
-                # To prevent duplication of coordinates and names in the DataFrame. Sets also reduce time complexity, massively speeding things up
+                # To prevent duplication of coordinates and names in the DataFrame. Sets also significantly reduce time complexity
                 if coordinate not in unique_coordinates and station_name not in unique_station_names:
                     unique_coordinates.add(coordinate)
                     unique_station_names.add(station_name)

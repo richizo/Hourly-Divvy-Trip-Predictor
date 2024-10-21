@@ -171,7 +171,7 @@ def match_names_and_ids_by_station_proximity(scenario: str, data: pd.DataFrame) 
 
     return data
 
-def save_geodata(data: pd.DataFrame, scenario: str, for_plotting: bool) -> None:
+def save_geodata(data: pd.DataFrame, scenario: str) -> None:
     """
     Saves the station ID, mame, and coordinates for use in the frontend
     """
@@ -180,44 +180,16 @@ def save_geodata(data: pd.DataFrame, scenario: str, for_plotting: bool) -> None:
     longitudes = data[f"{scenario}_lng"].values
     latitudes = data[f"{scenario}_lat"].values
 
-    if for_plotting:
-        file_path = MIXED_INDEXER / f"{scenario}_geojson.geojson"
-
-        geodata = {
-            "type": "FeatureCollection",
-            "features": [
-                {
-                    "type": "Feature",
-
-                    "geometry": {
-                        "type": "Point",
-                        "coordinate": [longitude, latitude]  # Apparently, this reversal is standard for geojson files
-                    },
-
-                    "properties": {
-                        "station_id": station_id,
-                        "station_name": station_name
-                    }
-                } 
-                for (latitude, longitude, station_id, station_name) in tqdm(
-                    iterable=zip(latitudes, longitudes, station_ids, station_names),
-                    desc="Saving the geodata in each row"
-                )     
-            ] 
+    geodata = [
+        {   
+            "coordinates": [latitude, longitude],
+            "station_id": station_id,
+            "station_name": station_name    
         }
+        for latitude, longitude, station_id, station_name in zip(latitudes, longitudes, station_ids, station_names)
+    ]
 
-    else:
-        file_path = MIXED_INDEXER / f"{scenario}_geodata.json"
-        geodata = [
-            {   
-                "coordinates": [latitude, longitude],
-                "station_id": station_id,
-                "station_name": station_name    
-            }
-            for latitude, longitude, station_id, station_name in zip(latitudes, longitudes, station_ids, station_names)
-        ]
-
-    with open(file_path, mode="w") as file:
+    with open(MIXED_INDEXER / f"{scenario}_geodata.json", mode="w") as file:
         json.dump(geodata, file)
 
 
@@ -316,8 +288,7 @@ def run_mixed_indexer(scenario: str, data: pd.DataFrame, delete_leftover_rows: b
         for column in unproblematic_data_with_rounded_coordinates.select_dtypes(include=["datetime64[ns]"]):
             unproblematic_data_with_rounded_coordinates[column] = unproblematic_data_with_rounded_coordinates[column].astype(str)
 
-        save_geodata(data=unproblematic_data_with_rounded_coordinates, scenario=scenario, for_plotting=False)
-        save_geodata(data=unproblematic_data_with_rounded_coordinates, scenario=scenario, for_plotting=True)
+        save_geodata(data=unproblematic_data_with_rounded_coordinates, scenario=scenario)
 
         unproblematic_data_with_rounded_coordinates = unproblematic_data_with_rounded_coordinates.drop(
             columns=[f"{scenario}_lat", f"{scenario}_lng", f"{scenario}_station_name"]
@@ -365,8 +336,7 @@ def run_mixed_indexer(scenario: str, data: pd.DataFrame, delete_leftover_rows: b
 
         all_data[f"{scenario}_station_id"] = all_data[f"{scenario}_station_name"].map(station_names_and_new_ids)
 
-        save_geodata(data=all_data, scenario=scenario, for_plotting=False)
-        save_geodata(data=all_data, scenario=scenario, for_plotting=True)
+        save_geodata(data=all_data, scenario=scenario)
         make_json_of_ids_and_names(scenario=scenario)
 
         all_data = all_data.drop(
