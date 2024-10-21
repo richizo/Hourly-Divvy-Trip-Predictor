@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from src.setup.config import config
-from src.setup.paths import MIXED_INDEXER, CLEANED_DATA, ROUNDING_INDEXER
+from src.setup.paths import MIXED_INDEXER, CLEANED_DATA, MIXED_INDEXER, ROUNDING_INDEXER
 from src.feature_pipeline.feature_engineering import ReverseGeocoder
 from src.feature_pipeline.rounding_indexer import add_column_of_rounded_coordinates
 
@@ -171,26 +171,44 @@ def match_names_and_ids_by_station_proximity(scenario: str, data: pd.DataFrame) 
 
     return data
 
-def save_geodata(data: pd.DataFrame, scenario: str) -> None:
+
+def save_geodata(scenario: str, data: pd.DataFrame) -> None:
     """
     Saves the station ID, mame, and coordinates for use in the frontend
+
+    Args:
+        scenario (str): "start" or "end"
+        data (pd.DataFrame): the dataframe from which this data is to be sourced
     """
     station_names = data[f"{scenario}_station_name"].values
     station_ids = [int(id_number) for id_number in data[f"{scenario}_station_id"].values]
     longitudes = data[f"{scenario}_lng"].values
     latitudes = data[f"{scenario}_lat"].values
 
-    geodata = [
-        {   
-            "coordinates": [latitude, longitude],
-            "station_id": station_id,
-            "station_name": station_name    
-        }
-        for latitude, longitude, station_id, station_name in zip(latitudes, longitudes, station_ids, station_names)
-    ]
+    coordinates, final_station_names, final_station_ids = [], [], []
+    unique_coordinates, unique_station_names, unique_station_ids = set(), set(), set()
 
-    with open(MIXED_INDEXER / f"{scenario}_geodata.json", mode="w") as file:
-        json.dump(geodata, file)
+    for (latitude, longitude, station_id, station_name) in tqdm(
+        iterable=zip(latitudes, longitudes, station_ids, station_names), 
+        desc=f"Collecting station details for {config.displayed_scenario_names[scenario].lower()}"
+    ):  
+        coordinate = tuple([longitude, latitude])  # Reverse the order of the coordinates to comply with pydeck's requirements
+
+        # To prevent duplication of coordinates and names in the DataFrame. Sets also significantly reduce time complexity
+        if (coordinate not in unique_coordinates) and (station_name not in unique_station_names) and (station_id not in unique_station_ids):
+            unique_coordinates.add(coordinate)
+            unique_station_ids.add(station_id)
+            unique_station_names.add(station_name)
+
+            coordinates.append(coordinate)
+            final_station_ids.append(station_id)
+            final_station_names.append(station_name)
+
+    geo_dataframe = pd.DataFrame(
+        data={"station_name": final_station_names, "station_id": final_station_ids, "coordinates": coordinates}
+    )
+    
+    geo_dataframe.to_parquet(MIXED_INDEXER/f"{scenario}_geodataframe.parquet")
 
 
 def make_json_of_ids_and_names(scenario: str, using_mixed_indexer: bool = True) -> None:
@@ -205,14 +223,14 @@ def make_json_of_ids_and_names(scenario: str, using_mixed_indexer: bool = True) 
         using_mixed_indexer (bool, optional): whether we will be using the mixed indexer or not. Defaults to True.
     """
     save_path = MIXED_INDEXER if using_mixed_indexer else ROUNDING_INDEXER
+    geo_dataframe = pd.read_parquet(MIXED_INDEXER/f"{scenario}_geodataframe.parquet")
+    station_ids, station_names = geo_dataframe["station_id"].values, geo_dataframe["station_name"].values
 
-    with open(save_path / f"{scenario}_geodata.json", mode="r") as file:
-        geodata = json.load(file)
-
-    names_and_ids = {detail["station_id"]: detail["station_name"] for detail in geodata}
+    # Used int here because station_id is of type int64, which means that it can't be a key
+    ids_and_names = {int(station_id): station_name for station_id, station_name in zip(station_ids, station_names)}
     
     with open(save_path / f"{scenario}_ids_and_names.json", mode="w") as file:
-        json.dump(names_and_ids, file)
+        json.dump(ids_and_names, file)
 
 
 def fetch_json_of_ids_and_names(scenario: str, using_mixed_indexer: bool, invert: bool) -> dict[int, str]:
@@ -228,7 +246,6 @@ def fetch_json_of_ids_and_names(scenario: str, using_mixed_indexer: bool, invert
     Returns:
         _type_: _description_
     """
-
     json_path = MIXED_INDEXER if using_mixed_indexer else ROUNDING_INDEXER
     with open(json_path / f"{scenario}_ids_and_names.json", mode="r") as file:
         ids_and_names = json.load(file)

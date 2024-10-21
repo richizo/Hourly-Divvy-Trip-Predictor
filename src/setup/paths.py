@@ -7,7 +7,6 @@ IMAGES_DIR = PARENT_DIR/"images"
 
 DATA_DIR = PARENT_DIR/"data"
 RAW_DATA_DIR = DATA_DIR/"raw"
-FRONTEND_DATA = DATA_DIR/"frontend"
 
 MODELS_DIR = PARENT_DIR/"models"
 LOCAL_SAVE_DIR = MODELS_DIR/"locally_created"
@@ -31,7 +30,7 @@ def make_fundamental_paths() -> None:
     for path in [
         DATA_DIR, CLEANED_DATA, RAW_DATA_DIR, PARQUETS, GEOGRAPHICAL_DATA, TRANSFORMED_DATA, TIME_SERIES_DATA, 
         IMAGES_DIR, TRAINING_DATA, INFERENCE_DATA, MODELS_DIR, LOCAL_SAVE_DIR, COMET_SAVE_DIR, ROUNDING_INDEXER,
-        MIXED_INDEXER, FRONTEND_DATA
+        MIXED_INDEXER
     ]: 
         if not Path(path).exists():
             os.mkdir(path)

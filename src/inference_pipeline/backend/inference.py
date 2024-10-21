@@ -254,13 +254,11 @@ def load_raw_local_geodata(scenario: str) -> list[dict]:
         list[dict]: the loaded json file as a dictionary
     """
     if len(os.listdir(ROUNDING_INDEXER)) != 0:
-        geodata_path = ROUNDING_INDEXER / f"{scenario}_geodata.json"
+        geodata_path = ROUNDING_INDEXER / f"{scenario}_geodataframe.parquet"
     elif len(os.listdir(MIXED_INDEXER)) != 0:
-        geodata_path = MIXED_INDEXER / f"{scenario}_geodata.json"
+        geodata_path = MIXED_INDEXER / f"{scenario}_geodataframe.parquet"
     else:
         raise FileNotFoundError("No geographical data has been made. Running the feature pipeline...")
 
     with open(geodata_path, mode="r") as file:
-        raw_geodata = json.load(file)
-        
-    return raw_geodata 
+        return pd.read_parquet(geodata_path)

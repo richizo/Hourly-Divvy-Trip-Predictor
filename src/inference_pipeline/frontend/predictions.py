@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from streamlit_extras.colored_header import colored_header
 
 from src.setup.config import config 
-from src.setup.paths import FRONTEND_DATA, INFERENCE_DATA
+from src.setup.paths import INFERENCE_DATA
 from src.inference_pipeline.frontend.tracker import ProgressTracker
 from src.inference_pipeline.backend.inference import load_predictions_from_store
 from src.inference_pipeline.frontend.data import make_geodataframes, reconcile_geodata

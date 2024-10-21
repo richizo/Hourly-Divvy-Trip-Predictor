@@ -1,4 +1,4 @@
-process:
+training-data:
 	poetry run python src/feature_pipeline/preprocessing.py 
 
 
