@@ -204,7 +204,6 @@ def make_json_of_ids_and_names(scenario: str, using_mixed_indexer: bool = True) 
         scenario (str): "start" or "end"
         using_mixed_indexer (bool, optional): whether we will be using the mixed indexer or not. Defaults to True.
     """
-
     save_path = MIXED_INDEXER if using_mixed_indexer else ROUNDING_INDEXER
 
     with open(save_path / f"{scenario}_geodata.json", mode="r") as file:
