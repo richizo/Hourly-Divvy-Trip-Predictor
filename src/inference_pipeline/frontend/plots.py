@@ -105,6 +105,7 @@ def load_features(start_date: datetime, target_date: datetime) -> list[pd.DataFr
             scenario=scenario,
             start_date=start_date, 
             target_date=target_date, 
+            feature_group=feature_group,
             geocode=False
         )
 
@@ -125,7 +126,7 @@ if __name__ != "__main__":
     )
 
     with st.spinner(text="Fetching features to be used for plotting"):        
-        all_features = load_features(start_date = datetime.now() - timedelta(days=7), target_date=datetime.now())
+        all_features = load_features(start_date = datetime.now() - timedelta(days=60), target_date=datetime.now())
 
     with st.spinner(text="Fetching the geographical data and the predictions for the next hour"):
 

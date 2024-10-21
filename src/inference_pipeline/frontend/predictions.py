@@ -152,7 +152,7 @@ def merge_geodataframe_and_predictions_per_scenario(scenario: str, geodataframe:
 class ColourModule:
     def __init__(self, value: int):
         self.red = (255, 0, 0)
-        self.blue = (0,0,255)
+        self.blue = (0, 0, 255)
         self.black = (0, 0, 0)
         self.value = value
 
@@ -297,13 +297,16 @@ if __name__ != "__main__":
     from_hour = config.current_hour - timedelta(hours=1)
     to_hour = config.current_hour 
 
-    st.header(body=f":green[Hourly] :violet[Predictions] for {to_hour.hour}:00", divider=True)
+    next_hour = config.current_hour + timedelta(hours=1)
+
+    st.header(body=f":violet[Predictions] for {to_hour.hour}:00 - {next_hour.hour}:00 (UTC)", divider=True)
     st.markdown(
         """
         After a bit of loading, a map of the city and its environs should appear, with points littered all over it.
-
-        Each point represents a :green[station], and if you pan over to one of them, you will see its address, 
+        Each point will represent a :green[station], and if you pan over to one of them, you will see its address, 
         as well as the number of :blue[arrivals] and :red[departures] predicted to take place there in the next hour. 
+
+        Once it loads, feel free to toggle the fullscreen button just above the top-right corner of the map.
         """
     ) 
         

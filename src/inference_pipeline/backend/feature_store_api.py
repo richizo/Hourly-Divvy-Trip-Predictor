@@ -13,17 +13,14 @@ from hsfs.constructor.query import Query
 from src.setup.config import config
 
 
-def get_feature_store(
-    project_name: str = config.hopsworks_project_name, 
-    api_key: str = config.hopsworks_api_key
-    ) -> FeatureStore:
+def get_feature_store() -> FeatureStore:
     """
     Login to Hopsworks and return a pointer to the feature store
 
     Returns:
         FeatureStore: pointer to the feature store
     """
-    project = hopsworks.login(project=project_name, api_key_value=api_key)
+    project = hopsworks.login(project=config.hopsworks_project_name, api_key_value=config.hopsworks_api_key)
     return project.get_feature_store()
 
 
