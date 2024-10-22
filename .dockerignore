@@ -14,4 +14,4 @@ Dockerfile*
 /data/raw
 /data/cleaned
 /data/transformed/training_data
-data/transformed/time series
+/data/transformed/time_series

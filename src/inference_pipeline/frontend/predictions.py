@@ -86,22 +86,29 @@ def retrieve_predictions_for_this_hour(
         previous_hour_ready = False if predictions[predictions[f"{scenario}_hour"] == from_hour].empty else True
 
         if next_hour_ready: 
+            # Save in case the latest prediction is unavailable at a future time
             predictions_for_target_hour: pd.DataFrame = predictions[predictions[f"{scenario}_hour"] == to_hour]
             predictions_for_target_hour.to_parquet(path=INFERENCE_DATA/f"{scenario}_predictions.parquet")
         
         elif previous_hour_ready:
             predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == from_hour]
 
-            if scenario == "start":  # So this message only appears once
+            if scenario == "start":  
                 st.write("⚠️ Predictions for the current hour are unavailable. Fetching those from an hour ago.")
-        
         else:
             try:
+                # Fetch last saved prediction if it exists
                 predictions_for_target_hour = pd.read_parquet(INFERENCE_DATA/f"{scenario}_predictions.parquet")
+                last_time_in_saved_predictions = predictions_for_target_hour[f"{scenario}_hour"].iloc[-1]
+                
                 if scenario == "start":
-                    st.write("Unable to fetch predictions for this or the previous hour. Providing predictions from a while ago.")
+                    st.write(f":orange[Unable to fetch predictions for the current or previous hour. Providing predictions from {last_time_in_saved_predictions}]")
             except:
-                raise Exception("Oh no! Neither the online nor the offline sources of predictions are available.")
+                last_time_in_received_predictions = predictions[f"{scenario}_hour"].iloc[-1]
+                predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == last_time_in_received_predictions]
+
+                if scenario == "start":
+                    st.subheader(f":orange[Unable to fetch predictions for the current or previous hour. Providing predictions from {last_time_in_received_predictions}]")
 
 
         # Now to include the names of stations
@@ -299,10 +306,11 @@ if __name__ != "__main__":
 
     next_hour = config.current_hour + timedelta(hours=1)
 
-    st.header(body=f":violet[Predictions] for {to_hour.hour}:00 - {next_hour.hour}:00 (UTC)", divider=True)
+    st.header(body=f":violet[Predictions for {to_hour.hour}:00 - {next_hour.hour}:00 (UTC)]", divider=True)
     st.markdown(
         """
         After a bit of loading, a map of the city and its environs should appear, with points littered all over it.
+        
         Each point will represent a :green[station], and if you pan over to one of them, you will see its address, 
         as well as the number of :blue[arrivals] and :red[departures] predicted to take place there in the next hour. 
 
@@ -369,11 +377,12 @@ if __name__ != "__main__":
 
     st.markdown(
         """
-        As you can see, the points on the map come in :red[red], :blue[blue], and black, and my use of coloured text so 
-        far suggests, the stations in:
-        - :red[red] have more predicted :red[departures] than :blue[arrivals].
-        - :blue[blue] have more predicted :blue[arrivals] than :red[departures].
-        - black have an equal number of predicted :red[departures] and :blue[arrivals].
+        As you can see, the points on the map come in :red[red], :blue[blue], and black. 
+        
+        The stations in:
+        - :red[red] are predicted to have more :red[departures] than :blue[arrivals].
+        - :blue[blue] are predicted to have more :blue[arrivals] than :red[departures].
+        - black are predicted to have an equal number of :red[departures] and :blue[arrivals].
         
         The management at Divvy Bikes may want to monitor these three classifications of stations, after which it may be 
         decided that if the stations stay the same colour over time:
@@ -381,5 +390,8 @@ if __name__ != "__main__":
         more departures than arrivals.
         - the blue stations don't necessarily need to have as many bikes because they tend to see more arrivals than 
         departures.
+
+        On the other hand, some stations may change colour from hour to another, which may require more immediate 
+        interventions, especially if there aren't enough bikes available to address a predicted increase in demand. 
         """
     )

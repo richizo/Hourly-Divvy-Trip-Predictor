@@ -174,10 +174,6 @@ def load_predictions_from_store(scenario: str, from_hour: datetime, to_hour: dat
         version=1
     )
 
-    logger.info(
-        f"Fetching predicted {config.displayed_scenario_names[scenario].lower()} between {from_hour.hour}:00 and {to_hour.hour}:00"
-    )
-
     predictions_df = predictions_feature_view.get_batch_data(
         start_time=from_hour - timedelta(days=1), 
         end_time=to_hour + timedelta(days=1)

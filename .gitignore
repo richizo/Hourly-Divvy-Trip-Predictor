@@ -19,9 +19,8 @@ keyfile
 
 Files
 **.ipynb
-data/geographical/mixed_indexer/start_geodata.json
-data/geographical/mixed_indexer/end_geodata.json
+data/geographical/mixed_indexer/start_geodataframe.parquet
+data/geographical/mixed_indexer/end_geodataframe.parquet
 
-data/geographical/mixed_indexer/start_reverse_geocoding.json
-data/geographical/mixed_indexer/end_reverse_geocoding.json
-
+data/geographical/mixed_indexer/start_ids_and_names.json
+data/geographical/mixed_indexer/end_ids_and_names.json

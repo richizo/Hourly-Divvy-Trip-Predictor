@@ -12,7 +12,7 @@ with col2:
     st.image(str(IMAGES_DIR/"profile.jpeg"), width=300)
 
 st.markdown(
-    f"""
+    """
     Hi there! My name is Kobina, and I'm a mathematician and Machine Learning Engineer.
     
     Thanks for using the service. You can view its code [here](https://github.com/kobinabrandon/Hourly-Divvy-Trip-Predictor).
@@ -38,18 +38,7 @@ st.markdown(
     quality data preprocessing, model training, and inference pipelines. If you have data, and some ideas about how a 
     machine learning application can be built around it to bring value to your business, consider reaching out to me.
     
-    You can find links to my Github & LinkedIn profiles below.
+    You can find a link to my Github [here](http://github.com/kobinabrandon), and my 
+    LinkedIn [here](https://www.linkedin.com/in/kobina-brandon-aa9445134).
     """
 )
-
-links = """
-<a href="http://github.com/kobinabrandon" target='_blank'>
-    <img src='https://upload.wikimedia.org/wikipedia/commons/c/c6/Font_Awesome_5_brands_github-square.svg' style='width:50px; height:50px;'>
-</a> 
-
-<a href="https://www.linkedin.com/in/kobina-brandon-aa9445134" target='_blank'>
-    <img src="https://pngmind.com/wp-content/uploads/2019/08/Linkedin-Logo-Png-Transparent-Background-1.png" style='width:50px; height:50px;'>
-</a>
-"""
-
-st.markdown(body=links, unsafe_allow_html=True)
