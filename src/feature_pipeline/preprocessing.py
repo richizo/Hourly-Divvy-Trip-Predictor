@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from src.setup.config import config
-from src.feature_pipeline.data_extraction import load_raw_data
+from src.feature_pipeline.data_sourcing import load_raw_data
 from src.feature_pipeline.mixed_indexer import run_mixed_indexer
 from src.feature_pipeline.rounding_indexer import run_rounding_indexer
 from src.feature_pipeline.feature_engineering import finish_feature_engineering
