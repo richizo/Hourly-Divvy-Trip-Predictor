@@ -197,13 +197,16 @@ def get_model_predictions(scenario: str, model: Pipeline, features: pd.DataFrame
     Returns:
         pd.DataFrame: the model's predictions
     """
-    predictions = model.predict(features)
-    prediction_per_station = pd.DataFrame()
+    generated_predictions = model.predict(features)
 
+    prediction_per_station = pd.DataFrame()
     prediction_per_station[f"{scenario}_station_id"] = features[f"{scenario}_station_id"].values
+
     prediction_per_station[f"{scenario}_hour"] = pd.to_datetime(datetime.utcnow()).floor("H")
-    prediction_per_station[f"predicted_{scenario}s"] = predictions.round(decimals=0)
-    
+    prediction_per_station[f"predicted_{scenario}s"] = generated_predictions.round(decimals=0)
+
+    prediction_per_station["timestamp"] = pd.to_datetime(prediction_per_station[f"{scenario}_hour"]).astype(int) // 10 ** 6  # Express in ms
+
     return prediction_per_station
 
 

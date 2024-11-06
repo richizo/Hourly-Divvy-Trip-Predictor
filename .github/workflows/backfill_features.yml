@@ -13,7 +13,7 @@ env:
 
 jobs:
 
-  inference_pipeline:
+  feature_pipeline:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
@@ -55,12 +55,12 @@ jobs:
         echo COMET_PROJECT_NAME = ${{secrets.COMET_PROJECT_NAME }} > .env
         echo COMET_WORKSPACE = ${{secrets.COMET_WORKSPACE }} > .env
         echo COMET_API_KEY = ${{ secrets.COMET_API_KEY }} > .env
-
+        
         echo HOPSWORKS_PROJECT_NAME = ${{ secrets.HOPSWORKS_PROJECT_NAME }} > .env
         echo HOPSWORKS_API_KEY = ${{ secrets.HOPSWORKS_API_KEY }} > .env
 
         
-    - name: Generating new batch of predictions
+    - name: Generating a new batch of features
       env: 
         EMAIL: ${{ secrets.EMAIL }}
 
@@ -71,5 +71,5 @@ jobs:
         HOPSWORKS_PROJECT_NAME: ${{ secrets.HOPSWORKS_PROJECT_NAME }}
         HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
 
-      run: make backfill-predictions
+      run: make backfill-features
   

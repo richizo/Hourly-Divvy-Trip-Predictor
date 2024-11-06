@@ -40,14 +40,13 @@ def setup_feature_group(
         FeatureGroup: a representation of the fetched or created feature group
     """
     store = get_feature_store()
-    event_time = f"{scenario}_hour" if for_predictions else None
 
     return store.get_or_create_feature_group(
         name=name,
         version=version,
         description=description,
         primary_key=primary_key,
-        event_time=event_time
+        event_time="timestamp"
     )
     
 
