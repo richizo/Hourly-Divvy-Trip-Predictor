@@ -90,11 +90,13 @@ def backfill_predictions(scenario: str, target_date: datetime, using_mixed_index
     ids_and_names = fetch_json_of_ids_and_names(scenario=scenario, using_mixed_indexer=True, invert=False)
     predictions[f"{scenario}_station_name"] = predictions[f"{scenario}_station_id"].map(ids_and_names)
 
+    breakpoint()
+
     predictions_feature_group = setup_feature_group(
         scenario=scenario,
         primary_key=primary_key,
         description=f"predicting {config.displayed_scenario_names[scenario]} - {tuned_or_not} {model_name}",
-        name=f"{model_name}_{scenario}_predictions_feature_group",
+        name=f"{model_name}_{scenario}_predictions",
         for_predictions=True,
         version=6
     )

@@ -143,13 +143,19 @@ def fetch_predictions_group(scenario: str, model_name: str) -> FeatureGroup:
         scenario=scenario,
         primary_key=None,
         description=f"predictions on {scenario} data using the {tuned_or_not} {model_name}",
-        name=f"{model_name}_{scenario}_predictions_feature_group",
+        name=f"{model_name}_{scenario}_predictions_by_{aggregation_method}",
         version=config.feature_group_version,
         for_predictions=True
     )
 
 
-def load_predictions_from_store(scenario: str, from_hour: datetime, to_hour: datetime, model_name: str) -> pd.DataFrame:
+def load_predictions_from_store(
+    scenario: str, 
+    from_hour: datetime, 
+    to_hour: datetime, 
+    model_name: str,
+    aggregation_method: str == "sum"
+    ) -> pd.DataFrame:
     """
     Load a dataframe containing predictions from their dedicated feature group on the offline feature store.
     This dataframe will contain predicted values between the specified hours. 
@@ -181,11 +187,18 @@ def load_predictions_from_store(scenario: str, from_hour: datetime, to_hour: dat
 
     predictions_df[f"{scenario}_hour"] = pd.to_datetime(predictions_df[f"{scenario}_hour"], utc=True)
 
-    return predictions_df.sort_values(
+    predictions_df = predictions_df.sort_values(
         by=[f"{scenario}_hour", f"{scenario}_station_id"]
     )
 
+    breakpoint()
 
+    if aggregation_method.lower() == "sum":
+        return aggregate_predictions(scenario=scenario, predictions=predictions_df, sum=True)
+    elif aggregate_predictions.lower() in ["average", "mean"]:
+        return aggregate_predictions(scenario=scenario, predictions=predictions_df, sum=False)
+
+    
 def get_model_predictions(scenario: str, model: Pipeline, features: pd.DataFrame) -> pd.DataFrame:
     """
     Simply use the model's predict method to provide predictions based on the supplied features
@@ -208,6 +221,15 @@ def get_model_predictions(scenario: str, model: Pipeline, features: pd.DataFrame
     prediction_per_station["timestamp"] = pd.to_datetime(prediction_per_station[f"{scenario}_hour"]).astype(int) // 10 ** 6  # Express in ms
 
     return prediction_per_station
+
+
+def aggregate_predictions(scenario: str, predictions: pd.DataFrame, sum: bool) -> pd.DataFrame:
+
+    if sum:
+        return predictions.groupby(f"{scenario}_station_id")[f"predicted_{scenario}s"].sum().reset_index()
+    else:
+        return predictions.groupby(f"{scenario}_station_id")[f"predicted_{scenario}s"].mean().reset_index()
+
 
 
 def rerun_feature_pipeline():
