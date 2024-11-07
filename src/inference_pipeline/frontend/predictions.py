@@ -41,17 +41,31 @@ def retrieve_predictions(from_hour: datetime, to_hour: datetime) -> pd.DataFrame
     prediction_dataframes =[]
     for scenario in config.displayed_scenario_names.keys():                
 
-        predictions: pd.DataFrame = load_predictions_from_store(
-            scenario=scenario,
-            model_name="lightgbm" if scenario == "end" else "xgboost", 
-            from_hour=from_hour, 
-            to_hour=to_hour
-        )
+        try:
+            predictions: pd.DataFrame = load_predictions_from_store(
+                scenario=scenario,
+                model_name="lightgbm" if scenario == "end" else "xgboost", 
+                from_hour=from_hour, 
+                to_hour=to_hour
+            )
 
-        # Now to add station names to the received predictions
-        ids_and_names = fetch_json_of_ids_and_names(scenario=scenario, using_mixed_indexer=True, invert=False)        
-        predictions[f"{scenario}_station_name"] = predictions[f"{scenario}_station_id"].map(ids_and_names)
-        prediction_dataframes.append(predictions)
+            # Now to add station names to the received predictions
+            ids_and_names = fetch_json_of_ids_and_names(scenario=scenario, using_mixed_indexer=True, invert=False)        
+            predictions[f"{scenario}_station_name"] = predictions[f"{scenario}_station_id"].map(ids_and_names)
+            prediction_dataframes.append(predictions)
+
+        except Exception as error:
+            logger.error(error)
+
+            # Just to have an empty dataframe that has all the right columns, to trigger the retrieval of the backup
+            predictions = pd.DataFrame(
+                index=[0],
+                data={
+                    f"{scenario}_hour": "", f"{scenario}_station_id": "", f"predicted_{scenario}s": "", "timestamp": ""
+                }
+            )
+
+            prediction_dataframes.append(predictions)
 
     start_predictions, end_predictions = prediction_dataframes[0], prediction_dataframes[1]
     return start_predictions, end_predictions
@@ -98,6 +112,9 @@ def retrieve_predictions_for_this_hour(
         
         elif previous_hour_ready:
             predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == from_hour]
+
+            # Just to increase the chances that a backup will be available, though it may be redundant
+            push_backup_predictions_to_postgres(table_name=f"{scenario}_backup_predictions", data=predictions_for_target_hour)
 
             if scenario == "start":  
                 st.write("⚠️ Predictions for the current hour are not available yet. Fetching those from an hour ago.")
