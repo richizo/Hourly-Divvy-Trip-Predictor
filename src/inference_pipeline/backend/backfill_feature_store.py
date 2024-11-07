@@ -11,7 +11,6 @@ from argparse import ArgumentParser
 from src.setup.config import config
 from src.setup.paths import MIXED_INDEXER, ROUNDING_INDEXER, INFERENCE_DATA
 from src.feature_pipeline.preprocessing import DataProcessor
-from src.feature_pipeline.mixed_indexer import fetch_json_of_ids_and_names
 
 from src.inference_pipeline.backend.inference import (
     make_features,
@@ -86,19 +85,13 @@ def backfill_predictions(scenario: str, target_date: datetime, using_mixed_index
     predictions: pd.DataFrame = get_model_predictions(scenario=scenario, model=model, features=features)
     predictions = predictions.drop_duplicates().reset_index(drop=True)
 
-    # Now to add station names to the predictions
-    ids_and_names = fetch_json_of_ids_and_names(scenario=scenario, using_mixed_indexer=True, invert=False)
-    predictions[f"{scenario}_station_name"] = predictions[f"{scenario}_station_id"].map(ids_and_names)
-
-    breakpoint()
-
     predictions_feature_group = setup_feature_group(
         scenario=scenario,
         primary_key=primary_key,
         description=f"predicting {config.displayed_scenario_names[scenario]} - {tuned_or_not} {model_name}",
         name=f"{model_name}_{scenario}_predictions",
         for_predictions=True,
-        version=6
+        version=config.feature_group_version
     )
 
     predictions_feature_group.insert(write_options={"wait_for_job": True}, features=predictions)

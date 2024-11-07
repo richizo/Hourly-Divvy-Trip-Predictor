@@ -141,9 +141,9 @@ def fetch_predictions_group(scenario: str, model_name: str) -> FeatureGroup:
        
     return setup_feature_group(
         scenario=scenario,
-        primary_key=None,
+        primary_key=[f"{scenario}_station_id"],
         description=f"predictions on {scenario} data using the {tuned_or_not} {model_name}",
-        name=f"{model_name}_{scenario}_predictions_by_{aggregation_method}",
+        name=f"{model_name}_{scenario}_predictions",
         version=config.feature_group_version,
         for_predictions=True
     )
@@ -154,7 +154,7 @@ def load_predictions_from_store(
     from_hour: datetime, 
     to_hour: datetime, 
     model_name: str,
-    aggregation_method: str == "sum"
+    aggregation_method: str = "sum"
     ) -> pd.DataFrame:
     """
     Load a dataframe containing predictions from their dedicated feature group on the offline feature store.
@@ -177,7 +177,7 @@ def load_predictions_from_store(
     predictions_feature_view: FeatureView = get_or_create_feature_view(
         name=f"{model_name}_{scenario}_predictions",
         feature_group=predictions_group,
-        version=1
+        version=config.feature_view_version
     )
 
     predictions_df = predictions_feature_view.get_batch_data(
@@ -186,19 +186,18 @@ def load_predictions_from_store(
     )
 
     predictions_df[f"{scenario}_hour"] = pd.to_datetime(predictions_df[f"{scenario}_hour"], utc=True)
+    predictions_df = predictions_df.drop("timestamp", axis=1)
 
     predictions_df = predictions_df.sort_values(
         by=[f"{scenario}_hour", f"{scenario}_station_id"]
     )
 
-    breakpoint()
-
     if aggregation_method.lower() == "sum":
-        return aggregate_predictions(scenario=scenario, predictions=predictions_df, sum=True)
+        return aggregate_predictions(scenario=scenario, predictions=predictions_df, aggregation_method="sum")
     elif aggregate_predictions.lower() in ["average", "mean"]:
-        return aggregate_predictions(scenario=scenario, predictions=predictions_df, sum=False)
+        return aggregate_predictions(scenario=scenario, predictions=predictions_df, aggregation_method="mean")
 
-    
+
 def get_model_predictions(scenario: str, model: Pipeline, features: pd.DataFrame) -> pd.DataFrame:
     """
     Simply use the model's predict method to provide predictions based on the supplied features
@@ -223,12 +222,18 @@ def get_model_predictions(scenario: str, model: Pipeline, features: pd.DataFrame
     return prediction_per_station
 
 
-def aggregate_predictions(scenario: str, predictions: pd.DataFrame, sum: bool) -> pd.DataFrame:
+def aggregate_predictions(scenario: str, predictions: pd.DataFrame, aggregation_method: str) -> pd.DataFrame:
 
-    if sum:
-        return predictions.groupby(f"{scenario}_station_id")[f"predicted_{scenario}s"].sum().reset_index()
+    if aggregation_method.lower() == "sum":
+        predictions[f"predicted_{scenario}s"] = predictions.groupby(f"{scenario}_station_id")[f"predicted_{scenario}s"].transform("sum")
+        return predictions.drop_duplicates()
+
+    elif aggregation_method.lower() == "mean":
+        predictions[f"predicted_{scenario}s"] = predictions.groupby(f"{scenario}_station_id")[f"predicted_{scenario}s"].transform("mean")
+        return predictions.drop_duplicates()
+
     else:
-        return predictions.groupby(f"{scenario}_station_id")[f"predicted_{scenario}s"].mean().reset_index()
+        raise NotImplementedError('The only aggregation methods in use are "sum" and "mean". ')
 
 
 

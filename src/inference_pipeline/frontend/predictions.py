@@ -17,6 +17,9 @@ from streamlit_extras.colored_header import colored_header
 
 from src.setup.config import config 
 from src.setup.paths import INFERENCE_DATA
+
+from src.feature_pipeline.mixed_indexer import fetch_json_of_ids_and_names
+
 from src.inference_pipeline.frontend.tracker import ProgressTracker
 from src.inference_pipeline.backend.inference import load_predictions_from_store
 from src.inference_pipeline.frontend.data import make_geodataframes, reconcile_geodata
@@ -36,15 +39,17 @@ def retrieve_predictions(from_hour: datetime, to_hour: datetime) -> pd.DataFrame
     """
     prediction_dataframes =[]
     for scenario in config.displayed_scenario_names.keys():                
-        model_name = "lightgbm" if scenario == "end" else "xgboost"
 
         predictions: pd.DataFrame = load_predictions_from_store(
             scenario=scenario,
-            model_name=model_name, 
+            model_name="lightgbm" if scenario == "end" else "xgboost", 
             from_hour=from_hour, 
             to_hour=to_hour
         )
-        
+
+        # Now to add station names to the received predictions
+        ids_and_names = fetch_json_of_ids_and_names(scenario=scenario, using_mixed_indexer=True, invert=False)        
+        predictions[f"{scenario}_station_name"] = predictions[f"{scenario}_station_id"].map(ids_and_names)
         prediction_dataframes.append(predictions)
 
     start_predictions, end_predictions = prediction_dataframes[0], prediction_dataframes[1]
@@ -88,7 +93,7 @@ def retrieve_predictions_for_this_hour(
         if next_hour_ready: 
             # Save in case the latest prediction is unavailable at a future time
             predictions_for_target_hour: pd.DataFrame = predictions[predictions[f"{scenario}_hour"] == to_hour]
-            predictions_for_target_hour.to_parquet(path=INFERENCE_DATA/f"{scenario}_predictions.parquet")
+            predictions_for_target_hour.to_parquet(path=INFERENCE_DATA/f"{scenario}_backup_predictions.parquet")
         
         elif previous_hour_ready:
             predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == from_hour]
@@ -98,18 +103,21 @@ def retrieve_predictions_for_this_hour(
         else:
             try:
                 # Fetch last saved prediction if it exists
-                predictions_for_target_hour = pd.read_parquet(INFERENCE_DATA/f"{scenario}_predictions.parquet")
+                predictions_for_target_hour = pd.read_parquet(INFERENCE_DATA/f"{scenario}_backup_predictions.parquet")
                 last_time_in_saved_predictions = predictions_for_target_hour[f"{scenario}_hour"].iloc[-1]
                 
                 if scenario == "start":
-                    st.write(f":orange[Unable to fetch predictions for the current or previous hour. Providing predictions from {last_time_in_saved_predictions}]")
+                    st.write(
+                        f":orange[Unable to fetch predictions for the current or previous hour. Providing predictions from {last_time_in_saved_predictions}]"
+                    )
             except:
                 last_time_in_received_predictions = predictions[f"{scenario}_hour"].iloc[-1]
                 predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == last_time_in_received_predictions]
 
                 if scenario == "start":
-                    st.subheader(f":orange[Unable to fetch predictions for the current or previous hour. Providing predictions from {last_time_in_received_predictions}]")
-
+                    st.subheader(
+                        f":orange[Unable to fetch predictions for the current or previous hour. Providing predictions from {last_time_in_received_predictions}]"
+                    )
 
         # Now to include the names of stations
         predictions_for_target_hour  = predictions_for_target_hour.drop(f"{scenario}_station_id", axis = 1)
