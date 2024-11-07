@@ -194,7 +194,7 @@ def load_predictions_from_store(
 
     if aggregation_method.lower() == "sum":
         return aggregate_predictions(scenario=scenario, predictions=predictions_df, aggregation_method="sum")
-    elif aggregate_predictions.lower() in ["average", "mean"]:
+    elif aggregation_method.lower() in ["average", "mean"]:
         return aggregate_predictions(scenario=scenario, predictions=predictions_df, aggregation_method="mean")
 
 
