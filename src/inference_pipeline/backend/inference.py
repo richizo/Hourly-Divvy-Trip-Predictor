@@ -154,7 +154,7 @@ def load_predictions_from_store(
     from_hour: datetime, 
     to_hour: datetime, 
     model_name: str,
-    aggregation_method: str = "sum"
+    aggregation_method: str = "mean"
     ) -> pd.DataFrame:
     """
     Load a dataframe containing predictions from their dedicated feature group on the offline feature store.
