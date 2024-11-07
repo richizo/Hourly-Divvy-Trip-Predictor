@@ -28,6 +28,7 @@ class GeneralConfig(BaseSettings):
     hopsworks_project_name: str
     feature_group_version: int = 3
     feature_view_version: int = 3
+    database_public_url: str
 
     backfill_days: int = 30
     current_hour: datetime = pd.to_datetime(datetime.now(tz=UTC)).floor("H")

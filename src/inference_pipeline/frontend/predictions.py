@@ -13,6 +13,7 @@ import streamlit as st
 
 from loguru import logger
 from datetime import datetime, timedelta
+from sqlalchemy import create_engine
 from streamlit_extras.colored_header import colored_header
 
 from src.setup.config import config 
@@ -93,17 +94,17 @@ def retrieve_predictions_for_this_hour(
         if next_hour_ready: 
             # Save in case the latest prediction is unavailable at a future time
             predictions_for_target_hour: pd.DataFrame = predictions[predictions[f"{scenario}_hour"] == to_hour]
-            predictions_for_target_hour.to_parquet(path=INFERENCE_DATA/f"{scenario}_backup_predictions.parquet")
+            push_backup_predictions_to_postgres(table_name=f"{scenario}_backup_predictions", data=predictions_for_target_hour)
         
         elif previous_hour_ready:
             predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == from_hour]
 
             if scenario == "start":  
-                st.write("⚠️ Predictions for the current hour are unavailable. Fetching those from an hour ago.")
+                st.write("⚠️ Predictions for the current hour are not available yet. Fetching those from an hour ago.")
         else:
             try:
                 # Fetch last saved prediction if it exists
-                predictions_for_target_hour = pd.read_parquet(INFERENCE_DATA/f"{scenario}_backup_predictions.parquet")
+                predictions_for_target_hour = retrieve_backup_predictions(table_name=f"{scenario}_backup_predictions")
                 last_time_in_saved_predictions = predictions_for_target_hour[f"{scenario}_hour"].iloc[-1]
                 
                 if scenario == "start":
@@ -127,6 +128,12 @@ def retrieve_predictions_for_this_hour(
     start_predictions, end_predictions = all_predictions_this_hour[0], all_predictions_this_hour[1]
     return start_predictions, end_predictions
 
+
+def push_backup_predictions_to_postgres(table_name: str, data: pd.DataFrame) -> None:
+    data.to_sql(name=table_name, con=config.database_public_url, if_exists="replace")
+
+def retrieve_backup_predictions(table_name: str) -> pd.DataFrame:
+    return pd.read_sql(sql=f'SELECT * FROM {table_name};', con=config.database_public_url)
 
 def restrict_geodataframe_to_stations_with_predictions(
     scenario: str,
