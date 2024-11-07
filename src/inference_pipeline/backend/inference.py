@@ -154,6 +154,7 @@ def load_predictions_from_store(
     from_hour: datetime, 
     to_hour: datetime, 
     model_name: str,
+    aggregate_predictions: bool = False, 
     aggregation_method: str = "mean"
     ) -> pd.DataFrame:
     """
@@ -168,6 +169,8 @@ def load_predictions_from_store(
     Returns:
         pd.DataFrame: the dataframe containing predictions.
     """
+    assert aggregation_method.lower() in ["sum", "mean"], 'Please specify "sum" or "mean" as aggregation methhods'
+
     # Ensure these times are datatimes
     from_hour = pd.to_datetime(from_hour, utc=True)
     to_hour = pd.to_datetime(to_hour, utc=True)
@@ -191,12 +194,12 @@ def load_predictions_from_store(
     predictions_df = predictions_df.sort_values(
         by=[f"{scenario}_hour", f"{scenario}_station_id"]
     )
-
-    if aggregation_method.lower() == "sum":
-        return aggregate_predictions(scenario=scenario, predictions=predictions_df, aggregation_method="sum")
-    elif aggregation_method.lower() in ["average", "mean"]:
-        return aggregate_predictions(scenario=scenario, predictions=predictions_df, aggregation_method="mean")
-
+    
+    if aggregate_predictions and aggregation_method.lower() in ["sum", "mean"]:
+        return aggregate_predictions(scenario=scenario, predictions=predictions_df, aggregation_method=aggregation_method)
+    elif not aggregate_predictions:
+        return predictions_df.reset_index(drop=True)
+    
 
 def get_model_predictions(scenario: str, model: Pipeline, features: pd.DataFrame) -> pd.DataFrame:
     """
@@ -226,14 +229,20 @@ def aggregate_predictions(scenario: str, predictions: pd.DataFrame, aggregation_
 
     if aggregation_method.lower() == "sum":
         predictions[f"predicted_{scenario}s"] = predictions.groupby(f"{scenario}_station_id")[f"predicted_{scenario}s"].transform("sum")
-        return predictions.drop_duplicates()
+        return predictions.drop_duplicates().reset_index(drop=True)
 
     elif aggregation_method.lower() == "mean":
         predictions[f"predicted_{scenario}s"] = predictions.groupby(f"{scenario}_station_id")[f"predicted_{scenario}s"].transform("mean")
-        return predictions.drop_duplicates()
+        predictions[f"predicted_{scenario}s"] = np.ceil(predictions[f"predicted_{scenario}s"])
+        return predictions.drop_duplicates().reset_index(drop=True)
 
     else:
         raise NotImplementedError('The only aggregation methods in use are "sum" and "mean". ')
+
+
+def round_mean_by_scenario(scenario: str, predicted_values: pd.Series) -> pd.Series:
+    if scenario == "start":
+        return np.ceil(predicted_values)
 
 
 
