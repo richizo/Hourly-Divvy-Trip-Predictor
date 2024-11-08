@@ -309,7 +309,7 @@ def make_map(_geodataframe_and_predictions: pd.DataFrame) -> None:
         stroked=False,
         filled=True,
         extruded=True,
-        get_radius=70,
+        get_radius=45,
         auto_highlight=True,
         pickable=True
     )
@@ -323,7 +323,7 @@ def make_map(_geodataframe_and_predictions: pd.DataFrame) -> None:
     map = pdk.Deck(
         layers=layer,
         initial_view_state=initial_view_state,
-        map_style="mapbox://styles/mapbox/navigation-day-v1",
+        map_style="mapbox://styles/mapbox/streets-v12",
         tooltip=tooltip
     )
 
