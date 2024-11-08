@@ -10,7 +10,7 @@ colored_header(
 
 st.markdown(
     """
-    Chicago's Divvy bike-sharing system (operated by Lyft) is the largest of its kind in North America.
+    Chicago's Divvy bike-sharing system (operated by Lyft) is one of the largest of its kind in North America.
 
     This application provides hourly :violet[predictions] of the number of :blue[arrivals] and :red[departures] 
     at various :green[Divvy stations] around the city, which you can view on the :violet["Predictions"] page. It is 
