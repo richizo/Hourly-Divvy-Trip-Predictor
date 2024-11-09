@@ -309,7 +309,7 @@ def make_map(_geodataframe_and_predictions: pd.DataFrame) -> None:
         stroked=False,
         filled=True,
         extruded=True,
-        get_radius=45,
+        get_radius=50,
         auto_highlight=True,
         pickable=True
     )
