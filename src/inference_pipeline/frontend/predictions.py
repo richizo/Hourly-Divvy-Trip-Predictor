@@ -191,8 +191,8 @@ def merge_geodataframe_and_predictions_per_scenario(scenario: str, geodataframe:
 class ColourModule:
     def __init__(self, value: int):
         self.red = (255, 0, 0)
-        self.blue = (0, 0, 255)
-        self.black = (0, 0, 0)
+        self.green = (0, 255, 0)
+        self.white = (255, 255, 255)
         self.value = value
 
     def pseudocolour(
@@ -217,11 +217,11 @@ class ColourModule:
             tuple[float...]: 
         """
         if self.value == 0:
-            start_colour, stop_colour = self.black, self.black
+            start_colour, stop_colour = self.white, self.white
         elif self.value > 0:
-            start_colour, stop_colour = self.black, self.red
+            start_colour, stop_colour = self.white, self.red
         elif self.value < 0:
-            start_colour, stop_colour = self.black, self.blue
+            start_colour, stop_colour = self.white, self.green
 
         relative_value =  float(self.value-min_value)/(max_value-min_value)
         shade = tuple(relative_value*(b-a) + a for (a,b) in zip(start_colour, stop_colour))
@@ -309,13 +309,13 @@ def make_map(_geodataframe_and_predictions: pd.DataFrame) -> None:
         stroked=False,
         filled=True,
         extruded=True,
-        get_radius=50,
+        get_radius=60,
         auto_highlight=True,
         pickable=True
     )
 
     tooltip = {
-        "style": {"backgroundColor": "green", "color": "white"},
+        "style": {"backgroundColor": "pink", "color": "black"},
         "html": "<b>{station_name} <br />\
                  <b>Predicted Arrivals:</b> {predicted_ends}<br /> <b>Predicted Departures:</b> {predicted_starts}"
     }
@@ -323,7 +323,7 @@ def make_map(_geodataframe_and_predictions: pd.DataFrame) -> None:
     map = pdk.Deck(
         layers=layer,
         initial_view_state=initial_view_state,
-        map_style="mapbox://styles/mapbox/streets-v12",
+        map_style="mapbox://styles/mapbox/dark-v11",
         tooltip=tooltip
     )
 
@@ -343,8 +343,8 @@ if __name__ != "__main__":
         """
         After a bit of loading, a map of the city and its environs should appear, with points littered all over it.
         
-        Each point will represent a :green[station], and if you pan over to one of them, you will see its address, 
-        as well as the number of :blue[arrivals] and :red[departures] predicted to take place there in the next hour. 
+        Each point will represent a :blue[station], and if you pan over to one of them, you will see its address, 
+        as well as the number of :green[arrivals] and :red[departures] predicted to take place there in the next hour. 
 
         Once it loads, feel free to toggle the fullscreen button just above the top-right corner of the map.
         """
@@ -405,22 +405,26 @@ if __name__ != "__main__":
 
     st.sidebar.write("✅ Map Drawn")
 
-    st.subheader(body=":green[Addressing] the :blue[Business Problem]", divider=True)
+    st.subheader(body=":blue[Addressing the Business Problem]", divider=True)
 
     st.markdown(
         """
-        As you can see, the points on the map come in :red[red], :blue[blue], and black. 
+        As you can see, the points on the map come in :red[red], :green[green], and white. 
         
         The stations in:
-        - :red[red] are predicted to have more :red[departures] than :blue[arrivals].
-        - :blue[blue] are predicted to have more :blue[arrivals] than :red[departures].
-        - black are predicted to have an equal number of :red[departures] and :blue[arrivals].
+        - :red[red] are predicted to have more :red[departures] than :green[arrivals].
+        - :green[green] are predicted to have more :green[arrivals] than :red[departures].
+        - white are predicted to have an equal number of :red[departures] and :green[arrivals].
+
+        Deeper shades of :green[green] and :red[red] suggest more extreme discrepancies between :green[arrivals] 
+        and :red[departures] respectively.
         
-        The management at Divvy Bikes may want to monitor these three classifications of stations, after which it may be 
-        decided that if the stations stay the same colour over time:
+        The management at Divvy Bikes may want to monitor these three classifications of stations, after which they could 
+        decide that (assuming the stations stay the same colour over time):
+
         - the red stations will need to have more bikes available than the others, because they are more likely to have
         more departures than arrivals.
-        - the blue stations don't necessarily need to have as many bikes because they tend to see more arrivals than 
+        - the green stations don't necessarily need to have as many bikes because they tend to see more arrivals than 
         departures.
 
         On the other hand, some stations may change colour from hour to another, which may require more immediate 
