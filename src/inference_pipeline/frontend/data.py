@@ -23,7 +23,7 @@ from src.feature_pipeline.feature_engineering import ReverseGeocoder
 from src.inference_pipeline.backend.inference import rerun_feature_pipeline, load_raw_local_geodata
 
 
-@st.cache_data
+@st.cache_data(persist=False)
 def make_geodataframes(using_mixed_indexer: bool = True) -> pd.DataFrame:
     """
     Create a dataframe containing the geographical details of each station using both

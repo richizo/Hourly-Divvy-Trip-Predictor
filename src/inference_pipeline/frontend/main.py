@@ -1,7 +1,6 @@
 """
 This module initiates the streamlit app.
 """
-import os
 import streamlit as st
 from streamlit_extras.app_logo import add_logo
 
@@ -22,4 +21,3 @@ pages = st.navigation(
 
 
 pages.run()
-os.system("streamlit cache clear")

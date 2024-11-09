@@ -26,7 +26,7 @@ from src.inference_pipeline.backend.inference import load_predictions_from_store
 from src.inference_pipeline.frontend.data import make_geodataframes, reconcile_geodata
 
 
-@st.cache_data
+@st.cache_data(persist=False)
 def retrieve_predictions(from_hour: datetime, to_hour: datetime) -> pd.DataFrame:
     """ 
     Download all the predictions for all the stations from one hour to another
@@ -71,7 +71,7 @@ def retrieve_predictions(from_hour: datetime, to_hour: datetime) -> pd.DataFrame
     return start_predictions, end_predictions
 
 
-@st.cache_data
+@st.cache_data(persist=False)
 def retrieve_predictions_for_this_hour(
     predicted_starts: pd.DataFrame,
     predicted_ends: pd.DataFrame,
@@ -288,7 +288,7 @@ def fully_merge_data(
     return colour_points_by_discrepancy(merged_data=complete_merger)
 
     
-@st.cache_resource
+@st.cache_resource()
 def make_map(_geodataframe_and_predictions: pd.DataFrame) -> None:
 
     initial_view_state = pdk.ViewState(
