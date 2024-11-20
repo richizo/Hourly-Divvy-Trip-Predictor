@@ -108,33 +108,32 @@ def retrieve_predictions_for_this_hour(
         if next_hour_ready: 
             # Save in case the latest prediction is unavailable at a future time
             predictions_for_target_hour: pd.DataFrame = predictions[predictions[f"{scenario}_hour"] == to_hour]
-            push_backup_predictions_to_postgres(table_name=f"{scenario}_backup_predictions", data=predictions_for_target_hour)
+            backup_predictions_to_postgres(table_name=f"{scenario}_backup_predictions", data=predictions_for_target_hour)
         
         elif previous_hour_ready:
             predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == from_hour]
 
             # Just to increase the chances that a backup will be available, though it may be redundant
-            push_backup_predictions_to_postgres(table_name=f"{scenario}_backup_predictions", data=predictions_for_target_hour)
+            backup_predictions_to_postgres(table_name=f"{scenario}_backup_predictions", data=predictions_for_target_hour)
 
             if scenario == "start":  
                 st.write("⚠️ Predictions for the current hour are not available yet. Fetching those from an hour ago.")
-        else:
+        else: 
             try:
-                # Fetch last saved prediction if it exists
                 predictions_for_target_hour = retrieve_backup_predictions(table_name=f"{scenario}_backup_predictions")
-                last_time_in_saved_predictions = predictions_for_target_hour[f"{scenario}_hour"].iloc[-1]
+                most_recent_hour_in_backup_predictions = predictions_for_target_hour[f"{scenario}_hour"].iloc[-1]
                 
                 if scenario == "start":
                     st.write(
-                        f":orange[Unable to fetch predictions for the current or previous hour. Providing predictions from {last_time_in_saved_predictions}]"
+                        f":orange[Could not fetch predictions for  previous hour. Providing predictions from {most_recent_hour_in_backup_predictions}]"
                     )
             except:
-                last_time_in_received_predictions = predictions[f"{scenario}_hour"].iloc[-1]
-                predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == last_time_in_received_predictions]
+                most_recent_hour_in_received_predictions = predictions[f"{scenario}_hour"].iloc[-1]
+                predictions_for_target_hour = predictions[predictions[f"{scenario}_hour"] == most_recent_hour_in_received_predictions]
 
                 if scenario == "start":
-                    st.subheader(
-                        f":orange[Unable to fetch predictions for the current or previous hour. Providing predictions from {last_time_in_received_predictions}]"
+                    st.write(
+                        f":orange[Unable to fetch predictions for the current or previous hour. Providing predictions from {most_recent_hour_in_received_predictions}]"
                     )
 
         # Now to include the names of stations
@@ -146,7 +145,7 @@ def retrieve_predictions_for_this_hour(
     return start_predictions, end_predictions
 
 
-def push_backup_predictions_to_postgres(table_name: str, data: pd.DataFrame) -> None:
+def backup_predictions_to_postgres(table_name: str, data: pd.DataFrame) -> None:
     data.to_sql(name=table_name, con=config.database_public_url, if_exists="replace")
 
 def retrieve_backup_predictions(table_name: str) -> pd.DataFrame:

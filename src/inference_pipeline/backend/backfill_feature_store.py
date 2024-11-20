@@ -2,27 +2,22 @@
 This module contains the code that is used to backfill feature and prediction 
 data.
 """
-import json 
 import pandas as pd
 from loguru import logger
 from datetime import datetime, timedelta
 from argparse import ArgumentParser
 
 from src.setup.config import config
-from src.setup.paths import MIXED_INDEXER, ROUNDING_INDEXER, INFERENCE_DATA
 from src.feature_pipeline.preprocessing import DataProcessor
 
 from src.inference_pipeline.backend.inference import (
-    make_features,
-    load_raw_local_geodata, 
-    fetch_predictions_group,
-    get_feature_group_for_time_series,
-    fetch_time_series_and_make_features
+        get_feature_group_for_time_series, 
+        fetch_time_series_and_make_features, 
+        get_model_predictions
 )
 
 from src.inference_pipeline.backend.feature_store_api import setup_feature_group
 from src.inference_pipeline.backend.model_registry_api import ModelRegistry
-from src.inference_pipeline.backend.inference import get_model_predictions
 
 
 def backfill_features(scenario: str) -> None:
@@ -35,7 +30,6 @@ def backfill_features(scenario: str) -> None:
     Returns:
         None
     """
-    event_time = "timestamp"
     primary_key = ["timestamp", f"{scenario}_station_id"]
     processor = DataProcessor(year=config.year, for_inference=False)
     ts_data = processor.make_time_series()[0] if scenario == "start" else processor.make_time_series()[1]
@@ -45,7 +39,7 @@ def backfill_features(scenario: str) -> None:
     ts_feature_group.insert(write_options={"wait_for_job": True}, features=ts_data) # Push time series data to the feature group
 
 
-def backfill_predictions(scenario: str, target_date: datetime, using_mixed_indexer: bool = True) -> None:
+def backfill_predictions(scenario: str, target_date: datetime) -> None: 
     """
     Fetch the registered version of the named model, and download it. Then load a batch of ts_data
     from the relevant feature group (whether for arrival or departure data), and make predictions on those 

@@ -496,13 +496,19 @@ class DataProcessor:
                     hours.append(hour)
             
             elif not use_standard_cutoff_indexer and len(ts_per_station) == 1:
-                x[0, :] = np.full(shape=(1, input_seq_len), fill_value=ts_per_station["trips"].iloc[0])
+
+                x[0, :] = np.full(
+                    shape=(1, input_seq_len), 
+                    fill_value=ts_per_station["trips"].iloc[0]
+                )
+
                 y[0] = ts_per_station["trips"].iloc[0]
                 hour = ts_per_station[f"{scenario}_hour"].values[0]
                 hours.append(hour)
 
             else:
                 ts_per_station = ts_per_station.reset_index(drop=True)
+                
                 for i, index in enumerate(indices):
                     x[i, :] = ts_per_station.iloc[index[0]: index[1], 2].values
                     y[i] = ts_per_station[index[1]:index[2]]["trips"].values[0]

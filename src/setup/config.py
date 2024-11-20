@@ -26,8 +26,8 @@ class GeneralConfig(BaseSettings):
     # Hopsworks
     hopsworks_api_key: str
     hopsworks_project_name: str
-    feature_group_version: int = 3
-    feature_view_version: int = 3
+    feature_group_version: int = 1
+    feature_view_version: int = 1
 
     # PostgreSQL
     database_public_url: str
