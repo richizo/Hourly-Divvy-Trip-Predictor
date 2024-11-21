@@ -11,9 +11,9 @@ from src.setup.config import config
 from src.feature_pipeline.preprocessing import DataProcessor
 
 from src.inference_pipeline.backend.inference import (
-        get_feature_group_for_time_series, 
-        fetch_time_series_and_make_features, 
-        get_model_predictions
+    get_feature_group_for_time_series, 
+    fetch_time_series_and_make_features, 
+    get_model_predictions
 )
 
 from src.inference_pipeline.backend.feature_store_api import setup_feature_group
