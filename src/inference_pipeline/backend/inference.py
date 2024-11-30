@@ -6,39 +6,31 @@ This module contains code that:
 - performs inference on features
 """
 import os
-import json
 import numpy as np
 import pandas as pd
-
-from pathlib import Path
 
 from loguru import logger
 from argparse import ArgumentParser
 
 from datetime import datetime, timedelta
+from sklearn.pipeline import Pipeline
+
 from hsfs.feature_group import FeatureGroup
 from hsfs.feature_view import FeatureView
 
-from sklearn.pipeline import Pipeline
-
 from src.setup.config import config
-from src.setup.paths import ROUNDING_INDEXER, MIXED_INDEXER, INFERENCE_DATA
-
+from src.setup.paths import ROUNDING_INDEXER, MIXED_INDEXER
 from src.feature_pipeline.preprocessing import DataProcessor
-from src.feature_pipeline.feature_engineering import finish_feature_engineering
-from src.inference_pipeline.backend.model_registry_api import ModelRegistry
 from src.inference_pipeline.backend.feature_store_api import setup_feature_group, get_or_create_feature_view
 
 
 def get_feature_group_for_time_series(scenario: str, primary_key: list[str]) -> FeatureGroup:
 
     return setup_feature_group(
-        scenario=scenario,
         primary_key=primary_key,
         description=f"Hourly time series data for {config.displayed_scenario_names[scenario].lower()}",
         name=f"{scenario}_feature_group",
         version=config.feature_group_version,
-        for_predictions=False
     )
 
 
@@ -95,7 +87,6 @@ def fetch_time_series_and_make_features(
 def make_features(
     scenario: str, 
     target_date: datetime, 
-    station_ids: list[int], 
     ts_data: pd.DataFrame, 
     geocode: bool
     ) -> pd.DataFrame:
@@ -140,12 +131,10 @@ def fetch_predictions_group(scenario: str, model_name: str) -> FeatureGroup:
     tuned_or_not = "tuned" if model_name == "lightgbm" else "untuned"
        
     return setup_feature_group(
-        scenario=scenario,
         primary_key=[f"{scenario}_station_id"],
         description=f"predictions on {scenario} data using the {tuned_or_not} {model_name}",
         name=f"{model_name}_{scenario}_predictions",
-        version=config.feature_group_version,
-        for_predictions=True
+        version=config.feature_group_version
     )
 
 

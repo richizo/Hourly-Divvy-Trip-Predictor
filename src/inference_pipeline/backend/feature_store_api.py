@@ -4,7 +4,6 @@ feature store API.
 """
 import hopsworks
 from loguru import logger
-
 from hsfs.feature_view import FeatureView
 from hsfs.feature_store import FeatureStore
 from hsfs.feature_group import FeatureGroup
@@ -25,12 +24,10 @@ def get_feature_store() -> FeatureStore:
 
 
 def setup_feature_group(
-    scenario: str, 
     name: str, 
     version: int, 
     primary_key: list[str] | None, 
-    description: str, 
-    for_predictions: bool
+    description: str 
     ) -> FeatureGroup:
     """
     Create or connect to a feature group with the specified name, and 
