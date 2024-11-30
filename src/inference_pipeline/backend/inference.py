@@ -79,8 +79,7 @@ def fetch_time_series_and_make_features(
         scenario=scenario, 
         ts_data=ts_data, 
         geocode=geocode,
-        target_date=target_date,
-        station_ids=ts_data[f"{scenario}_station_id"].unique()
+        target_date=target_date
     )
 
 
