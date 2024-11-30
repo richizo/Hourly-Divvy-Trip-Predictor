@@ -275,7 +275,7 @@ def add_hours_and_days(features: pd.DataFrame, scenario: str) -> pd.DataFrame:
         pd.DataFrame: the data frame with these features included
     """
     # The values in this column change types when uploading to Hopsworks, so this avoids errors.
-    features[f"{scenario}_hour"] = pd.to_datetime(features[f"{scenario}_hour"], errors="coerce")
+    features[f"{scenario}_hour"] = pd.to_datetime(features[f"{scenario}_hour"], format='%Y-%m-%d %H:%M:%S', utc=True)
 
     times_and_entries = {
         "hour": features[f"{scenario}_hour"].apply(lambda x: x.hour),

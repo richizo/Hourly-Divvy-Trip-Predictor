@@ -20,7 +20,7 @@ requests = "^2.32.3"
 optuna = "^4.1.0"
 setuptools = "^75.6.0"
 numpy = "1.26.4"
-pandas = "2.1.2"
 hopsworks = "^4.1.2"
 comet-ml = "^3.47.4"
+pandas = "2.1.4"
 

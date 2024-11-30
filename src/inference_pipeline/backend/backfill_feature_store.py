@@ -80,11 +80,9 @@ def backfill_predictions(scenario: str, target_date: datetime) -> None:
     predictions = predictions.drop_duplicates().reset_index(drop=True)
 
     predictions_feature_group = setup_feature_group(
-        scenario=scenario,
         primary_key=primary_key,
         description=f"predicting {config.displayed_scenario_names[scenario]} - {tuned_or_not} {model_name}",
         name=f"{model_name}_{scenario}_predictions",
-        for_predictions=True,
         version=config.feature_group_version
     )
 
