@@ -115,8 +115,7 @@ class DataProcessor:
             else:
                 logger.success(f"You already have training data for the {config.displayed_scenario_names[scenario]}")  
             
-            continue
-            return training_sets
+        return training_sets
 
     def make_time_series(self) -> tuple[pd.DataFrame, pd.DataFrame]:
         """

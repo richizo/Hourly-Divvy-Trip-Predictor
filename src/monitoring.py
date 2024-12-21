@@ -29,7 +29,7 @@ def load_predictions_and_historical_trips(
     Returns:
         pd.DataFrame: the data to be used fo
     """
-    tuned_or_not = "tuned"
+    tuned_or_not = "tuned" if scenario == "start" else "untuned"
     from_ts = int(from_date.timestamp() * 1000)
     to_ts = int(to_date.timestamp() * 1000)
 

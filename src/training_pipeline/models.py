@@ -104,3 +104,4 @@ def load_local_model(directory: Path, model_name: str, scenario: str, tuned_or_n
     model_file = directory / model_file_name
     with open(model_file, "rb") as file:
         return pickle.load(file)
+

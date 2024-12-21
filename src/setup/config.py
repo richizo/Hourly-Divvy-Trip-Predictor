@@ -32,7 +32,7 @@ class GeneralConfig(BaseSettings):
     # PostgreSQL
     database_public_url: str
 
-    backfill_days: int = 180
+    backfill_days: int = 210 
     current_hour: datetime = pd.to_datetime(datetime.now(tz=UTC)).floor("H")
     displayed_scenario_names: dict = {"start": "Departures", "end": "Arrivals"} 
 

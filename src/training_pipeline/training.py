@@ -59,10 +59,12 @@ class Trainer:
             training_data = pd.read_parquet(path=data_path)
             logger.success(f"Fetched saved training data for {config.displayed_scenario_names[self.scenario].lower()}")
         else:
-            logger.warning("No training data is stored. Creating the dataset will take a while. Watch some One Piece.")
+            logger.warning("No training data is stored. Creating the dataset will take a while. Watch some One Piece (it's fantastic).")
 
             processor = DataProcessor(year=config.year, for_inference=False)
             training_sets = processor.make_training_data(geocode=False)
+
+            breakpoint()
             training_data = training_sets[0] if self.scenario.lower() == "start" else training_sets[1]
             
             logger.success("Training data produced successfully")
@@ -83,7 +85,7 @@ class Trainer:
         Returns:
             float: the error of the chosen model on the test dataset.
         """
-        model_fn: callable = get_model(model_name=model_name)
+        model_fn: object = get_model(model_name=model_name)
         features, target = self.get_or_make_training_data()
 
         train_sample_size = int(0.9 * len(features))
@@ -112,7 +114,7 @@ class Trainer:
         else:
             experiment.set_name(name=f"{model_name.title()}(Tuned) model for the {self.scenario}s of trips")
             logger.info(
-                f"Tuning hyperparameters of the {model_name} model. Have a snack and watch One Piece (it's fantastic)"
+                f"Tuning hyperparameters of the {model_name} model. Have a snack and watch One Piece (seriously, it's great)"
             )
 
             best_model_hyperparameters = optimise_hyperparameters(
@@ -195,3 +197,4 @@ if __name__ == "__main__":
     )
 
     trainer.train_and_register_models(model_names=args.models, version="1.0.0", status="production")
+

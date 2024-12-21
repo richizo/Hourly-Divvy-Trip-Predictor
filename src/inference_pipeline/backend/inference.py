@@ -127,7 +127,7 @@ def fetch_predictions_group(scenario: str, model_name: str) -> FeatureGroup:
         FeatureGroup: the feature group for the given model's predictions.
     """
     assert model_name in ["xgboost", "lightgbm"], 'The selected model architectures are currently "xgboost" and "lightgbm"'
-    tuned_or_not = "tuned" if model_name == "lightgbm" else "untuned"
+    tuned_or_not = "tuned" if scenario == "start" else "untuned"
        
     return setup_feature_group(
         primary_key=[f"{scenario}_station_id"],

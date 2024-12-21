@@ -55,8 +55,8 @@ def backfill_predictions(scenario: str, target_date: datetime) -> None:
     end_date = target_date + timedelta(days=1)
     
     # The best model architectures for arrivals & departures at the moment
-    model_name = "lightgbm" if scenario == "end" else "xgboost"
-    tuned_or_not = "tuned" if scenario == "end" else "untuned"
+    model_name = "xgboost"
+    tuned_or_not = "tuned" if scenario == "start" else "untuned"
 
     registry = ModelRegistry(scenario=scenario, model_name=model_name, tuned_or_not=tuned_or_not)
     model = registry.download_latest_model(unzip=True)
