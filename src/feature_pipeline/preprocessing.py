@@ -19,17 +19,17 @@ from src.setup.paths import (
 
 class DataProcessor:
     def __init__(self, year: int, for_inference: bool):
-        self.station_ids = None
+        self.station_ids: None = None
         self.scenarios: list[str] = ["start", "end"]
         self.for_inference: bool = for_inference
-        self.start_ts_path: Path = TIME_SERIES_DATA / "start_ts.parquet"
-        self.end_ts_path: Path = TIME_SERIES_DATA / "end_ts.parquet"
+        self.start_ts_path: Path = Path.joinpath(TIME_SERIES_DATA, "start_ts.parquet")
+        self.end_ts_path: Path = Path.joinpath(TIME_SERIES_DATA, "end_ts.parquet")
 
         if for_inference:
-            self.data = None  # Because the data will have been fetched from the feature store instead.
+            self.data: None = None  # Because the data will have been fetched from the feature store instead.
         else:
-            loaded_raw_data = list(load_raw_data(year=year))
-            self.data = pd.concat(loaded_raw_data, axis=0) 
+            loaded_raw_data: list[pd.DataFrame] = list(load_raw_data(year=year))
+            self.data: pd.DataFrame = pd.concat(loaded_raw_data, axis=0) 
 
     def use_custom_station_indexing(self, scenarios: list[str], data: pd.DataFrame) -> bool:
         """

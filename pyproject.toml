@@ -26,4 +26,3 @@ pandas = "2.1.4"
 sqlalchemy = "2.0.29"
 psycopg2-binary = "^2.9.10"
 confluent-kafka = "^2.7.0"
-

@@ -44,7 +44,9 @@ def download_and_extract_zipfile(year: int, month: int, keep_zipfile: bool = Fal
     url = f"https://divvy-tripdata.s3.amazonaws.com/{zipfile_name}"
     response = requests.get(url)
 
-    if response.status_code == 200:
+    if response.status_code != 200:
+        logger.error(f"Cannot find the zipfile. Status code: {response.status_code}")
+    else:
         file_name = zipfile_name[:-4]  # Remove ".zip" from the name of the zipfile
         folder_path = Path.joinpath(RAW_DATA_DIR, file_name)
         zipfile_path = Path.joinpath(RAW_DATA_DIR, zipfile_name)
@@ -59,11 +61,9 @@ def download_and_extract_zipfile(year: int, month: int, keep_zipfile: bool = Fal
 
         if not keep_zipfile:
             os.remove(zipfile_path)
-    else:
-        logger.error(f"Cannot find the zipfile. Status code: {response.status_code}")
 
 
-def check_for_file_or_download(year: int, file_name: str, month: int | None = None):
+def check_for_file_or_download(year: int, file_name: str, month: int | None = None) -> None:
     """
     Checks for the presence of a file, and downloads it if necessary.
 
@@ -119,10 +119,6 @@ def load_raw_data(year: int, months: list[int] | None = None) -> pd.DataFrame:
 
     for month in months_to_download:
         file_name = f"{year}{month:02d}-divvy-tripdata"
+        check_for_file_or_download(year=year, month=month, file_name=file_name)
+        yield get_dataframe_from_folder(file_name=file_name)
 
-        try:
-            check_for_file_or_download(year=year, month=month, file_name=file_name)
-            yield get_dataframe_from_folder(file_name=file_name)
-        except Exception as error:
-            logger.error(error)
-           

@@ -53,7 +53,7 @@ class Trainer:
             pd.DataFrame: a tuple containing the training data's features and targets
         """
         assert self.scenario.lower() in ["start", "end"]
-        data_path = TRAINING_DATA / f"{self.scenario}s.parquet"
+        data_path = Path.joinpath(TRAINING_DATA, f"{self.scenario}s.parquet")
         
         if Path(data_path).is_file():
             training_data = pd.read_parquet(path=data_path)

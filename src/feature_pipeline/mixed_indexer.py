@@ -290,7 +290,7 @@ def run_mixed_indexer(scenario: str, data: pd.DataFrame, delete_leftover_rows: b
 
     if delete_leftover_rows:
         logger.warning(f"Discarding the {len(leftover_row_indices)} rows that still have no station IDs and names.")
-        logger.info("Providing new indices for each station in the rest of the data")
+        logger.info("Providing new indices to each station in the rest of the data")
 
         station_id_index = unproblematic_data_with_rounded_coordinates.columns.get_loc(f"{scenario}_station_id")
         station_ids = unproblematic_data_with_rounded_coordinates.iloc[:, station_id_index]
@@ -307,9 +307,7 @@ def run_mixed_indexer(scenario: str, data: pd.DataFrame, delete_leftover_rows: b
         save_geodata(data=unproblematic_data_with_rounded_coordinates, scenario=scenario)
 
         unproblematic_data_with_rounded_coordinates = unproblematic_data_with_rounded_coordinates.drop(
-            columns=[
-                f"{scenario}_lat", f"{scenario}_lng", f"{scenario}_station_name"
-            ]
+            columns=[f"{scenario}_lat", f"{scenario}_lng", f"{scenario}_station_name"]
         )
 
         if save:
