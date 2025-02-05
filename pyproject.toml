@@ -5,7 +5,7 @@ description = ""
 authors = ["kobina <maadabrandon@protonmail.com>"]
 
 [tool.poetry.dependencies]
-python = ">=3.10.0, <=3.12.7"
+python = ">=3.10.0, <=3.12.8"
 tqdm = "^4.67.1"
 geopy = "^2.4.1"
 streamlit = "^1.40.2"

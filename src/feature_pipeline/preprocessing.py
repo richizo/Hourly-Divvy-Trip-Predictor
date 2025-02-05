@@ -20,10 +20,10 @@ from src.setup.paths import (
 class DataProcessor:
     def __init__(self, year: int, for_inference: bool):
         self.station_ids = None
-        self.scenarios = ["start", "end"]
-        self.for_inference = for_inference
-        self.start_ts_path = TIME_SERIES_DATA / "start_ts.parquet"
-        self.end_ts_path = TIME_SERIES_DATA / "end_ts.parquet"
+        self.scenarios: list[str] = ["start", "end"]
+        self.for_inference: bool = for_inference
+        self.start_ts_path: Path = TIME_SERIES_DATA / "start_ts.parquet"
+        self.end_ts_path: Path = TIME_SERIES_DATA / "end_ts.parquet"
 
         if for_inference:
             self.data = None  # Because the data will have been fetched from the feature store instead.
@@ -39,7 +39,7 @@ class DataProcessor:
         than 6 or 7 values, while the long IDs are generally longer than 7 characters. The second group of 
         problematic station IDs are, naturally, the missing ones.
         
-        This function starts by checking which how many of the station IDs fall into either of these two groups. 
+        This function starts by checking how many of the station IDs fall into either of these two groups. 
         If there are enough of these (subjectively determined to be at least half the total number of IDs), then 
         the station IDs will have to be replaced with numerical values using one of the two custom indexing methods
         mentioned before. Which of these methods will be used will depend on the result of the function after this 
@@ -48,29 +48,29 @@ class DataProcessor:
         Returns:
             bool: whether a custom indexing method will be used. 
         """
-        if not self.for_inference:
-            results = []
+        assert not self.for_inference
+        results = []
 
-            for scenario in scenarios:
-                long_id_count = 0
+        for scenario in scenarios:
+            long_id_count = 0
 
-                for station_id in data.loc[:, f"{scenario}_station_id"]:
-                    if len(str(station_id)) >= 7 and not pd.isnull(station_id):
-                        long_id_count += 1
+            for station_id in data.loc[:, f"{scenario}_station_id"]:
+                if len(str(station_id)) >= 7 and not pd.isnull(station_id):
+                    long_id_count += 1
 
-                number_of_missing_indices = data[f"{scenario}_station_id"].isna().sum()
-                proportion_of_problem_rows = (number_of_missing_indices + long_id_count) / data.shape[0] 
-                result = True if proportion_of_problem_rows >= 0.5 else False
+            number_of_missing_indices: int = data[f"{scenario}_station_id"].isna().sum()
+            proportion_of_problem_rows: float = (number_of_missing_indices + long_id_count) / data.shape[0] 
+            result = True if proportion_of_problem_rows >= 0.5 else False
 
-                results.append(result)
+            results.append(result)
 
-            return True if False not in results else False
+        return True if False not in results else False
 
-    def tie_ids_to_unique_coordinates(self, data: pd.DataFrame) -> bool:
+    def tie_ids_to_unique_coordinates(self, data: pd.DataFrame, threshold: int = 10_000_000) -> bool:
         """
-        With a large enough dataset (subjectively determined to be those that has more than 10M rows), the author has 
-        finds it necessary to round the coordinates of each station to make the preprocessing operations that follow 
-        less taxing in terms of time and system memory. Following the rounding operation, a number will be assigned to 
+        With a large enough dataset (subjectively determined to be one with more than 10M rows), I found it 
+        necessary to round the coordinates of each station to make the preprocessing operations that follow less 
+        taxing in terms of time and system memory. Following the rounding operation, a number will be assigned to 
         each unique coordinate which will function as the new ID for that station. 
 
         In smaller datasets (which are heavily preferred by the author), the new IDs are created with no connection to
@@ -80,15 +80,15 @@ class DataProcessor:
             data (pd.DataFrame): the dataset to be examined.
 
         Returns:
-            bool: whether the dataset is deemed to be large enough to trigger the 
+            bool: whether the dataset is deemed to be large enough to trigger the above condition 
         """
-        if not self.for_inference:
-            return True if len(data) > 10_000_000 else False
+        assert not self.for_inference
+        return True if len(data) > threshold else False
 
     def make_training_data(self, geocode: bool) -> list[pd.DataFrame] | tuple[pd.DataFrame, pd.DataFrame]:
         """
-        Extract raw data, clean it, transform it into time series data, and transform that in turn into
-        training data which is subsequently saved. 
+        Extract raw data, clean it, transform it into time series data, and transform that time series data into
+        training data. 
 
         Args:
             geocode (bool): whether to geocode as part of feature engineering.
@@ -147,16 +147,16 @@ class DataProcessor:
         if self.use_custom_station_indexing(scenarios=self.scenarios, data=self.data) \
                 and self.tie_ids_to_unique_coordinates(data=self.data):
 
-            cleaned_data_file_path = CLEANED_DATA/"data_with_newly_indexed_stations (rounded_indexer).parquet"
+            cleaned_data_file_path = Path.joinpath(CLEANED_DATA, "data_with_newly_indexed_stations (rounded_indexer).parquet")
 
         elif self.use_custom_station_indexing(scenarios=self.scenarios, data=self.data) \
                 and not self.tie_ids_to_unique_coordinates(data=self.data):
 
-            cleaned_data_file_path = CLEANED_DATA/"data_with_newly_indexed_stations (mixed_indexer).parquet"
+            cleaned_data_file_path = Path.joinpath(CLEANED_DATA, "data_with_newly_indexed_stations (mixed_indexer).parquet")
 
         # Will think of a more elegant solution in due course. This only serves my current interests.
         elif self.for_inference:
-            cleaned_data_file_path = CLEANED_DATA/"partially_cleaned_data_for_inference.parquet"
+            cleaned_data_file_path = Path.joinpath(CLEANED_DATA, "partially_cleaned_data_for_inference.parquet")
 
         else:
             raise NotImplementedError(
@@ -206,6 +206,7 @@ class DataProcessor:
 
             if self.use_custom_station_indexing(data=self.data, scenarios=self.scenarios) and \
                     self.tie_ids_to_unique_coordinates(data=self.data):
+
                 features_to_drop.extend(
                     ["start_station_id", "start_station_name", "end_station_name"]
                 )
@@ -279,7 +280,7 @@ class DataProcessor:
                 """
                 In an earlier version of the project, I ran into memory issues for two reasons:
                     1) I was dealing with more than a year's worth of data. 
-                    2) mistakes that were deeply embedded in the feature pipeline.
+                    2) there were bugs embedded in the feature pipeline.
 
                 As a result, I decided to match approximations of each coordinate with an ID of 
                 my own making, thereby reducing the size of the dataset during the aggregation
@@ -299,7 +300,7 @@ class DataProcessor:
                 As of late July 2024, 60% of the IDs (for origin and destination stations) have long strings
                 or missing indices. It is therefore unlikely that we will need an alternative method. However, 
                 I will write one eventually. Most likely it will involve simply applying the custom procedure to only
-                that problematic minority of indices,to generate new integer indices that aren't already in the column.
+                that problematic minority of indices, to generate new integer indices that aren't already in the column.
 
                 Args:
                     cleaned_data (pd.DataFrame): the version of the dataset that has been cleaned

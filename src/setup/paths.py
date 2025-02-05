@@ -3,9 +3,10 @@ from pathlib import Path
 
 
 PARENT_DIR = Path("_file_").parent.resolve()
-IMAGES_DIR = PARENT_DIR/"images"
 
-DATA_DIR = PARENT_DIR/"data"
+IMAGES_DIR = Path.joinpath(PARENT_DIR, "images")
+DATA_DIR = Path.joinpath(PARENT_DIR, "data")
+
 RAW_DATA_DIR = DATA_DIR/"raw"
 
 MODELS_DIR = PARENT_DIR/"models"

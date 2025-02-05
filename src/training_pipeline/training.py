@@ -59,14 +59,11 @@ class Trainer:
             training_data = pd.read_parquet(path=data_path)
             logger.success(f"Fetched saved training data for {config.displayed_scenario_names[self.scenario].lower()}")
         else:
-            logger.warning("No training data is stored. Creating the dataset will take a while. Watch some One Piece (it's fantastic).")
+            logger.warning("No training data is storage. Creating the dataset will take a while.")
 
             processor = DataProcessor(year=config.year, for_inference=False)
             training_sets = processor.make_training_data(geocode=False)
-
-            breakpoint()
             training_data = training_sets[0] if self.scenario.lower() == "start" else training_sets[1]
-            
             logger.success("Training data produced successfully")
 
         target = training_data["trips_next_hour"]
@@ -113,9 +110,7 @@ class Trainer:
                     pipeline = make_pipeline(model_fn())
         else:
             experiment.set_name(name=f"{model_name.title()}(Tuned) model for the {self.scenario}s of trips")
-            logger.info(
-                f"Tuning hyperparameters of the {model_name} model. Have a snack and watch One Piece (seriously, it's great)"
-            )
+            logger.info(f"Tuning hyperparameters of the {model_name} model.")
 
             best_model_hyperparameters = optimise_hyperparameters(
                 model_fn=model_fn,
@@ -175,6 +170,7 @@ class Trainer:
             models_and_errors[model_name] = test_error
 
         test_errors = models_and_errors.values()
+
         for model_name in model_names:
             if models_and_errors[model_name] == min(test_errors):
                 logger.info(f"The best performing model is {model_name} -> Pushing it to the CometML model registry")

@@ -16,24 +16,24 @@ class GeneralConfig(BaseSettings):
     # Names 
     year: int = 2024
     n_features: int = 672
-    email: str
+    # email: str
 
-    # CometML
-    comet_api_key: str
-    comet_workspace: str
-    comet_project_name: str
-
-    # Hopsworks
-    hopsworks_api_key: str
-    hopsworks_project_name: str
-    feature_group_version: int = 1
-    feature_view_version: int = 1
-
-    # PostgreSQL
-    database_public_url: str
-
-    backfill_days: int = 210 
-    current_hour: datetime = pd.to_datetime(datetime.now(tz=UTC)).floor("H")
+    # # CometML
+    # comet_api_key: str
+    # comet_workspace: str
+    # comet_project_name: str
+    #
+    # # Hopsworks
+    # hopsworks_api_key: str
+    # hopsworks_project_name: str
+    # feature_group_version: int = 1
+    # feature_view_version: int = 1
+    #
+    # # PostgreSQL
+    # database_public_url: str
+    #
+    # backfill_days: int = 210 
+    # current_hour: datetime = pd.to_datetime(datetime.now(tz=UTC)).floor("H")
     displayed_scenario_names: dict = {"start": "Departures", "end": "Arrivals"} 
 
 
