@@ -17,7 +17,7 @@ class GeneralConfig(BaseSettings):
     year: int = 2024
     n_features: int = 672
     email: str
-
+    
     # CometML
     comet_api_key: str
     comet_workspace: str
