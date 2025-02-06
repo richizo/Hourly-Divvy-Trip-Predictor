@@ -127,7 +127,7 @@ def fetch_predictions_group(scenario: str, model_name: str) -> FeatureGroup:
         FeatureGroup: the feature group for the given model's predictions.
     """
     assert model_name in ["xgboost", "lightgbm"], 'The selected model architectures are currently "xgboost" and "lightgbm"'
-    tuned_or_not = "tuned" if scenario == "start" else "untuned"
+    tuned_or_not = "tuned" 
        
     return setup_feature_group(
         primary_key=[f"{scenario}_station_id"],
@@ -179,12 +179,12 @@ def load_predictions_from_store(
     predictions_df[f"{scenario}_hour"] = pd.to_datetime(predictions_df[f"{scenario}_hour"], utc=True)
     predictions_df = predictions_df.drop("timestamp", axis=1)
 
-    predictions_df = predictions_df.sort_values(
+    predictions_df: pd.DataFrame = predictions_df.sort_values(
         by=[f"{scenario}_hour", f"{scenario}_station_id"]
     )
     
     if aggregate_predictions and aggregation_method.lower() in ["sum", "mean"]:
-        return aggregate_predictions(scenario=scenario, predictions=predictions_df, aggregation_method=aggregation_method)
+        return get_aggregate_predictions(scenario=scenario, predictions=predictions_df, aggregation_method=aggregation_method)
     elif not aggregate_predictions:
         return predictions_df.reset_index(drop=True)
     
@@ -213,7 +213,7 @@ def get_model_predictions(scenario: str, model: Pipeline, features: pd.DataFrame
     return prediction_per_station
 
 
-def aggregate_predictions(scenario: str, predictions: pd.DataFrame, aggregation_method: str) -> pd.DataFrame:
+def get_aggregate_predictions(scenario: str, predictions: pd.DataFrame, aggregation_method: str) -> pd.DataFrame:
 
     if aggregation_method.lower() == "sum":
         predictions[f"predicted_{scenario}s"] = predictions.groupby(f"{scenario}_station_id")[f"predicted_{scenario}s"].transform("sum")

@@ -5,7 +5,6 @@ Contains code that:
 - displays the locations of the various stations on an interactive map. It has been challenging to create an 
 implementation of this that produces a good experience.
 """
-import time 
 import numpy as np
 import pandas as pd
 import pydeck as pdk
@@ -13,17 +12,12 @@ import streamlit as st
 
 from loguru import logger
 from datetime import datetime, timedelta
-from sqlalchemy import create_engine
-from streamlit_extras.colored_header import colored_header
 
 from src.setup.config import config 
-from src.setup.paths import INFERENCE_DATA
-
 from src.feature_pipeline.mixed_indexer import fetch_json_of_ids_and_names
-
 from src.inference_pipeline.frontend.tracker import ProgressTracker
 from src.inference_pipeline.backend.inference import load_predictions_from_store
-from src.inference_pipeline.frontend.data import make_geodataframes, reconcile_geodata
+from src.inference_pipeline.frontend.data import make_geodataframes
 
 
 @st.cache_data()
@@ -44,7 +38,7 @@ def retrieve_predictions(from_hour: datetime, to_hour: datetime) -> pd.DataFrame
         try:
             predictions: pd.DataFrame = load_predictions_from_store(
                 scenario=scenario,
-                model_name="lightgbm" if scenario == "end" else "xgboost", 
+                model_name="lightgbm" if scenario == "start" else "xgboost", 
                 from_hour=from_hour, 
                 to_hour=to_hour
             )

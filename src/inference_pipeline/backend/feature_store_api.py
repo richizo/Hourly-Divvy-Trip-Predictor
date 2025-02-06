@@ -72,7 +72,7 @@ def get_or_create_feature_view(
     store = get_feature_store()
     try:
         query: Query = sub_query if use_sub_query else feature_group.select_all() 
-        feature_view = store.create_feature_view(name=name, version=version, query=query)
+        feature_view = store.get_or_create_feature_view(name=name, version=version, query=query)
 
     except Exception as error:
         logger.exception(error)
