@@ -68,7 +68,7 @@ class DataProcessor:
 
     def tie_ids_to_unique_coordinates(self, data: pd.DataFrame, threshold: int = 10_000_000) -> bool:
         """
-        With a large enough dataset (subjectively determined to be one with more than 10M rows), I found it 
+        With a large enough dataset (subjectively defined to be one with more than 10M rows), I found it 
         necessary to round the coordinates of each station to make the preprocessing operations that follow less 
         taxing in terms of time and system memory. Following the rounding operation, a number will be assigned to 
         each unique coordinate which will function as the new ID for that station. 
@@ -99,16 +99,13 @@ class DataProcessor:
         start_ts, end_ts = self.make_time_series()
         ts_data_per_scenario = {"start": start_ts, "end": end_ts}
 
-        training_sets = []
+        training_sets: list[pd.DataFrame] = []
         for scenario in ts_data_per_scenario.keys():
             if not Path(TRAINING_DATA/f"{scenario}s.parquet").is_file():
                 training_data: pd.DataFrame = self.transform_ts_into_training_data(
                     ts_data=ts_data_per_scenario[scenario],
                     geocode=geocode,
-                    scenario=scenario,
-                    input_seq_len=config.n_features,
-                    step_size=1
-                )
+                    scenario=scenario, input_seq_len=config.n_features, step_size=1)
 
                 training_sets.append(training_data)
 
@@ -131,13 +128,13 @@ class DataProcessor:
         end_df_columns = ["ended_at", "end_lat", "end_lng", "end_station_id"]
 
         if self.use_custom_station_indexing(scenarios=self.scenarios, data=self.data) and not \
-                self.tie_ids_to_unique_coordinates(data=self.data):
+        self.tie_ids_to_unique_coordinates(data=self.data):
 
             start_df_columns.append("start_station_name")
             end_df_columns.append("end_station_name")
 
-        start_df = self.data[start_df_columns]
-        end_df = self.data[end_df_columns]
+        start_df: pd.DataFrame = self.data[start_df_columns]
+        end_df: pd.DataFrame = self.data[end_df_columns]
 
         start_ts, end_ts = self.transform_cleaned_data_into_ts_data(start_df=start_df, end_df=end_df)
         return start_ts, end_ts
@@ -145,13 +142,11 @@ class DataProcessor:
     def clean(self, save: bool = True) -> pd.DataFrame:
 
         if self.use_custom_station_indexing(scenarios=self.scenarios, data=self.data) \
-                and self.tie_ids_to_unique_coordinates(data=self.data):
-
+        and self.tie_ids_to_unique_coordinates(data=self.data):
             cleaned_data_file_path = Path.joinpath(CLEANED_DATA, "data_with_newly_indexed_stations (rounded_indexer).parquet")
 
         elif self.use_custom_station_indexing(scenarios=self.scenarios, data=self.data) \
-                and not self.tie_ids_to_unique_coordinates(data=self.data):
-
+        and not self.tie_ids_to_unique_coordinates(data=self.data):
             cleaned_data_file_path = Path.joinpath(CLEANED_DATA, "data_with_newly_indexed_stations (mixed_indexer).parquet")
 
         # Will think of a more elegant solution in due course. This only serves my current interests.
@@ -172,11 +167,11 @@ class DataProcessor:
                 """
                 There are rows with missing latitude and longitude values for the various
                 stations. If any of these rows have available station names, then geocoding
-                can be used to get the coordinates. At the current time however, all rows with
+                can be used to get the coordinates. 
+
+                At the current time however, all rows with
                 missing coordinates also have missing station names, rendering these rows
-                irreparably lacking. 
-                
-                We locate and delete these points with this function.
+                irreparably lacking. We locate and delete these points with this function.
 
                 Returns:
                     pd.DataFrame: the data, absent the aforementioned rows.
@@ -205,7 +200,7 @@ class DataProcessor:
             features_to_drop = ["ride_id", "rideable_type", "member_casual"]
 
             if self.use_custom_station_indexing(data=self.data, scenarios=self.scenarios) and \
-                    self.tie_ids_to_unique_coordinates(data=self.data):
+            self.tie_ids_to_unique_coordinates(data=self.data):
 
                 features_to_drop.extend(
                     ["start_station_id", "start_station_name", "end_station_name"]
@@ -321,7 +316,7 @@ class DataProcessor:
                 logger.info("Determining the method of dealing with invalid station indices...")
 
                 if self.use_custom_station_indexing(scenarios=[start_or_end], data=self.data) and \
-                        self.tie_ids_to_unique_coordinates(data=self.data):
+                self.tie_ids_to_unique_coordinates(data=self.data):
 
                     logger.warning("Custom station indexer required: tying new station IDs to unique coordinates")
                     interim_data = run_rounding_indexer(data=cleaned_data, scenario=start_or_end, decimal_places=6)

@@ -6,14 +6,12 @@ certfile
 keyfile
 
 # Folders
-/.idea
+/.venv
 /data/cleaned
 /data/raw
 /data/transformed
 /data/geographical/rounding_indexer
 /models
-/.cometml-runs
-/Mapping attempts
 **__pycache__
 
 
