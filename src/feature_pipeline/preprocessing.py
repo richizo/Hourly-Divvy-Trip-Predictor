@@ -1,35 +1,41 @@
 import json
-from tqdm import tqdm
-from loguru import logger
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
+from loguru import logger
 
 from src.setup.config import config
-from src.feature_pipeline.data_sourcing import load_raw_data
+from src.feature_pipeline.data_sourcing import load_raw_data, Year
 from src.feature_pipeline.mixed_indexer import run_mixed_indexer
 from src.feature_pipeline.rounding_indexer import run_rounding_indexer
 from src.feature_pipeline.feature_engineering import finish_feature_engineering
 
 from src.setup.paths import (
-    CLEANED_DATA, TRAINING_DATA, TIME_SERIES_DATA, MIXED_INDEXER, INFERENCE_DATA, make_fundamental_paths
+    CLEANED_DATA, 
+    TRAINING_DATA, 
+    MIXED_INDEXER, 
+    INFERENCE_DATA, 
+    TIME_SERIES_DATA, 
+    make_fundamental_paths
 )
 
 
 class DataProcessor:
-    def __init__(self, year: int, for_inference: bool):
+    def __init__(self, years: list[Year], for_inference: bool, offset: int = 3):
+        self.offset: int = offset
+        self.years: list[Year] = years
         self.station_ids: None = None
-        self.scenarios: list[str] = ["start", "end"]
         self.for_inference: bool = for_inference
+        self.scenarios: list[str] = ["start", "end"]
+        self.data: pd.DataFrame | None = self.__retrieve_data__()
+
         self.start_ts_path: Path = Path.joinpath(TIME_SERIES_DATA, "start_ts.parquet")
         self.end_ts_path: Path = Path.joinpath(TIME_SERIES_DATA, "end_ts.parquet")
 
-        if for_inference:
-            self.data: None = None  # Because the data will have been fetched from the feature store instead.
-        else:
-            loaded_raw_data: list[pd.DataFrame] = list(load_raw_data(year=year))
-            self.data: pd.DataFrame = pd.concat(loaded_raw_data, axis=0) 
+    def __retrieve_data__(self) -> pd.DataFrame | None: 
+        return load_raw_data(years=self.years) if not self.for_inference else None  # Because the data will have been fetched from the feature store instead.
 
     def use_custom_station_indexing(self, scenarios: list[str], data: pd.DataFrame) -> bool:
         """
@@ -49,7 +55,7 @@ class DataProcessor:
             bool: whether a custom indexing method will be used. 
         """
         assert not self.for_inference
-        results = []
+        results: list[bool] = []
 
         for scenario in scenarios:
             long_id_count = 0
@@ -60,11 +66,10 @@ class DataProcessor:
 
             number_of_missing_indices: int = data[f"{scenario}_station_id"].isna().sum()
             proportion_of_problem_rows: float = (number_of_missing_indices + long_id_count) / data.shape[0] 
-            result = True if proportion_of_problem_rows >= 0.5 else False
-
+            result: bool = True if proportion_of_problem_rows >= 0.5 else False
             results.append(result)
 
-        return True if False not in results else False
+        return True if (False not in results) else False
 
     def tie_ids_to_unique_coordinates(self, data: pd.DataFrame, threshold: int = 10_000_000) -> bool:
         """
@@ -649,5 +654,11 @@ class CutoffIndexer:
 
 if __name__ == "__main__":
     make_fundamental_paths()
-    trips_2024 = DataProcessor(year=2024, for_inference=False)
-    trips_2024.make_training_data(geocode=False)
+
+    years: list[Year] = [
+        Year(value=2024, offset=3),
+        Year(value=2025, offset=0)
+    ]
+
+    trips_2024 = DataProcessor(years=years, for_inference=False)
+    _ = trips_2024.make_training_data(geocode=False) 

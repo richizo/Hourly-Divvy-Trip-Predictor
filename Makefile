@@ -42,3 +42,4 @@ image:
 
 container:
 	docker run -it --env-file .env -p 8501:8501/tcp divvy-hourly:latest 
+
