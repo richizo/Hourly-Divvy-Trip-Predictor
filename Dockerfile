@@ -1,13 +1,13 @@
 FROM python:3.12.5-slim-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends pip gcc make python3-dev 
-RUN pip install poetry
+RUN pip install uv 
 
 WORKDIR /app
 COPY . /app/
 
-RUN poetry install 
-
+RUN uv venv
+RUN pip install -e "."
 EXPOSE 8501
 
 ENV EMAIL=email 
@@ -23,4 +23,4 @@ RUN echo "[general]"  > ~/.streamlit/credentials.toml
 RUN echo "email = \"\""  >> ~/.streamlit/credentials.toml
 
 RUN touch /var/log/cron.log /var/log/supervisord.log
-ENTRYPOINT ["poetry", "run", "streamlit", "run", "src/inference_pipeline/frontend/main.py", "--server.port", "8501"]
+ENTRYPOINT ["uv", "run", "streamlit", "run", "src/inference_pipeline/frontend/main.py", "--server.port", "8501"]

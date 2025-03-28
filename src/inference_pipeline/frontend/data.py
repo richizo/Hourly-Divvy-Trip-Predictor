@@ -24,7 +24,7 @@ from src.inference_pipeline.backend.inference import rerun_feature_pipeline, loa
 
 
 @st.cache_data()
-def make_geodataframes(using_mixed_indexer: bool = True) -> pd.DataFrame:
+def make_geodataframes(using_mixed_indexer: bool = True) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Create a dataframe containing the geographical details of each station using both
     arrival and departure data, and return them
@@ -40,7 +40,7 @@ def make_geodataframes(using_mixed_indexer: bool = True) -> pd.DataFrame:
         if Path(file_path).exists():
             geo_dataframe = pd.read_parquet(file_path)
         else:
-            geo_dataframe: pd.DataFrame = load_raw_local_geodata(scenario=scenario)
+            geo_dataframe: pd.DataFrame | None = load_raw_local_geodata(scenario=scenario)
         
         geo_dataframe.drop("station_id", axis=1)
         geo_dataframes.append(geo_dataframe)

@@ -146,6 +146,7 @@ def backup_predictions_to_postgres(table_name: str, data: pd.DataFrame) -> None:
 def retrieve_backup_predictions(table_name: str) -> pd.DataFrame:
     return pd.read_sql(sql=f'SELECT * FROM {table_name};', con=config.database_public_url)
 
+
 def restrict_geodataframe_to_stations_with_predictions(
     scenario: str,
     predictions: pd.DataFrame,
@@ -332,7 +333,7 @@ if __name__ == "__main__":
 
     next_hour = config.current_hour + timedelta(hours=1)
 
-    st.header(body=f":violet[Predictions for {to_hour.hour}:00 - {next_hour.hour}:00 (UTC)]", divider=True)
+    _ = st.header(body=f":violet[Predictions for {to_hour.hour}:00 - {next_hour.hour}:00 (UTC)]", divider=True)
     _ = st.markdown(
         """
         After a bit of loading, a map of the city and its environs should appear, with points littered all over it.
