@@ -7,8 +7,8 @@ from tqdm import tqdm
 from loguru import logger
 
 from src.setup.config import config
-from src.feature_pipeline.data_sourcing import load_raw_data, Year
 from src.feature_pipeline.mixed_indexer import run_mixed_indexer
+from src.feature_pipeline.data_sourcing import load_raw_data, Year
 from src.feature_pipeline.rounding_indexer import run_rounding_indexer
 from src.feature_pipeline.feature_engineering import finish_feature_engineering
 
@@ -630,7 +630,7 @@ class CutoffIndexer:
         Then the function will slide "step_size" steps and repeat the process. The function
         terminates once it reaches the last row of the dataframe. 
 
-        Credit to P.L.B.
+        Credit to Pau. 
 
         Args:
             first_index (int): _description_
@@ -654,11 +654,6 @@ class CutoffIndexer:
 
 if __name__ == "__main__":
     make_fundamental_paths()
-
-    years: list[Year] = [
-        Year(value=2024, offset=3),
-        Year(value=2025, offset=0)
-    ]
-
-    trips_2024 = DataProcessor(years=years, for_inference=False)
+    trips_2024 = DataProcessor(years=config.years, for_inference=False)
     _ = trips_2024.make_training_data(geocode=False) 
+

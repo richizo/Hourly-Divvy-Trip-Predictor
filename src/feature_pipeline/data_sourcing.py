@@ -118,10 +118,11 @@ def load_raw_data(years: list[Year]) -> pd.DataFrame:
             download_file_if_needed(year=year.value, month=month, file_name=file_name)
             path_to_month_data: Path = RAW_DATA_DIR.joinpath(f"{file_name}").joinpath(f"{file_name}.csv")
 
-            try:
+            if path_to_month_data.exists():
                 month_data: pd.DataFrame = pd.read_csv(path_to_month_data)
                 data = pd.concat([data, month_data], axis=0)
-            except Exception as error:
-                logger.error(f"Skipping over {file_name} due to: {error}")
+            else:
+                logger.error(f"Skipping over {file_name} as Lyft hasn't uploaded it yet.")
     
     return data
+

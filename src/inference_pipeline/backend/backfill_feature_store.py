@@ -31,7 +31,7 @@ def backfill_features(scenario: str) -> None:
         None
     """
     primary_key = ["timestamp", f"{scenario}_station_id"]
-    processor = DataProcessor(year=config.year, for_inference=False)
+    processor = DataProcessor(years=config.years, for_inference=False)
     ts_data = processor.make_time_series()[0] if scenario == "start" else processor.make_time_series()[1]
     ts_data["timestamp"] = pd.to_datetime(ts_data[f"{scenario}_hour"]).astype(int) // 10 ** 6  # Express in ms
 
@@ -55,8 +55,8 @@ def backfill_predictions(scenario: str, target_date: datetime) -> None:
     end_date = target_date + timedelta(days=1)
     
     # Based on the best models for arrivals & departures at the moment
-    tuned_or_not = "tuned" 
-    model_name = "lightgbm" if scenario == "start" else "xgboost"
+    model_name = "xgboost"
+    tuned_or_not = "tuned" if scenario == "end" else "untuned"
 
     registry = ModelRegistry(scenario=scenario, model_name=model_name, tuned_or_not=tuned_or_not)
     model = registry.download_latest_model(unzip=True)

@@ -10,7 +10,6 @@ import pandas as pd
 from loguru import logger
 
 from comet_ml import Experiment
-
 from xgboost import XGBRegressor
 from sklearn.metrics import mean_absolute_error
 from sklearn.pipeline import Pipeline, make_pipeline
@@ -61,7 +60,7 @@ class Trainer:
         else:
             logger.warning("No training data is storage. Creating the dataset will take a while.")
 
-            processor = DataProcessor(year=config.year, for_inference=False)
+            processor = DataProcessor(years=config.years, for_inference=False)
             training_sets = processor.make_training_data(geocode=False)
             training_data = training_sets[0] if self.scenario.lower() == "start" else training_sets[1]
             logger.success("Training data produced successfully")

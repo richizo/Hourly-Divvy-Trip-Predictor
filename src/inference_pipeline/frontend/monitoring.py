@@ -16,7 +16,7 @@ from src.inference_pipeline.frontend.tracker import ProgressTracker
 
 
 @st.cache_data
-def fetch_from_monitoring_feature_view(scenario: str, model_name: str = "xgboost") -> pd.DataFrame:
+def fetch_from_monitoring_feature_view(scenario: str, model_name: str) -> pd.DataFrame:
     """
     Fetch historical and prediction data.
 

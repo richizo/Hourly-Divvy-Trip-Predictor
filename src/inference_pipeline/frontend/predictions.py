@@ -1,9 +1,8 @@
 """
 Contains code that:
-- loads geographical data and predictions in order to feed the map.
-- fetches predictions from the feature store so that it can be passed to the streamlit interface. 
-- displays the locations of the various stations on an interactive map. It has been challenging to create an 
-implementation of this that produces a good experience.
+- loads geographical data 
+- fetches predictions from the feature store 
+- displays the locations of the various stations, with their names and associated predictions on an interactive map. 
 """
 import numpy as np
 import pandas as pd
@@ -14,14 +13,14 @@ from loguru import logger
 from datetime import datetime, timedelta
 
 from src.setup.config import config 
-from src.feature_pipeline.mixed_indexer import fetch_json_of_ids_and_names
-from src.inference_pipeline.frontend.tracker import ProgressTracker
-from src.inference_pipeline.backend.inference import load_predictions_from_store
 from src.inference_pipeline.frontend.data import make_geodataframes
+from src.inference_pipeline.frontend.tracker import ProgressTracker
+from src.feature_pipeline.mixed_indexer import fetch_json_of_ids_and_names
+from src.inference_pipeline.backend.inference import load_predictions_from_store
 
 
 @st.cache_data()
-def retrieve_predictions(from_hour: datetime, to_hour: datetime) -> pd.DataFrame:
+def retrieve_predictions(from_hour: datetime, to_hour: datetime, model_name: str = "xgboost") -> tuple[pd.DataFrame, pd.DataFrame]:
     """ 
     Download all the predictions for all the stations from one hour to another
 
@@ -32,13 +31,13 @@ def retrieve_predictions(from_hour: datetime, to_hour: datetime) -> pd.DataFrame
     Returns:
         tuple[pd.DataFrame, pd.DataFrame]: a list of dataframes of predictions for both arrivals and departures
     """
-    prediction_dataframes =[]
+    prediction_dataframes: list[pd.DataFrame] =[]
     for scenario in config.displayed_scenario_names.keys():                
 
         try:
             predictions: pd.DataFrame = load_predictions_from_store(
                 scenario=scenario,
-                model_name="lightgbm" if scenario == "start" else "xgboost", 
+                model_name=model_name,
                 from_hour=from_hour, 
                 to_hour=to_hour
             )
@@ -55,7 +54,10 @@ def retrieve_predictions(from_hour: datetime, to_hour: datetime) -> pd.DataFrame
             predictions = pd.DataFrame(
                 index=[0],
                 data={
-                    f"{scenario}_hour": "", f"{scenario}_station_id": "", f"predicted_{scenario}s": "", "timestamp": ""
+                    f"{scenario}_hour": "", 
+                    f"{scenario}_station_id": "", 
+                    f"predicted_{scenario}s": "", 
+                    "timestamp": ""
                 }
             )
 
@@ -95,7 +97,6 @@ def retrieve_predictions_for_this_hour(
 
     for scenario in scenario_and_predictions.keys():
         predictions = scenario_and_predictions[scenario]
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
         next_hour_ready = False if predictions[predictions[f"{scenario}_hour"] == to_hour].empty else True
         previous_hour_ready = False if predictions[predictions[f"{scenario}_hour"] == from_hour].empty else True
 
@@ -111,7 +112,7 @@ def retrieve_predictions_for_this_hour(
             backup_predictions_to_postgres(table_name=f"{scenario}_backup_predictions", data=predictions_for_target_hour)
 
             if scenario == "start":  
-                st.write("⚠️ Predictions for the current hour are not available yet. Fetching those from an hour ago.")
+                st.write("Predictions for the current hour are not available yet. Fetching those from an hour ago.")
         else: 
             try:
                 predictions_for_target_hour = retrieve_backup_predictions(table_name=f"{scenario}_backup_predictions")
@@ -323,7 +324,7 @@ def make_map(_geodataframe_and_predictions: pd.DataFrame) -> None:
     st.pydeck_chart(pydeck_obj=map, width=700)
 
 
-if __name__ != "__main__":
+if __name__ == "__main__":
 
     tracker = ProgressTracker(n_steps=5)
     from_hour = config.current_hour - timedelta(hours=1)
@@ -332,7 +333,7 @@ if __name__ != "__main__":
     next_hour = config.current_hour + timedelta(hours=1)
 
     st.header(body=f":violet[Predictions for {to_hour.hour}:00 - {next_hour.hour}:00 (UTC)]", divider=True)
-    st.markdown(
+    _ = st.markdown(
         """
         After a bit of loading, a map of the city and its environs should appear, with points littered all over it.
         
@@ -398,9 +399,9 @@ if __name__ != "__main__":
 
     st.sidebar.write("✅ Map Drawn")
 
-    st.subheader(body=":blue[Addressing the Business Problem]", divider=True)
+    _ = st.subheader(body=":blue[Addressing the Business Problem]", divider=True)
 
-    st.markdown(
+    _ = st.markdown(
         """
         As you can see, the points on the map come in :red[red], :green[green], and white. 
         

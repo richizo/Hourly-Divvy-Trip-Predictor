@@ -18,3 +18,4 @@ class ProgressTracker:
     def next(self) -> None:
         self.current_step += 1 
         self.progress_bar.progress(self.current_step/self.n_steps)
+

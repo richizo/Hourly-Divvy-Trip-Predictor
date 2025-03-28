@@ -7,7 +7,7 @@ from streamlit_extras.app_logo import add_logo
 from src.setup.paths import IMAGES_DIR
 
 
-add_logo(logo_url=IMAGES_DIR/"logo.png", height=120)
+add_logo(logo_url=str(IMAGES_DIR.joinpath("logo.png")), height=120)
 
 pages = st.navigation(
     pages=[
@@ -21,3 +21,4 @@ pages = st.navigation(
 
 
 pages.run()
+

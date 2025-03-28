@@ -100,7 +100,7 @@ def make_features(
     Returns:
         pd.DataFrame: time series data
     """
-    processor = DataProcessor(year=config.year, for_inference=True)
+    processor = DataProcessor(years=config.years, for_inference=True)
     
     # Perform transformation of the time series data with feature engineering
     features = processor.transform_ts_into_training_data(
@@ -126,7 +126,7 @@ def fetch_predictions_group(scenario: str, model_name: str) -> FeatureGroup:
     Returns:
         FeatureGroup: the feature group for the given model's predictions.
     """
-    assert model_name in ["xgboost", "lightgbm"], 'The selected model architectures are currently "xgboost" and "lightgbm"'
+    assert model_name == "xgboost", 'The selected model architectures are currently "xgboost" and "lightgbm"'
     tuned_or_not = "tuned" 
        
     return setup_feature_group(
@@ -228,9 +228,8 @@ def get_aggregate_predictions(scenario: str, predictions: pd.DataFrame, aggregat
         raise NotImplementedError('The only aggregation methods in use are "sum" and "mean". ')
 
 
-def round_mean_by_scenario(scenario: str, predicted_values: pd.Series) -> pd.Series:
-    if scenario == "start":
-        return np.ceil(predicted_values)
+def round_mean_by_scenario(scenario: str, predicted_values: pd.Series): 
+    return np.ceil(predicted_values) if scenario == "start" else None
 
 
 
@@ -252,7 +251,7 @@ def rerun_feature_pipeline():
                 logger.warning(message)
                 st.spinner(message)
 
-                processor = DataProcessor(year=config.year, for_inference=False)
+                processor = DataProcessor(years=config.years, for_inference=False)
                 processor.make_training_data(geocode=False)
                 return fn(*args, **kwargs)
         return wrapper
@@ -260,7 +259,7 @@ def rerun_feature_pipeline():
 
 
 @rerun_feature_pipeline()
-def load_raw_local_geodata(scenario: str) -> list[dict]:
+def load_raw_local_geodata(scenario: str) -> pd.DataFrame | None:
     """
     Load the json file that contains the geographical information for 
     each station.
@@ -277,9 +276,9 @@ def load_raw_local_geodata(scenario: str) -> list[dict]:
         list[dict]: the loaded json file as a dictionary
     """
     if len(os.listdir(ROUNDING_INDEXER)) != 0:
-        geodata_path = ROUNDING_INDEXER / f"{scenario}_geodataframe.parquet"
+        geodata_path = ROUNDING_INDEXER.joinpath(f"{scenario}_geodataframe.parquet")
     elif len(os.listdir(MIXED_INDEXER)) != 0:
-        geodata_path = MIXED_INDEXER / f"{scenario}_geodataframe.parquet"
+        geodata_path = MIXED_INDEXER.joinpath(f"{scenario}_geodataframe.parquet")
     else:
         raise FileNotFoundError("No geographical data has been made. Running the feature pipeline...")
 
