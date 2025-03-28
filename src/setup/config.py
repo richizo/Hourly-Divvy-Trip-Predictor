@@ -8,12 +8,14 @@ from src.setup.paths import PARENT_DIR
 from src.feature_pipeline.data_sourcing import Year
 
 
-env_file_present: bool = load_dotenv(find_dotenv()) 
+env_file_path = PARENT_DIR.joinpath(".env") 
+_ = load_dotenv(env_file_path) 
+
 
 class GeneralConfig(BaseSettings):
 
     _ = SettingsConfigDict(
-        env_file=f"{PARENT_DIR.joinpath(".env")}", 
+        env_file=str(env_file_path),
         env_file_encoding="utf-8", 
         extra="allow"
     )
@@ -33,19 +35,16 @@ class GeneralConfig(BaseSettings):
     current_hour: datetime = pd.to_datetime(datetime.now(tz=UTC)).floor("H")
     displayed_scenario_names: dict[str, str] = {"start": "Departures", "end": "Arrivals"} 
 
-    
-    if env_file_present:
-        email: str
+    email: str
+    # Comet
+    comet_api_key: str
+    comet_workspace: str
+    comet_project_name: str
 
-        # Comet
-        comet_api_key: str
-        comet_workspace: str
-        comet_project_name: str
+    hopsworks_api_key: str
+    hopsworks_project_name: str
 
-        hopsworks_api_key: str
-        hopsworks_project_name: str
-
-        database_public_url: str
+    database_public_url: str
 
 
 config = GeneralConfig()
