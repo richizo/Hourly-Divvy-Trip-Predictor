@@ -37,7 +37,9 @@ jobs:
         echo "$HOME/.local/bin" >> $GITHUB_PATH
     
     - name: Install Dependencies
-      run: uv pip install -e .
+      run: |
+        uv venv
+        uv pip install -e .
 
     - name: Create env file
       run: |
